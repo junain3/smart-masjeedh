@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle } from "lucide-react";
+import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 
@@ -24,6 +24,52 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const t = translations[lang];
+
+  const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
+  const [serviceName, setServiceName] = useState("");
+  const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [submittingService, setSubmittingService] = useState(false);
+
+  const createServiceDistribution = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supabase) return;
+    setSubmittingService(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // 1. Fetch all families for this masjid
+      const { data: families } = await supabase
+        .from("families")
+        .select("id")
+        .eq("masjid_id", session.user.id);
+      
+      if (!families || families.length === 0) {
+        alert("No families found to distribute to.");
+        return;
+      }
+
+      // 2. Create distribution records for each family
+      const distributions = families.map(f => ({
+        family_id: f.id,
+        masjid_id: session.user.id,
+        name: serviceName,
+        date: serviceDate,
+        status: 'Pending'
+      }));
+
+      const { error } = await supabase.from("service_distributions").insert(distributions);
+      if (error) throw error;
+
+      alert("Service distribution created for all families!");
+      setIsServicesModalOpen(false);
+      setServiceName("");
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSubmittingService(false);
+    }
+  };
 
   // Real-time clock update
   useEffect(() => {
@@ -148,11 +194,21 @@ export default function DashboardPage() {
               <CreditCard className="w-5 h-5" />
               <span>{t.accounts}</span>
             </Link>
-            <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
-              <Settings className="w-5 h-5" />
-              <span>{t.settings}</span>
-            </Link>
-            <div className="flex items-center gap-4 p-4 opacity-40 text-slate-600 rounded-2xl font-bold cursor-not-allowed">
+          <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
+            <Settings className="w-5 h-5" />
+            <span>{t.settings}</span>
+          </Link>
+          <button 
+            onClick={() => {
+              setIsSidebarOpen(false);
+              setIsServicesModalOpen(true);
+            }} 
+            className="w-full flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all text-left"
+          >
+            <Calendar className="w-5 h-5 text-amber-500" />
+            <span>{t.services_received}</span>
+          </button>
+          <div className="flex items-center gap-4 p-4 opacity-40 text-slate-600 rounded-2xl font-bold cursor-not-allowed">
               <HelpCircle className="w-5 h-5" />
               <span>Help & Support</span>
             </div>
@@ -265,6 +321,59 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      {/* Services Distribution Modal */}
+      {isServicesModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-300">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-black text-slate-900">{t.services_received}</h2>
+              <button onClick={() => setIsServicesModalOpen(false)} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
+                <X className="w-6 h-6 text-slate-300" />
+              </button>
+            </div>
+
+            <form onSubmit={createServiceDistribution} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.name}</label>
+                <input 
+                  required
+                  type="text"
+                  value={serviceName}
+                  onChange={e => setServiceName(e.target.value)}
+                  className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-amber-500/10 outline-none"
+                  placeholder="E.g. Ramadan Dates"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.date}</label>
+                <input 
+                  required
+                  type="date"
+                  value={serviceDate}
+                  onChange={e => setServiceDate(e.target.value)}
+                  className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-amber-500/10 outline-none"
+                />
+              </div>
+
+              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 mb-6">
+                <p className="text-[10px] text-amber-700 font-bold leading-relaxed uppercase tracking-tight">
+                  This will create a pending service record for ALL families in your masjid.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submittingService}
+                className="w-full py-5 rounded-3xl font-black text-white bg-amber-500 shadow-xl shadow-amber-500/20 transition-all active:scale-[0.97] disabled:opacity-50"
+              >
+                {submittingService ? "CREATING..." : "DISTRIBUTE TO ALL FAMILIES"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

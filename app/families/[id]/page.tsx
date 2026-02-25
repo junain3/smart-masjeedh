@@ -153,6 +153,16 @@ export default function FamilyDetailsPage() {
       
       if (paymentData) setPayments(paymentData);
 
+      // Fetch services (service_distributions linked to this family)
+      const { data: serviceData } = await supabase
+        .from("service_distributions")
+        .select("id, name, date, status")
+        .eq("family_id", id)
+        .eq("masjid_id", session.user.id)
+        .order("date", { ascending: false });
+      
+      if (serviceData) setServices(serviceData);
+
     } catch (error: any) {
       console.error("Error fetching data:", error);
       setErrorMessage(error.message || "தரவுகளைப் பெறுவதில் சிக்கல் ஏற்பட்டது.");
@@ -162,6 +172,7 @@ export default function FamilyDetailsPage() {
   };
 
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
     fetchData();
@@ -171,32 +182,53 @@ export default function FamilyDetailsPage() {
     e.preventDefault();
     if (!supabase || !id) return;
     setSubmitting(true);
+    setSuccessMessage("");
 
     try {
-      // Get current masjid ID
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("லாகின் செய்யப்படவில்லை.");
 
-      const { error } = await supabase.from("members").insert([
-        {
-          family_id: id,
-          full_name: fullName,
-          relationship,
-          age: parseInt(age),
-          gender,
-          dob,
-          nic,
-          phone,
-          civil_status: civilStatus,
-          masjid_id: session.user.id // Include masjid ID
-        }
-      ]);
-
-      if (error) throw error;
+      if (editingMember) {
+        const { error } = await supabase
+          .from("members")
+          .update({
+            full_name: fullName,
+            relationship,
+            age: parseInt(age),
+            gender,
+            dob,
+            nic,
+            phone,
+            civil_status: civilStatus
+          })
+          .eq("id", editingMember.id);
+        if (error) throw error;
+        setSuccessMessage("உறுப்பினர் விபரம் மாற்றப்பட்டது!");
+      } else {
+        const { error } = await supabase.from("members").insert([
+          {
+            family_id: id,
+            full_name: fullName,
+            relationship,
+            age: parseInt(age),
+            gender,
+            dob,
+            nic,
+            phone,
+            civil_status: civilStatus,
+            masjid_id: session.user.id
+          }
+        ]);
+        if (error) throw error;
+        setSuccessMessage("புதிய உறுப்பினர் சேர்க்கப்பட்டார்!");
+      }
 
       setIsModalOpen(false);
       resetForm();
       fetchData();
+      
+      // Auto-hide success message after 3 seconds
+      setTimeout(() => setSuccessMessage(""), 3000);
     } catch (error: any) {
       alert(`பிழை: ${error.message || "உறுப்பினரைச் சேர்க்க முடியவில்லை"}`);
     } finally {
@@ -213,9 +245,70 @@ export default function FamilyDetailsPage() {
     setNic("");
     setPhone("");
     setCivilStatus("Single");
+    setEditingMember(null);
   };
 
+  const deleteMember = async (memberId: string) => {
+    if (!supabase || !confirm(t.confirm_delete)) return;
+    try {
+      const { error } = await supabase
+        .from("members")
+        .delete()
+        .eq("id", memberId);
+      if (error) throw error;
+      fetchData();
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    doc.text(`Family: ${family?.head_name} (${family?.family_code})`, 14, 15);
+    
+    const tableData = members.map(m => [
+      m.full_name,
+      m.relationship,
+      m.age,
+      m.gender,
+      m.nic,
+      m.phone
+    ]);
+
+    doc.autoTable({
+      startY: 20,
+      head: [["Name", "Relation", "Age", "Gender", "NIC", "Phone"]],
+      body: tableData,
+    });
+
+    doc.save(`family_${family?.family_code}_members.pdf`);
+  };
+
+  const filteredMembers = members.filter(member => 
+    member.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    member.relationship.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const subBalance = (family?.subscription_amount || 0) * 12 - payments.reduce((sum, p) => sum + p.amount, 0);
+
+  const toggleServiceStatus = async (serviceId: string) => {
+    if (!supabase) return;
+    try {
+      const service = services.find(s => s.id === serviceId);
+      if (!service) return;
+
+      const newStatus = service.status === 'Received' ? 'Pending' : 'Received';
+      const { error } = await supabase
+        .from("service_distributions")
+        .update({ status: newStatus })
+        .eq("id", serviceId);
+      
+      if (error) throw error;
+      fetchData();
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
 
   if (loading) {
     return (
@@ -242,6 +335,34 @@ export default function FamilyDetailsPage() {
           <FileText className="h-5 w-5" />
         </button>
       </header>
+
+      {/* Error Message */}
+      {errorMessage && (
+        <div className="px-6 pt-6">
+          <div className="bg-amber-50 border border-amber-100 p-4 rounded-[2rem] flex items-center gap-3">
+            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+            </div>
+            <p className="text-[11px] font-black text-amber-900 uppercase tracking-tight leading-relaxed">
+              {errorMessage}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Success Message */}
+      {successMessage && (
+        <div className="px-6 pt-6">
+          <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-[2rem] flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <CheckCircle className="w-5 h-5 text-emerald-600" />
+            </div>
+            <p className="text-xs font-bold text-emerald-900">
+              {successMessage}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Summary Cards Row */}
       <div className="px-6 pt-6 grid grid-cols-2 gap-4">
@@ -445,24 +566,36 @@ export default function FamilyDetailsPage() {
           </div>
         ) : (
           <div className="space-y-3 w-full">
-            {services.map(service => (
-              <div key={service.id} className="bg-white rounded-2xl p-4 flex items-center justify-between border border-slate-50 shadow-sm">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
-                    <CheckCircle className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-black text-slate-800">{service.name}</h4>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">{service.date}</p>
-                  </div>
+            {services.length === 0 ? (
+              <div className="py-12 text-center flex flex-col items-center gap-4">
+                <div className="p-5 bg-slate-50 rounded-full text-slate-200">
+                  <CheckCircle className="h-10 w-10" />
                 </div>
-                <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${
-                  service.status === 'Received' ? 'bg-emerald-500 text-white' : 'bg-amber-100 text-amber-600'
-                }`}>
-                  {service.status}
-                </span>
+                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No services recorded</p>
               </div>
-            ))}
+            ) : (
+              services.map(service => (
+                <div key={service.id} className="bg-white rounded-2xl p-4 flex items-center justify-between border border-slate-50 shadow-sm">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
+                      <CheckCircle className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-800">{service.name}</h4>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">{service.date}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => toggleServiceStatus(service.id)}
+                    className={`px-3 py-1 rounded-full text-[8px] font-black uppercase transition-all active:scale-95 ${
+                      service.status === 'Received' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-amber-100 text-amber-600'
+                    }`}
+                  >
+                    {service.status === 'Received' ? t.active : t.inactive}
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>
