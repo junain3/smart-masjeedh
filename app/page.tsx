@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut } from "lucide-react";
+import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 type MasjidProfile = {
@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const [familyCount, setFamilyCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [masjid, setMasjid] = useState<MasjidProfile | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const router = useRouter();
 
   // Real-time clock update
@@ -96,20 +97,68 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-white text-black font-sans pb-24">
+    <div className="flex flex-col min-h-screen bg-white text-black font-sans pb-24 relative overflow-x-hidden">
+      {/* Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm transition-opacity"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Drawer */}
+      <aside className={`fixed top-0 left-0 h-full w-72 bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-6 flex flex-col h-full">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-xl font-black text-emerald-600 uppercase tracking-tighter">Menu</h2>
+            <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
+              <X className="w-6 h-6 text-slate-400" />
+            </button>
+          </div>
+
+          <div className="flex-1 space-y-2">
+            <Link href="/" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 bg-emerald-50 text-emerald-600 rounded-2xl font-bold transition-all">
+              <HomeIcon className="w-5 h-5" />
+              <span>Dashboard</span>
+            </Link>
+            <Link href="/families" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
+              <Users className="w-5 h-5" />
+              <span>Families</span>
+            </Link>
+            <div className="flex items-center gap-4 p-4 opacity-40 text-slate-600 rounded-2xl font-bold cursor-not-allowed">
+              <CreditCard className="w-5 h-5" />
+              <span>Accounts</span>
+            </div>
+            <div className="flex items-center gap-4 p-4 opacity-40 text-slate-600 rounded-2xl font-bold cursor-not-allowed">
+              <Settings className="w-5 h-5" />
+              <span>Settings</span>
+            </div>
+            <div className="flex items-center gap-4 p-4 opacity-40 text-slate-600 rounded-2xl font-bold cursor-not-allowed">
+              <HelpCircle className="w-5 h-5" />
+              <span>Help & Support</span>
+            </div>
+          </div>
+
+          <button 
+            onClick={handleLogout}
+            className="mt-auto flex items-center gap-4 p-4 text-red-500 hover:bg-red-50 rounded-2xl font-bold transition-all"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
+
       {/* Header */}
       <header className="p-4 flex items-center justify-between sticky top-0 bg-white z-20">
-        <button className="p-2 text-gray-600">
+        <button 
+          onClick={() => setIsSidebarOpen(true)}
+          className="p-2 text-gray-600 hover:bg-slate-50 rounded-xl transition-colors"
+        >
           <Menu className="w-6 h-6" />
         </button>
         <h1 className="text-xl font-semibold">Home</h1>
-        <button 
-          onClick={handleLogout}
-          className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-1"
-        >
-          <LogOut className="w-5 h-5" />
-          <span className="text-[10px] font-bold uppercase">Logout</span>
-        </button>
+        <div className="w-10"></div>
       </header>
 
       {/* Main Content */}
