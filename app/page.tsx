@@ -2,13 +2,22 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+
+type MasjidProfile = {
+  name: string;
+  logo_url: string;
+  tagline: string;
+};
 
 export default function DashboardPage() {
   const [time, setTime] = useState(new Date());
   const [familyCount, setFamilyCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [masjid, setMasjid] = useState<MasjidProfile | null>(null);
+  const router = useRouter();
 
   // Real-time clock update
   useEffect(() => {
@@ -16,26 +25,68 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch family count from Supabase
+  // Fetch data and auth check
   useEffect(() => {
-    async function fetchCount() {
+    async function fetchData() {
       try {
         if (!supabase) return;
-        const { count, error } = await supabase
+
+        // Check if user is logged in
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          router.push('/login');
+          return;
+        }
+
+        // Fetch family count
+        const { count, error: countError } = await supabase
           .from("families")
           .select("*", { count: "exact", head: true });
         
-        if (error) throw error;
+        if (countError) throw countError;
         setFamilyCount(count || 0);
+
+        // Fetch dynamic masjid profile (Optional table - fallback to MJM if not exists)
+        try {
+          const { data: masjidData } = await supabase
+            .from("masjids")
+            .select("*")
+            .eq("id", session.user.id)
+            .single();
+          
+          if (masjidData) {
+            setMasjid(masjidData);
+          } else {
+            // Default Fallback
+            setMasjid({
+              name: "MJM",
+              logo_url: "",
+              tagline: "Mubeen Jummah Masjid"
+            });
+          }
+        } catch (e) {
+          // If table masjids doesn't exist yet
+          setMasjid({
+            name: "MJM",
+            logo_url: "",
+            tagline: "Mubeen Jummah Masjid"
+          });
+        }
+
       } catch (err) {
-        console.error("Error fetching family count:", err);
-        setFamilyCount(1); 
+        console.error("Error fetching data:", err);
       } finally {
         setLoading(false);
       }
     }
-    fetchCount();
-  }, []);
+    fetchData();
+  }, [router]);
+
+  const handleLogout = async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
 
   // Format date: "25 February 2026 at 6:43"
   const formatDate = (date: Date) => {
@@ -52,7 +103,13 @@ export default function DashboardPage() {
           <Menu className="w-6 h-6" />
         </button>
         <h1 className="text-xl font-semibold">Home</h1>
-        <div className="w-10"></div>
+        <button 
+          onClick={handleLogout}
+          className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-1"
+        >
+          <LogOut className="w-5 h-5" />
+          <span className="text-[10px] font-bold uppercase">Logout</span>
+        </button>
       </header>
 
       {/* Main Content */}
@@ -64,28 +121,35 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* MJM Logo */}
+        {/* Dynamic Masjid Logo & Branding */}
         <div className="flex justify-center py-2">
           <div className="relative w-72 h-72 flex flex-col items-center justify-center p-4">
-            {/* Simple Mosque Illustration */}
-            <div className="absolute inset-0 flex items-center justify-center opacity-10">
+            <div className="absolute inset-0 flex items-center justify-center opacity-5">
                <svg viewBox="0 0 200 200" className="w-full h-full fill-emerald-600">
                  <path d="M100 20 C60 20 30 60 30 100 L30 180 L170 180 L170 100 C170 60 140 20 100 20 Z" />
                </svg>
             </div>
             
             <div className="text-center z-10 space-y-0">
-              <div className="mb-2 text-[#00a859]">
-                <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2L4 7v11h16V7l-8-5z"></path>
-                  <path d="M12 22v-4"></path>
-                  <path d="M8 18v4"></path>
-                  <path d="M16 18v4"></path>
-                  <path d="M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path>
-                </svg>
-              </div>
-              <h2 className="text-6xl font-bold text-[#003d5b] tracking-tighter leading-none">MJM</h2>
-              <p className="text-xs font-bold text-[#c6893f] uppercase tracking-wider">Mubeen Jummah Masjid</p>
+              {masjid?.logo_url ? (
+                <img src={masjid.logo_url} alt="Logo" className="w-32 h-32 object-contain mb-2 mx-auto" />
+              ) : (
+                <div className="mb-2 text-[#00a859]">
+                  <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L4 7v11h16V7l-8-5z"></path>
+                    <path d="M12 22v-4"></path>
+                    <path d="M8 18v4"></path>
+                    <path d="M16 18v4"></path>
+                    <path d="M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path>
+                  </svg>
+                </div>
+              )}
+              <h2 className="text-5xl font-black text-[#003d5b] tracking-tighter leading-none uppercase">
+                {masjid?.name || "MJM"}
+              </h2>
+              <p className="text-xs font-bold text-[#c6893f] uppercase tracking-wider mt-1">
+                {masjid?.tagline || "Mubeen Jummah Masjid"}
+              </p>
             </div>
           </div>
         </div>
