@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { translations, Language } from "@/lib/i18n/translations";
 
 type MasjidProfile = {
   name: string;
@@ -18,7 +19,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [masjid, setMasjid] = useState<MasjidProfile | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [lang, setLang] = useState<Language>("en");
   const router = useRouter();
+
+  const t = translations[lang];
 
   // Real-time clock update
   useEffect(() => {
@@ -31,6 +35,10 @@ export default function DashboardPage() {
     async function fetchData() {
       try {
         if (!supabase) return;
+
+        // Load language from localStorage
+        const savedLang = localStorage.getItem("app_lang") as Language;
+        if (savedLang) setLang(savedLang);
 
         // Check if user is logged in
         const { data: { session } } = await supabase.auth.getSession();
@@ -121,20 +129,20 @@ export default function DashboardPage() {
           <div className="flex-1 space-y-2">
             <Link href="/" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 bg-emerald-50 text-emerald-600 rounded-2xl font-bold transition-all">
               <HomeIcon className="w-5 h-5" />
-              <span>Dashboard</span>
+              <span>{t.dashboard}</span>
             </Link>
             <Link href="/families" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
               <Users className="w-5 h-5" />
-              <span>Families</span>
+              <span>{t.families}</span>
             </Link>
             <div className="flex items-center gap-4 p-4 opacity-40 text-slate-600 rounded-2xl font-bold cursor-not-allowed">
               <CreditCard className="w-5 h-5" />
-              <span>Accounts</span>
+              <span>{t.accounts}</span>
             </div>
-            <div className="flex items-center gap-4 p-4 opacity-40 text-slate-600 rounded-2xl font-bold cursor-not-allowed">
+            <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
               <Settings className="w-5 h-5" />
-              <span>Settings</span>
-            </div>
+              <span>{t.settings}</span>
+            </Link>
             <div className="flex items-center gap-4 p-4 opacity-40 text-slate-600 rounded-2xl font-bold cursor-not-allowed">
               <HelpCircle className="w-5 h-5" />
               <span>Help & Support</span>
@@ -146,7 +154,7 @@ export default function DashboardPage() {
             className="mt-auto flex items-center gap-4 p-4 text-red-500 hover:bg-red-50 rounded-2xl font-bold transition-all"
           >
             <LogOut className="w-5 h-5" />
-            <span>Logout</span>
+            <span>{t.logout}</span>
           </button>
         </div>
       </aside>
@@ -159,7 +167,7 @@ export default function DashboardPage() {
         >
           <Menu className="w-6 h-6" />
         </button>
-        <h1 className="text-xl font-semibold">Home</h1>
+        <h1 className="text-xl font-semibold">{t.home}</h1>
         <div className="w-10"></div>
       </header>
 
@@ -211,12 +219,12 @@ export default function DashboardPage() {
           className="w-full bg-[#00c853] text-white py-4 rounded-xl flex items-center justify-center gap-2 font-bold text-lg shadow-sm active:scale-[0.98] transition-all"
         >
           <HomeIcon className="w-5 h-5" />
-          Add New Family
+          {t.add_new_family}
         </Link>
 
         {/* Stats Section */}
         <div className="space-y-4 pt-2">
-          <h3 className="text-2xl font-bold text-black">Total Families</h3>
+          <h3 className="text-2xl font-bold text-black">{t.total_families}</h3>
           <div className="w-full bg-white border border-gray-200 rounded-2xl p-5 flex items-center h-16">
             <span className="text-2xl font-medium text-black">
               {loading ? "..." : familyCount}
@@ -228,17 +236,17 @@ export default function DashboardPage() {
         <div className="grid grid-cols-3 gap-3 pt-4">
           <Link href="/families" className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7]">
             <Users className="w-6 h-6 text-[#00c853]" />
-            <span className="text-[10px] font-bold text-[#00c853]">Families</span>
+            <span className="text-[10px] font-bold text-[#00c853]">{t.families}</span>
           </Link>
           
           <div className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7] opacity-80">
             <Edit className="w-6 h-6 text-[#00c853]" />
-            <span className="text-[10px] font-bold text-[#00c853]">Accounts</span>
+            <span className="text-[10px] font-bold text-[#00c853]">{t.accounts}</span>
           </div>
 
           <div className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7] opacity-80">
             <User className="w-6 h-6 text-[#00c853]" />
-            <span className="text-[10px] font-bold text-[#00c853]">Staff</span>
+            <span className="text-[10px] font-bold text-[#00c853]">{t.staff}</span>
           </div>
         </div>
       </main>
