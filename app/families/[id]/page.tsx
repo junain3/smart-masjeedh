@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { ArrowLeft, UserPlus, Trash2, User, Edit2, Search, MoreVertical } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft, UserPlus, Trash2, User, Edit2, Search, MoreVertical, QrCode, TrendingUp, Wallet } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { QRCodeSVG } from "qrcode.react";
+import { translations, Language } from "@/lib/i18n/translations";
 
 type Member = {
   id: string;
   family_id: string;
+  member_code: string;
   full_name: string;
   relationship: string;
   age: number;
@@ -17,6 +20,7 @@ type Member = {
   nic: string;
   phone: string;
   civil_status: string;
+  status: string;
 };
 
 type Family = {
@@ -25,19 +29,35 @@ type Family = {
   head_name: string;
   address: string;
   phone: string;
+  subscription_amount: number;
+  is_widow_head: boolean;
+};
+
+type Payment = {
+  id: string;
+  amount: number;
+  date: string;
+  description: string;
 };
 
 export default function FamilyDetailsPage() {
   const { id } = useParams();
+  const router = useRouter();
+  const [lang, setLang] = useState<Language>("en");
   const [family, setFamily] = useState<Family | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"members" | "payments">("members");
   
   // Form states
   const [fullName, setFullName] = useState("");
+  const [memberCode, setMemberCode] = useState("");
   const [relationship, setRelationship] = useState("மகன்");
+  const [status, setStatus] = useState("active");
   const [dob, setDob] = useState("");
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("Male");
@@ -45,6 +65,24 @@ export default function FamilyDetailsPage() {
   const [phone, setPhone] = useState("");
   const [civilStatus, setCivilStatus] = useState("Single");
   const [submitting, setSubmitting] = useState(false);
+
+  const t = translations[lang];
+
+  useEffect(() => {
+    const savedLang = localStorage.getItem("app_lang") as Language;
+    if (savedLang) setLang(savedLang);
+  }, []);
+
+  useEffect(() => {
+    if (isModalOpen && members.length > 0) {
+      const lastCode = members
+        .map(m => parseInt(m.member_code?.split('-')[1] || '0'))
+        .sort((a, b) => b - a)[0] || 0;
+      setMemberCode(`${family?.family_code}-${(lastCode + 1).toString().padStart(2, '0')}`);
+    } else if (isModalOpen) {
+      setMemberCode(`${family?.family_code}-01`);
+    }
+  }, [isModalOpen, members, family]);
 
   // Age calculation from DOB
   useEffect(() => {
@@ -68,7 +106,10 @@ export default function FamilyDetailsPage() {
     try {
       // Get current masjid ID
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        router.push("/login");
+        return;
+      }
 
       const { data: familyData, error: familyError } = await supabase
         .from("families")
@@ -97,6 +138,17 @@ export default function FamilyDetailsPage() {
       } else if (membersData) {
         setMembers(membersData);
       }
+
+      // Fetch payment history (subscriptions)
+      const { data: paymentData } = await supabase
+        .from("transactions")
+        .select("id, amount, date, description")
+        .eq("family_id", id)
+        .eq("masjid_id", session.user.id)
+        .order("date", { ascending: false });
+      
+      if (paymentData) setPayments(paymentData);
+
     } catch (error: any) {
       console.error("Error fetching data:", error);
       setErrorMessage(error.message || "தரவுகளைப் பெறுவதில் சிக்கல் ஏற்பட்டது.");
@@ -124,6 +176,7 @@ export default function FamilyDetailsPage() {
       const { error } = await supabase.from("members").insert([
         {
           family_id: id,
+          member_code: memberCode,
           full_name: fullName,
           relationship,
           age: parseInt(age),
@@ -132,6 +185,7 @@ export default function FamilyDetailsPage() {
           nic,
           phone,
           civil_status: civilStatus,
+          status,
           masjid_id: session.user.id // Include masjid ID
         }
       ]);
@@ -193,10 +247,25 @@ export default function FamilyDetailsPage() {
 
       {/* Family Info Section */}
       <div className="p-6">
-        <div className="bg-white professional-card rounded-[2rem] p-6 space-y-6">
+        <div className="bg-white professional-card rounded-[2rem] p-6 space-y-6 relative overflow-hidden">
+          {/* QR Button */}
+          <button 
+            onClick={() => setIsQrModalOpen(true)}
+            className="absolute top-6 right-6 p-3 bg-slate-50 text-slate-600 rounded-2xl hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95"
+          >
+            <QrCode className="w-6 h-6" />
+          </button>
+
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Family Head</label>
-            <h2 className="text-2xl font-black text-slate-900">{family?.head_name}</h2>
+            <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">{t.family} Head</label>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-black text-slate-900">{family?.head_name}</h2>
+              {family?.is_widow_head && (
+                <span className="px-3 py-1 bg-rose-50 text-rose-500 text-[10px] font-black uppercase rounded-full border border-rose-100">
+                  {t.widow_head}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 pt-2">
@@ -222,22 +291,48 @@ export default function FamilyDetailsPage() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="px-6 pb-2">
+        <div className="flex p-1 bg-slate-100 rounded-2xl">
+          <button 
+            onClick={() => setActiveTab("members")}
+            className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+              activeTab === "members" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400"
+            }`}
+          >
+            {t.members}
+          </button>
+          <button 
+            onClick={() => setActiveTab("payments")}
+            className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+              activeTab === "payments" ? "bg-white text-blue-600 shadow-sm" : "text-slate-400"
+            }`}
+          >
+            {t.payment_history}
+          </button>
+        </div>
+      </div>
+
       {/* Add Button & Search */}
       <div className="px-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-xl font-black text-slate-900">Members</h3>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="h-12 w-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 active:scale-90 transition-all"
-          >
-            <UserPlus className="h-6 w-6" />
-          </button>
+          <h3 className="text-xl font-black text-slate-900">
+            {activeTab === "members" ? t.members : t.payment_history}
+          </h3>
+          {activeTab === "members" && (
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="h-12 w-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 active:scale-90 transition-all"
+            >
+              <UserPlus className="h-6 w-6" />
+            </button>
+          )}
         </div>
         <div className="relative group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
           <input 
             type="text"
-            placeholder="Search member..."
+            placeholder={t.search}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm"
@@ -245,52 +340,109 @@ export default function FamilyDetailsPage() {
         </div>
       </div>
 
-      {/* Members List */}
+      {/* List Section */}
       <div className="flex-1 px-6 mt-6 overflow-y-auto">
-        {errorMessage && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-xs text-center flex flex-col gap-2">
-            <p className="font-semibold">{errorMessage}</p>
-            <button 
-              onClick={fetchData}
-              className="bg-red-100 hover:bg-red-200 py-2 px-4 rounded-xl text-[10px] font-bold transition-colors"
-            >
-              RETRY
-            </button>
-          </div>
-        )}
-        <div className="space-y-3 w-full">
-          {filteredMembers.length === 0 ? (
-            <div className="py-12 text-center flex flex-col items-center gap-4">
-              <div className="p-5 bg-slate-50 rounded-full text-slate-200">
-                <User className="h-10 w-10" />
+        {activeTab === "members" ? (
+          <div className="space-y-3 w-full">
+            {filteredMembers.length === 0 ? (
+              <div className="py-12 text-center flex flex-col items-center gap-4">
+                <div className="p-5 bg-slate-50 rounded-full text-slate-200">
+                  <User className="h-10 w-10" />
+                </div>
+                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No members found</p>
               </div>
-              <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No members found</p>
-            </div>
-          ) : (
-            filteredMembers.map(member => (
-              <div key={member.id} className="bg-white professional-card rounded-2xl p-4 flex items-center justify-between group animate-in fade-in duration-500">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="h-14 w-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-100 transition-colors flex-shrink-0">
-                    <User className="h-7 w-7" />
+            ) : (
+              filteredMembers.map(member => (
+                <div key={member.id} className="bg-white professional-card rounded-2xl p-4 flex items-center justify-between group animate-in fade-in duration-500">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="h-14 w-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-100 transition-colors flex-shrink-0">
+                      <User className="h-7 w-7" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-[10px] font-black text-emerald-600 uppercase tracking-tighter bg-emerald-50 px-1.5 py-0.5 rounded-md inline-block">
+                          {member.member_code}
+                        </p>
+                        <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md ${
+                          member.status === 'active' ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'
+                        }`}>
+                          {member.status === 'active' ? t.active : t.inactive}
+                        </span>
+                      </div>
+                      <h3 className="text-sm font-black text-slate-900 truncate group-hover:text-emerald-600 transition-colors">
+                        {member.full_name}
+                      </h3>
+                      <p className="text-xs font-bold text-slate-400">{member.relationship} • {member.age} YEARS</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-tighter mb-0.5 bg-emerald-50 px-1.5 py-0.5 rounded-md inline-block">
-                      {member.age} YEARS
-                    </p>
-                    <h3 className="text-sm font-black text-slate-900 truncate group-hover:text-emerald-600 transition-colors">
-                      {member.full_name}
-                    </h3>
-                    <p className="text-xs font-bold text-slate-400">{member.relationship}</p>
+                  <button className="p-2 text-slate-300 hover:bg-slate-50 rounded-xl transition-all">
+                    <MoreVertical className="h-5 w-5" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3 w-full">
+            {payments.length === 0 ? (
+              <div className="py-12 text-center flex flex-col items-center gap-4">
+                <div className="p-5 bg-slate-50 rounded-full text-slate-200">
+                  <Wallet className="h-10 w-10" />
+                </div>
+                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No payments yet</p>
+              </div>
+            ) : (
+              payments.map(payment => (
+                <div key={payment.id} className="bg-white rounded-2xl p-4 flex items-center justify-between border border-slate-50 shadow-sm animate-in fade-in duration-500">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-500">
+                      <TrendingUp className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-800">{payment.description}</h4>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">{payment.date}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-black text-emerald-500">+ Rs. {payment.amount.toLocaleString()}</p>
                   </div>
                 </div>
-                <button className="p-2 text-slate-300 hover:bg-slate-50 rounded-xl transition-all">
-                  <MoreVertical className="h-5 w-5" />
-                </button>
-              </div>
-            ))
-          )}
-        </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
+
+      {/* QR Modal */}
+      {isQrModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] p-10 flex flex-col items-center text-center animate-in zoom-in duration-300">
+            <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mb-6">
+              <QrCode className="w-10 h-10 text-emerald-600" />
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 mb-2">{t.qr_code}</h2>
+            <p className="text-slate-400 text-sm font-bold uppercase tracking-widest mb-8">
+              {family?.family_code} - {family?.head_name}
+            </p>
+            
+            <div className="bg-slate-50 p-8 rounded-[2.5rem] border-4 border-emerald-500/10 mb-8 shadow-inner">
+              <QRCodeSVG 
+                value={`smart-masjeedh:family:${family?.id}`} 
+                size={200}
+                level="H"
+                includeMargin={false}
+              />
+            </div>
+
+            <button 
+              onClick={() => setIsQrModalOpen(false)}
+              className="w-full bg-slate-900 text-white py-5 rounded-3xl font-black uppercase tracking-widest active:scale-95 transition-all shadow-xl shadow-slate-900/20"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Add Member Modal */}
       {isModalOpen && (
@@ -299,14 +451,38 @@ export default function FamilyDetailsPage() {
             <h2 className="text-2xl font-bold mb-6 text-center text-slate-900">உறுப்பினர் சேர்க்கை</h2>
             
             <form onSubmit={addMember} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.member_code}</label>
+                  <input 
+                    type="text" 
+                    value={memberCode} 
+                    readOnly
+                    className="w-full p-4 bg-slate-100 border-none rounded-2xl font-black text-slate-500 outline-none cursor-not-allowed" 
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.status}</label>
+                  <select 
+                    value={status} 
+                    onChange={(e) => setStatus(e.target.value)}
+                    className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-900 outline-none focus:ring-2 ring-emerald-500/10"
+                  >
+                    <option value="active">{t.active}</option>
+                    <option value="inactive">{t.inactive}</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="space-y-1">
-                <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">முழுப் பெயர்</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.full_name}</label>
                 <input 
-                  required
-                  value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20" 
-                  placeholder="பெயர்"
+                  required 
+                  type="text" 
+                  className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-900 outline-none focus:ring-2 ring-emerald-500/10" 
+                  placeholder="E.g. Ahmed Khan" 
+                  value={fullName} 
+                  onChange={(e) => setFullName(e.target.value)} 
                 />
               </div>
 
@@ -357,13 +533,14 @@ export default function FamilyDetailsPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">தொலைபேசி</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.phone}</label>
                 <input 
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20" 
-                  placeholder="07XXXXXXXX"
+                  type="tel" 
+                  className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-900 outline-none focus:ring-2 ring-emerald-500/10" 
+                  placeholder="07XXXXXXXX" 
+                  value={phone} 
+                  onChange={(e) => setPhone(e.target.value.slice(0, 10))} 
+                  maxLength={10}
                 />
               </div>
 

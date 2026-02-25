@@ -11,16 +11,24 @@ type Transaction = {
   id: string;
   amount: number;
   description: string;
-  type: "income" | "expense";
+  type: "income" | "expense" | "subscription";
   category: string;
   date: string;
   masjid_id: string;
+  family_id?: string;
+};
+
+type Family = {
+  id: string;
+  family_code: string;
+  head_name: string;
 };
 
 export default function AccountsPage() {
   const router = useRouter();
   const [lang, setLang] = useState<Language>("en");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [families, setFamilies] = useState<Family[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -28,7 +36,8 @@ export default function AccountsPage() {
   // Form states
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  const [type, setType] = useState<"income" | "expense">("income");
+  const [type, setType] = useState<"income" | "expense" | "subscription">("income");
+  const [selectedFamilyId, setSelectedFamilyId] = useState("");
   const [category, setCategory] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
@@ -38,10 +47,10 @@ export default function AccountsPage() {
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
-    fetchTransactions();
+    fetchData();
   }, []);
 
-  async function fetchTransactions() {
+  async function fetchData() {
     if (!supabase) return;
     setLoading(true);
     try {
@@ -51,21 +60,28 @@ export default function AccountsPage() {
         return;
       }
 
-      const { data, error } = await supabase
+      // Fetch transactions
+      const { data: txData, error: txError } = await supabase
         .from("transactions")
         .select("*")
         .eq("masjid_id", session.user.id)
         .order("date", { ascending: false });
 
-      if (error) {
-        if (error.code === 'PGRST116' || error.message.includes('table')) {
-          setTransactions([]);
-        } else {
-          throw error;
-        }
-      } else if (data) {
-        setTransactions(data);
+      if (txError) {
+        if (!txError.message.includes('table')) throw txError;
+      } else if (txData) {
+        setTransactions(txData);
       }
+
+      // Fetch families for subscription selection
+      const { data: famData } = await supabase
+        .from("families")
+        .select("id, family_code, head_name")
+        .eq("masjid_id", session.user.id)
+        .order("family_code", { ascending: true });
+      
+      if (famData) setFamilies(famData);
+
     } catch (err: any) {
       console.error("Fetch error:", err.message);
     } finally {
@@ -82,30 +98,43 @@ export default function AccountsPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
+      const finalType = type === "subscription" ? "income" : type;
+      const finalCategory = type === "subscription" ? t.subscription : category;
+      const finalDescription = type === "subscription" 
+        ? `${t.subscription} - ${families.find(f => f.id === selectedFamilyId)?.family_code}`
+        : description;
+
       const { error } = await supabase.from("transactions").insert([
         {
           amount: parseFloat(amount),
-          description,
-          type,
-          category,
+          description: finalDescription,
+          type: finalType,
+          category: finalCategory,
           date,
-          masjid_id: session.user.id
+          masjid_id: session.user.id,
+          family_id: type === "subscription" ? selectedFamilyId : null
         }
       ]);
 
       if (error) throw error;
       
       setIsModalOpen(false);
-      setAmount("");
-      setDescription("");
-      setCategory("");
-      fetchTransactions();
+      resetForm();
+      fetchData();
     } catch (err: any) {
       alert(err.message);
     } finally {
       setSubmitting(false);
     }
   }
+
+  const resetForm = () => {
+    setAmount("");
+    setDescription("");
+    setCategory("");
+    setSelectedFamilyId("");
+    setType("income");
+  };
 
   const totalIncome = transactions
     .filter(t => t.type === "income")
@@ -233,11 +262,11 @@ export default function AccountsPage() {
 
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Type Toggle */}
-              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-50 rounded-2xl">
+              <div className="grid grid-cols-3 gap-2 p-1 bg-slate-50 rounded-2xl">
                 <button
                   type="button"
                   onClick={() => setType("income")}
-                  className={`py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${
+                  className={`py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
                     type === "income" ? "bg-white text-emerald-500 shadow-sm" : "text-slate-400"
                   }`}
                 >
@@ -245,14 +274,40 @@ export default function AccountsPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setType("subscription")}
+                  className={`py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                    type === "subscription" ? "bg-white text-blue-500 shadow-sm" : "text-slate-400"
+                  }`}
+                >
+                  {t.subscription}
+                </button>
+                <button
+                  type="button"
                   onClick={() => setType("expense")}
-                  className={`py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${
+                  className={`py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
                     type === "expense" ? "bg-white text-rose-500 shadow-sm" : "text-slate-400"
                   }`}
                 >
                   {t.expense}
                 </button>
               </div>
+
+              {type === "subscription" && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.select_family}</label>
+                  <select
+                    required
+                    value={selectedFamilyId}
+                    onChange={e => setSelectedFamilyId(e.target.value)}
+                    className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none appearance-none"
+                  >
+                    <option value="">{t.select_family}</option>
+                    {families.map(f => (
+                      <option key={f.id} value={f.id}>{f.family_code} - {f.head_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.amount}</label>
@@ -266,31 +321,35 @@ export default function AccountsPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.description}</label>
-                <input 
-                  required
-                  type="text"
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
-                  placeholder="E.g. Friday Donation"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              {type !== "subscription" && (
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.category}</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.description}</label>
                   <input 
                     required
                     type="text"
-                    value={category}
-                    onChange={e => setCategory(e.target.value)}
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
                     className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
-                    placeholder="E.g. Charity"
+                    placeholder="E.g. Friday Donation"
                   />
                 </div>
-                <div className="space-y-2">
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                {type !== "subscription" && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.category}</label>
+                    <input 
+                      required
+                      type="text"
+                      value={category}
+                      onChange={e => setCategory(e.target.value)}
+                      className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
+                      placeholder="E.g. Charity"
+                    />
+                  </div>
+                )}
+                <div className={`space-y-2 ${type === "subscription" ? "col-span-2" : ""}`}>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.date}</label>
                   <input 
                     required
@@ -306,7 +365,9 @@ export default function AccountsPage() {
                 type="submit"
                 disabled={submitting}
                 className={`w-full py-5 rounded-3xl font-black text-white shadow-xl transition-all active:scale-[0.97] disabled:opacity-50 ${
-                  type === "income" ? "bg-emerald-500 shadow-emerald-500/20" : "bg-rose-500 shadow-rose-500/20"
+                  type === "income" ? "bg-emerald-500 shadow-emerald-500/20" : 
+                  type === "subscription" ? "bg-blue-500 shadow-blue-500/20" :
+                  "bg-rose-500 shadow-rose-500/20"
                 }`}
               >
                 {submitting ? "PROCESSING..." : t.save}
