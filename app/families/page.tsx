@@ -90,6 +90,27 @@ export default function FamiliesPage() {
     }
   }, [isScannerOpen]);
 
+  useEffect(() => {
+    if (isOpen && families.length > 0 && isLive) {
+      // Find the last family code format
+      const lastFamily = families[families.length - 1];
+      const lastCode = lastFamily.family_code;
+      
+      // Try to extract prefix and number (e.g., FM-01 -> FM, 01)
+      const match = lastCode.match(/^([A-Za-z\s-]+)(\d+)$/);
+      if (match) {
+        const prefix = match[1];
+        const num = parseInt(match[2]);
+        setFamilyCode(`${prefix}${(num + 1).toString().padStart(match[2].length, '0')}`);
+      } else {
+        // Fallback if format is different
+        setFamilyCode("");
+      }
+    } else if (isOpen && !isLive) {
+      setFamilyCode("FM-01");
+    }
+  }, [isOpen, families, isLive]);
+
   async function fetchFamilies() {
     if (!supabase) return;
     setIsFetching(true);

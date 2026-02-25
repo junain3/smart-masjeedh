@@ -55,9 +55,7 @@ export default function FamilyDetailsPage() {
   
   // Form states
   const [fullName, setFullName] = useState("");
-  const [memberCode, setMemberCode] = useState("");
   const [relationship, setRelationship] = useState("மகன்");
-  const [status, setStatus] = useState("active");
   const [dob, setDob] = useState("");
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("Male");
@@ -72,17 +70,6 @@ export default function FamilyDetailsPage() {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
   }, []);
-
-  useEffect(() => {
-    if (isModalOpen && members.length > 0) {
-      const lastCode = members
-        .map(m => parseInt(m.member_code?.split('-')[1] || '0'))
-        .sort((a, b) => b - a)[0] || 0;
-      setMemberCode(`${family?.family_code}-${(lastCode + 1).toString().padStart(2, '0')}`);
-    } else if (isModalOpen) {
-      setMemberCode(`${family?.family_code}-01`);
-    }
-  }, [isModalOpen, members, family]);
 
   // Age calculation from DOB
   useEffect(() => {
@@ -176,7 +163,6 @@ export default function FamilyDetailsPage() {
       const { error } = await supabase.from("members").insert([
         {
           family_id: id,
-          member_code: memberCode,
           full_name: fullName,
           relationship,
           age: parseInt(age),
@@ -185,7 +171,6 @@ export default function FamilyDetailsPage() {
           nic,
           phone,
           civil_status: civilStatus,
-          status,
           masjid_id: session.user.id // Include masjid ID
         }
       ]);
@@ -359,20 +344,13 @@ export default function FamilyDetailsPage() {
                       <User className="h-7 w-7" />
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-[10px] font-black text-emerald-600 uppercase tracking-tighter bg-emerald-50 px-1.5 py-0.5 rounded-md inline-block">
-                          {member.member_code}
-                        </p>
-                        <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md ${
-                          member.status === 'active' ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'
-                        }`}>
-                          {member.status === 'active' ? t.active : t.inactive}
-                        </span>
-                      </div>
                       <h3 className="text-sm font-black text-slate-900 truncate group-hover:text-emerald-600 transition-colors">
                         {member.full_name}
                       </h3>
                       <p className="text-xs font-bold text-slate-400">{member.relationship} • {member.age} YEARS</p>
+                      <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 mt-1 inline-block">
+                        {member.civil_status}
+                      </span>
                     </div>
                   </div>
                   <button className="p-2 text-slate-300 hover:bg-slate-50 rounded-xl transition-all">
@@ -451,29 +429,6 @@ export default function FamilyDetailsPage() {
             <h2 className="text-2xl font-bold mb-6 text-center text-slate-900">உறுப்பினர் சேர்க்கை</h2>
             
             <form onSubmit={addMember} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.member_code}</label>
-                  <input 
-                    type="text" 
-                    value={memberCode} 
-                    readOnly
-                    className="w-full p-4 bg-slate-100 border-none rounded-2xl font-black text-slate-500 outline-none cursor-not-allowed" 
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.status}</label>
-                  <select 
-                    value={status} 
-                    onChange={(e) => setStatus(e.target.value)}
-                    className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-900 outline-none focus:ring-2 ring-emerald-500/10"
-                  >
-                    <option value="active">{t.active}</option>
-                    <option value="inactive">{t.inactive}</option>
-                  </select>
-                </div>
-              </div>
-
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.full_name}</label>
                 <input 
