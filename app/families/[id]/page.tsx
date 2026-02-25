@@ -276,8 +276,9 @@ export default function FamilyDetailsPage() {
                   <MoreVertical className="h-5 w-5" />
                 </button>
               </div>
-            ))}
-          </div>
+            ))
+          )}
+        </div>
       </div>
 
       {/* Add Member Modal */}
