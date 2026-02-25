@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft } from "lucide-react";
+import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { translations, Language } from "@/lib/i18n/translations";
@@ -321,7 +321,7 @@ export default function FamiliesPage() {
         </Link>
         <Link href="/accounts" className="flex flex-col items-center gap-1 group">
           <div className="p-3 bg-slate-50 rounded-2xl group-hover:bg-slate-100 transition-colors">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+            <CreditCard className="w-6 h-6 text-slate-400" />
           </div>
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t.accounts}</span>
         </Link>

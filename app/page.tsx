@@ -144,10 +144,10 @@ export default function DashboardPage() {
               <Users className="w-5 h-5" />
               <span>{t.families}</span>
             </Link>
-            <div className="flex items-center gap-4 p-4 opacity-40 text-slate-600 rounded-2xl font-bold cursor-not-allowed">
+            <Link href="/accounts" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
               <CreditCard className="w-5 h-5" />
               <span>{t.accounts}</span>
-            </div>
+            </Link>
             <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
               <Settings className="w-5 h-5" />
               <span>{t.settings}</span>
