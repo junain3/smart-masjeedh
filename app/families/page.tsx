@@ -48,9 +48,14 @@ export default function FamiliesPage() {
     if (!supabase) return;
     setIsFetching(true);
     try {
+      // Get current masjid ID
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
       const { data, error } = await supabase
         .from("families")
         .select("*")
+        .eq("masjid_id", session.user.id) // Filter by masjid ID
         .order("family_code", { ascending: true });
 
       if (error) throw error;
@@ -84,12 +89,17 @@ export default function FamiliesPage() {
     }
 
     try {
+      // Get current masjid ID
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("லாகின் செய்யப்படவில்லை.");
+
       const { error } = await supabase.from("families").insert([
         {
           family_code: familyCode,
           head_name: headName,
           address,
-          phone
+          phone,
+          masjid_id: session.user.id // Include masjid ID
         }
       ]);
 

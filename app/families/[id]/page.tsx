@@ -63,13 +63,18 @@ export default function FamilyDetailsPage() {
   const fetchData = async () => {
     if (!supabase || !id) return;
     setLoading(true);
-    setErrorMessage(""); // Clear any previous error
+    setErrorMessage(""); 
     
     try {
+      // Get current masjid ID
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
       const { data: familyData, error: familyError } = await supabase
         .from("families")
         .select("*")
         .eq("id", id)
+        .eq("masjid_id", session.user.id) // Ensure user can only see their own masjid's family
         .single();
       
       if (familyError) throw familyError;
@@ -78,7 +83,8 @@ export default function FamilyDetailsPage() {
       const { data: membersData, error: membersError } = await supabase
         .from("members")
         .select("*")
-        .eq("family_id", id);
+        .eq("family_id", id)
+        .eq("masjid_id", session.user.id); // Ensure user can only see their own masjid's members
       
       if (membersError) {
         // Specifically check if the error is "Table not found"
@@ -111,6 +117,10 @@ export default function FamilyDetailsPage() {
     setSubmitting(true);
 
     try {
+      // Get current masjid ID
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("லாகின் செய்யப்படவில்லை.");
+
       const { error } = await supabase.from("members").insert([
         {
           family_id: id,
@@ -121,7 +131,8 @@ export default function FamilyDetailsPage() {
           dob,
           nic,
           phone,
-          civil_status: civilStatus
+          civil_status: civilStatus,
+          masjid_id: session.user.id // Include masjid ID
         }
       ]);
 

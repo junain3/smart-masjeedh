@@ -42,7 +42,8 @@ export default function DashboardPage() {
         // Fetch family count
         const { count, error: countError } = await supabase
           .from("families")
-          .select("*", { count: "exact", head: true });
+          .select("*", { count: "exact", head: true })
+          .eq("masjid_id", session.user.id); // Filter by masjid ID
         
         if (countError) throw countError;
         setFamilyCount(count || 0);
