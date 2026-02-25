@@ -180,7 +180,7 @@ export default function FamiliesPage() {
 
       {/* Families List */}
       <section className="flex-1 px-4 overflow-y-auto pb-6">
-        <div className="space-y-3 max-w-md mx-auto">
+        <div className="space-y-3 w-full">
           {filteredFamilies.length === 0 ? (
             <div className="py-20 text-center flex flex-col items-center gap-4">
               <div className="p-6 bg-slate-100 rounded-full text-slate-300">

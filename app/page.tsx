@@ -56,7 +56,7 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-6 space-y-6 max-w-md mx-auto w-full">
+      <main className="flex-1 p-6 space-y-6 w-full">
         {/* Date Display */}
         <div className="text-center">
           <p className="text-xl font-medium text-black">

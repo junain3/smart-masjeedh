@@ -247,7 +247,7 @@ export default function FamilyDetailsPage() {
             </button>
           </div>
         )}
-        <div className="space-y-3 max-w-md mx-auto">
+        <div className="space-y-3 w-full">
           {filteredMembers.length === 0 ? (
             <div className="py-12 text-center flex flex-col items-center gap-4">
               <div className="p-5 bg-slate-50 rounded-full text-slate-200">
