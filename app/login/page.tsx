@@ -20,6 +20,8 @@ export default function MasjidLoginPage() {
       return;
     }
 
+    if (!supabase) return;
+
     const { data, error } = await supabase.auth.signInWithPassword({ 
       email, 
       password, 

@@ -49,6 +49,7 @@ export default function DashboardPage() {
 
         // Fetch dynamic masjid profile (Optional table - fallback to MJM if not exists)
         try {
+          if (!supabase) return;
           const { data: masjidData } = await supabase
             .from("masjids")
             .select("*")

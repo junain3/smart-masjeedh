@@ -23,6 +23,8 @@ export default function MasjidRegisterPage() {
       return;
     }
 
+    if (!supabase) return;
+
     // 1. Sign up the user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({ 
       email, 
@@ -35,7 +37,7 @@ export default function MasjidRegisterPage() {
       return;
     }
 
-    if (authData.user) {
+    if (authData.user && supabase) {
       // 2. Create the masjid profile in the 'masjids' table
       const { error: profileError } = await supabase
         .from('masjids')
