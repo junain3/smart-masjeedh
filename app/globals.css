@@ -1,14 +1,15 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-:root {
-  color-scheme: light;
-}
-
-body {
-  min-height: 100vh;
-  background-color: #f8fafc;
-  color: #020617;
-}
-
+/* professional-styles */ 
+ @tailwind base; 
+ @tailwind components; 
+ @tailwind utilities; 
+ 
+ body { 
+   background-color: #f8fafc; /* Soft background */ 
+   -webkit-tap-highlight-color: transparent; /* Smooth mobile touch */ 
+ } 
+ 
+ /* Custom card shadow for professional look */ 
+ .professional-card { 
+   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); 
+   border: 1px solid rgba(226, 232, 240, 1); 
+ }

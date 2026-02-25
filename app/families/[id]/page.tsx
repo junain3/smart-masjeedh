@@ -161,61 +161,81 @@ export default function FamilyDetailsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 flex flex-col">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-6 font-sans">
       {/* Top Header */}
-      <div className="px-4 py-4 flex items-center justify-between">
-        <Link href="/families" className="p-1">
-          <ArrowLeft className="h-6 w-6 text-emerald-600" />
-        </Link>
-      </div>
+      <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Link href="/families" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-emerald-600">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          </Link>
+          <div>
+            <h1 className="text-lg font-bold leading-none">{family?.family_code}</h1>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">
+              Family Details
+            </p>
+          </div>
+        </div>
+        <button className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 active:scale-95 transition-all">
+          <Edit2 className="h-5 w-5" />
+        </button>
+      </header>
 
       {/* Family Info Section */}
-      <div className="px-4 pb-6">
-        <div className="flex justify-between items-start mb-1">
-          <h1 className="text-3xl font-bold text-slate-900">{family?.family_code}</h1>
-          <button className="flex items-center gap-1 bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-sm font-semibold shadow-sm">
-            <Edit2 className="h-4 w-4" />
-            Edit
-          </button>
-        </div>
-        <p className="text-slate-500 text-lg mb-6">{family?.head_name}</p>
-
-        <div className="space-y-4">
-          <div className="flex justify-between border-b border-slate-100 pb-2">
-            <span className="text-slate-400">Address</span>
-            <span className="text-slate-900 font-medium text-right max-w-[200px]">{family?.address}</span>
+      <div className="p-6">
+        <div className="bg-white professional-card rounded-[2rem] p-6 space-y-6">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Family Head</label>
+            <h2 className="text-2xl font-black text-slate-900">{family?.head_name}</h2>
           </div>
-          <div className="flex justify-between border-b border-slate-100 pb-2">
-            <span className="text-slate-400">Phone</span>
-            <span className="text-slate-900 font-medium">{family?.phone}</span>
+
+          <div className="grid grid-cols-1 gap-4 pt-2">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-slate-50 rounded-xl text-slate-400">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Address</p>
+                <p className="text-sm font-semibold text-slate-700">{family?.address}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-slate-50 rounded-xl text-slate-400">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Phone</p>
+                <p className="text-sm font-semibold text-slate-700">{family?.phone}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Add Button & Search */}
-      <div className="relative px-4 mb-4">
-        <div className="flex justify-end mb-4">
+      <div className="px-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-black text-slate-900">Members</h3>
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="h-10 w-10 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-lg active:scale-90 transition-transform"
+            className="h-12 w-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 active:scale-90 transition-all"
           >
             <UserPlus className="h-6 w-6" />
           </button>
         </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <div className="relative group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
           <input 
             type="text"
-            placeholder="Search"
+            placeholder="Search member..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-100 border-none rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-1 ring-emerald-500/20"
+            className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm"
           />
         </div>
       </div>
 
       {/* Members List */}
-      <div className="flex-1 px-4 overflow-y-auto">
+      <div className="flex-1 px-6 mt-6 overflow-y-auto">
         {errorMessage && (
           <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-xs text-center flex flex-col gap-2">
             <p className="font-semibold">{errorMessage}</p>
@@ -223,38 +243,41 @@ export default function FamilyDetailsPage() {
               onClick={fetchData}
               className="bg-red-100 hover:bg-red-200 py-2 px-4 rounded-xl text-[10px] font-bold transition-colors"
             >
-              மீண்டும் முயற்சிக்க (RETRY)
+              RETRY
             </button>
           </div>
         )}
-        {filteredMembers.length === 0 ? (
-          <div className="py-10 text-center">
-            <User className="h-12 w-12 text-slate-200 mx-auto mb-2" />
-            <p className="text-sm text-slate-400">உறுப்பினர்கள் யாரும் இல்லை</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-50">
-            {filteredMembers.map(member => (
-              <div key={member.id} className="py-4 flex items-center justify-between group">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-xl bg-slate-100 flex items-center justify-center">
-                    <User className="h-6 w-6 text-slate-300" />
+        <div className="space-y-3 max-w-md mx-auto">
+          {filteredMembers.length === 0 ? (
+            <div className="py-12 text-center flex flex-col items-center gap-4">
+              <div className="p-5 bg-slate-50 rounded-full text-slate-200">
+                <User className="h-10 w-10" />
+              </div>
+              <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No members found</p>
+            </div>
+          ) : (
+            filteredMembers.map(member => (
+              <div key={member.id} className="bg-white professional-card rounded-2xl p-4 flex items-center justify-between group animate-in fade-in duration-500">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="h-14 w-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-100 transition-colors flex-shrink-0">
+                    <User className="h-7 w-7" />
                   </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-0.5">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-tighter mb-0.5 bg-emerald-50 px-1.5 py-0.5 rounded-md inline-block">
                       {member.age} YEARS
                     </p>
-                    <h3 className="text-sm font-bold text-slate-900">{member.full_name}</h3>
-                    <p className="text-xs text-slate-400">{member.relationship}</p>
+                    <h3 className="text-sm font-black text-slate-900 truncate group-hover:text-emerald-600 transition-colors">
+                      {member.full_name}
+                    </h3>
+                    <p className="text-xs font-bold text-slate-400">{member.relationship}</p>
                   </div>
                 </div>
-                <button className="p-2 text-slate-300 hover:text-slate-600">
+                <button className="p-2 text-slate-300 hover:bg-slate-50 rounded-xl transition-all">
                   <MoreVertical className="h-5 w-5" />
                 </button>
               </div>
             ))}
           </div>
-        )}
       </div>
 
       {/* Add Member Modal */}
