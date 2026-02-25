@@ -3,10 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, UserPlus, Trash2, User, Edit2, Search, MoreVertical, QrCode, TrendingUp, Wallet } from "lucide-react";
+import { ArrowLeft, UserPlus, Trash2, User, Edit2, Search, MoreVertical, QrCode, TrendingUp, Wallet, FileText, CheckCircle, Clock } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { QRCodeSVG } from "qrcode.react";
 import { translations, Language } from "@/lib/i18n/translations";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+
+declare module "jspdf" {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
 
 type Member = {
   id: string;
@@ -40,6 +48,13 @@ type Payment = {
   description: string;
 };
 
+type Service = {
+  id: string;
+  name: string;
+  date: string;
+  status: string;
+};
+
 export default function FamilyDetailsPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -47,11 +62,13 @@ export default function FamilyDetailsPage() {
   const [family, setFamily] = useState<Family | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"members" | "payments">("members");
+  const [activeTab, setActiveTab] = useState<"members" | "payments" | "services">("members");
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
   
   // Form states
   const [fullName, setFullName] = useState("");
@@ -198,9 +215,7 @@ export default function FamilyDetailsPage() {
     setCivilStatus("Single");
   };
 
-  const filteredMembers = members.filter(m => 
-    m.full_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const subBalance = (family?.subscription_amount || 0) * 12 - payments.reduce((sum, p) => sum + p.amount, 0);
 
   if (loading) {
     return (
@@ -212,23 +227,41 @@ export default function FamilyDetailsPage() {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-6 font-sans">
-      {/* Top Header */}
+      {/* Header */}
       <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link href="/families" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-emerald-600">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            <ArrowLeft className="h-6 w-6" />
           </Link>
-          <div>
-            <h1 className="text-lg font-bold leading-none">{family?.family_code}</h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">
-              Family Details
-            </p>
-          </div>
+          <h1 className="text-lg font-black">{t.family}</h1>
         </div>
-        <button className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 active:scale-95 transition-all">
-          <Edit2 className="h-5 w-5" />
+        <button 
+          onClick={generatePDF}
+          className="p-2.5 bg-slate-50 text-blue-600 rounded-xl hover:bg-blue-50 active:scale-95 transition-all"
+        >
+          <FileText className="h-5 w-5" />
         </button>
       </header>
+
+      {/* Summary Cards Row */}
+      <div className="px-6 pt-6 grid grid-cols-2 gap-4">
+        <div className="bg-emerald-50 rounded-[2rem] p-5 border border-emerald-100 space-y-2">
+          <div className="flex items-center gap-2 text-emerald-600">
+            <CheckCircle className="w-4 h-4" />
+            <span className="text-[10px] font-black uppercase tracking-widest">{t.recent_services}</span>
+          </div>
+          <p className="text-xs font-bold text-slate-700">Ramadan Dates</p>
+          <p className="text-[9px] font-black text-emerald-600/60 uppercase">MARCH 2024</p>
+        </div>
+        <div className="bg-rose-50 rounded-[2rem] p-5 border border-rose-100 space-y-2">
+          <div className="flex items-center gap-2 text-rose-600">
+            <Clock className="w-4 h-4" />
+            <span className="text-[10px] font-black uppercase tracking-widest">{t.subscription_balance}</span>
+          </div>
+          <p className="text-sm font-black text-slate-900">Rs. {subBalance.toLocaleString()}</p>
+          <p className="text-[9px] font-black text-rose-600/60 uppercase tracking-tighter">Due for 2024</p>
+        </div>
+      </div>
 
       {/* Family Info Section */}
       <div className="p-6">
@@ -281,7 +314,7 @@ export default function FamilyDetailsPage() {
         <div className="flex p-1 bg-slate-100 rounded-2xl">
           <button 
             onClick={() => setActiveTab("members")}
-            className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
               activeTab === "members" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400"
             }`}
           >
@@ -289,11 +322,19 @@ export default function FamilyDetailsPage() {
           </button>
           <button 
             onClick={() => setActiveTab("payments")}
-            className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
               activeTab === "payments" ? "bg-white text-blue-600 shadow-sm" : "text-slate-400"
             }`}
           >
             {t.payment_history}
+          </button>
+          <button 
+            onClick={() => setActiveTab("services")}
+            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              activeTab === "services" ? "bg-white text-amber-600 shadow-sm" : "text-slate-400"
+            }`}
+          >
+            {t.services_received}
           </button>
         </div>
       </div>
@@ -301,12 +342,15 @@ export default function FamilyDetailsPage() {
       {/* Add Button & Search */}
       <div className="px-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-xl font-black text-slate-900">
-            {activeTab === "members" ? t.members : t.payment_history}
+          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">
+            {activeTab === "members" ? t.members : activeTab === "payments" ? t.payment_history : t.services_received}
           </h3>
           {activeTab === "members" && (
             <button 
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => {
+                resetForm();
+                setIsModalOpen(true);
+              }}
               className="h-12 w-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 active:scale-90 transition-all"
             >
               <UserPlus className="h-6 w-6" />
@@ -353,14 +397,25 @@ export default function FamilyDetailsPage() {
                       </span>
                     </div>
                   </div>
-                  <button className="p-2 text-slate-300 hover:bg-slate-50 rounded-xl transition-all">
-                    <MoreVertical className="h-5 w-5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={() => setEditingMember(member)}
+                      className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                    <button 
+                      onClick={() => deleteMember(member.id)}
+                      className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
           </div>
-        ) : (
+        ) : activeTab === "payments" ? (
           <div className="space-y-3 w-full">
             {payments.length === 0 ? (
               <div className="py-12 text-center flex flex-col items-center gap-4">
@@ -387,6 +442,27 @@ export default function FamilyDetailsPage() {
                 </div>
               ))
             )}
+          </div>
+        ) : (
+          <div className="space-y-3 w-full">
+            {services.map(service => (
+              <div key={service.id} className="bg-white rounded-2xl p-4 flex items-center justify-between border border-slate-50 shadow-sm">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
+                    <CheckCircle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-slate-800">{service.name}</h4>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">{service.date}</p>
+                  </div>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${
+                  service.status === 'Received' ? 'bg-emerald-500 text-white' : 'bg-amber-100 text-amber-600'
+                }`}>
+                  {service.status}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>

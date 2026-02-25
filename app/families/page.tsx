@@ -3,10 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard } from "lucide-react";
+import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { translations, Language } from "@/lib/i18n/translations";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+
+declare module "jspdf" {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
 
 type Family = {
   id: string;
@@ -14,6 +22,8 @@ type Family = {
   head_name: string;
   address: string;
   phone: string;
+  subscription_amount?: number;
+  is_widow_head?: boolean;
 };
 
 const dummyFamilies: Family[] = [
@@ -51,6 +61,7 @@ export default function FamiliesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [lang, setLang] = useState<Language>("en");
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [editingFamily, setEditingFamily] = useState<Family | null>(null);
 
   const t = translations[lang];
 
@@ -59,6 +70,18 @@ export default function FamiliesPage() {
     if (savedLang) setLang(savedLang);
     fetchFamilies();
   }, []);
+
+  useEffect(() => {
+    if (editingFamily) {
+      setHeadName(editingFamily.head_name);
+      setAddress(editingFamily.address);
+      setPhone(editingFamily.phone);
+      setFamilyCode(editingFamily.family_code);
+      setSubscriptionAmount(editingFamily.subscription_amount?.toString() || "");
+      setIsWidowHead(editingFamily.is_widow_head || false);
+      setIsOpen(true);
+    }
+  }, [editingFamily]);
 
   useEffect(() => {
     if (isScannerOpen) {
@@ -91,7 +114,7 @@ export default function FamiliesPage() {
   }, [isScannerOpen]);
 
   useEffect(() => {
-    if (isOpen && families.length > 0 && isLive) {
+    if (isOpen && families.length > 0 && isLive && !editingFamily) {
       // Find the last family code format
       const lastFamily = families[families.length - 1];
       const lastCode = lastFamily.family_code;
@@ -151,12 +174,30 @@ export default function FamiliesPage() {
     }
 
     try {
-      // Get current masjid ID
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("லாகின் செய்யப்படவில்லை.");
 
-      const { error } = await supabase.from("families").insert([
-        {
+      if (editingFamily) {
+        // Update existing
+        const { error } = await supabase
+          .from("families")
+          .update({
+            family_code: familyCode,
+            head_name: headName,
+            address,
+            phone,
+            subscription_amount: parseFloat(subscriptionAmount) || 0,
+            is_widow_head: isWidowHead
+          })
+          .eq("id", editingFamily.id)
+          .eq("masjid_id", session.user.id);
+
+        if (error) throw error;
+        setSuccessMessage("குடும்ப விபரம் திருத்தப்பட்டது.");
+      } else {
+        // Insert new
+        const { error } = await supabase.from("families").insert([
+          {
             family_code: familyCode,
             head_name: headName,
             address,
@@ -165,16 +206,14 @@ export default function FamiliesPage() {
             is_widow_head: isWidowHead,
             masjid_id: session.user.id // Include masjid ID
           }
-      ]);
+        ]);
 
-      if (error) throw error;
+        if (error) throw error;
+        setSuccessMessage("குடும்பம் வெற்றிகரமாகச் சேமிக்கப்பட்டது.");
+      }
 
-      setSuccessMessage("குடும்பம் வெற்றிகரமாகச் சேமிக்கப்பட்டது.");
       setIsOpen(false);
-      setHeadName("");
-      setAddress("");
-      setPhone("");
-      setFamilyCode("");
+      resetForm();
       fetchFamilies();
     } catch (err: any) {
       setErrorMessage(err.message);
@@ -182,6 +221,51 @@ export default function FamiliesPage() {
       setLoading(false);
     }
   }
+
+  const resetForm = () => {
+    setHeadName("");
+    setAddress("");
+    setPhone("");
+    setFamilyCode("");
+    setSubscriptionAmount("");
+    setIsWidowHead(false);
+    setEditingFamily(null);
+  };
+
+  async function deleteFamily(id: string) {
+    if (!supabase || !confirm(t.confirm_delete)) return;
+    try {
+      const { error } = await supabase
+        .from("families")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      fetchFamilies();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
+
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    doc.text("Masjid Families List", 14, 15);
+    
+    const tableData = filteredFamilies.map(f => [
+      f.family_code,
+      f.head_name,
+      f.address,
+      f.phone,
+      f.subscription_amount || 0
+    ]);
+
+    doc.autoTable({
+      startY: 20,
+      head: [["Code", "Head Name", "Address", "Phone", "Sub. Amt"]],
+      body: tableData,
+    });
+
+    doc.save("families_list.pdf");
+  };
 
   const filteredFamilies = families.filter(f => 
     f.head_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -204,6 +288,13 @@ export default function FamiliesPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button 
+            onClick={generatePDF}
+            className="p-2.5 bg-slate-50 text-blue-600 rounded-xl hover:bg-blue-50 transition-all active:scale-95"
+            title={t.download_pdf}
+          >
+            <FileText className="h-5 w-5" />
+          </button>
           <button 
             onClick={() => setIsScannerOpen(true)}
             className="p-2.5 bg-slate-50 text-slate-600 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95"
@@ -296,8 +387,27 @@ export default function FamiliesPage() {
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <div className="h-10 w-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-500 transition-all">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setEditingFamily(family);
+                        }}
+                        className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          deleteFamily(family.id);
+                        }}
+                        className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                     <p className="text-[10px] font-bold text-slate-400">{family.phone}</p>
                   </div>

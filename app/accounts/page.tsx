@@ -3,9 +3,17 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Search, TrendingUp, TrendingDown, Wallet, Calendar, Tag, MoreVertical, X } from "lucide-react";
+import { ArrowLeft, Plus, Search, TrendingUp, TrendingDown, Wallet, Calendar, Tag, MoreVertical, X, Edit, Trash2, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+
+declare module "jspdf" {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
 
 type Transaction = {
   id: string;
@@ -32,6 +40,7 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   
   // Form states
   const [amount, setAmount] = useState("");
@@ -49,6 +58,18 @@ export default function AccountsPage() {
     if (savedLang) setLang(savedLang);
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (editingTransaction) {
+      setAmount(editingTransaction.amount.toString());
+      setDescription(editingTransaction.description);
+      setType(editingTransaction.type === "income" && editingTransaction.family_id ? "subscription" : editingTransaction.type as any);
+      setCategory(editingTransaction.category);
+      setDate(editingTransaction.date);
+      setSelectedFamilyId(editingTransaction.family_id || "");
+      setIsModalOpen(true);
+    }
+  }, [editingTransaction]);
 
   async function fetchData() {
     if (!supabase) return;
@@ -104,20 +125,34 @@ export default function AccountsPage() {
         ? `${t.subscription} - ${families.find(f => f.id === selectedFamilyId)?.family_code}`
         : description;
 
-      const { error } = await supabase.from("transactions").insert([
-        {
-          amount: parseFloat(amount),
-          description: finalDescription,
-          type: finalType,
-          category: finalCategory,
-          date,
-          masjid_id: session.user.id,
-          family_id: type === "subscription" ? selectedFamilyId : null
-        }
-      ]);
+      if (editingTransaction) {
+        const { error } = await supabase
+          .from("transactions")
+          .update({
+            amount: parseFloat(amount),
+            description: finalDescription,
+            type: finalType,
+            category: finalCategory,
+            date,
+            family_id: type === "subscription" ? selectedFamilyId : null
+          })
+          .eq("id", editingTransaction.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("transactions").insert([
+          {
+            amount: parseFloat(amount),
+            description: finalDescription,
+            type: finalType,
+            category: finalCategory,
+            date,
+            masjid_id: session.user.id,
+            family_id: type === "subscription" ? selectedFamilyId : null
+          }
+        ]);
+        if (error) throw error;
+      }
 
-      if (error) throw error;
-      
       setIsModalOpen(false);
       resetForm();
       fetchData();
@@ -134,6 +169,42 @@ export default function AccountsPage() {
     setCategory("");
     setSelectedFamilyId("");
     setType("income");
+    setEditingTransaction(null);
+  };
+
+  async function deleteTransaction(id: string) {
+    if (!supabase || !confirm(t.confirm_delete)) return;
+    try {
+      const { error } = await supabase
+        .from("transactions")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      fetchData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
+
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    doc.text("Masjid Transactions Report", 14, 15);
+    
+    const tableData = filteredTransactions.map(tx => [
+      tx.date,
+      tx.description,
+      tx.category,
+      tx.type.toUpperCase(),
+      `Rs. ${tx.amount.toLocaleString()}`
+    ]);
+
+    doc.autoTable({
+      startY: 20,
+      head: [["Date", "Description", "Category", "Type", "Amount"]],
+      body: tableData,
+    });
+
+    doc.save("transactions_report.pdf");
   };
 
   const totalIncome = transactions
@@ -162,12 +233,24 @@ export default function AccountsPage() {
           </Link>
           <h1 className="text-xl font-black">{t.accounts}</h1>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="p-3 bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
-        >
-          <Plus className="w-6 h-6" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={generatePDF}
+            className="p-3 bg-slate-50 text-blue-600 rounded-2xl hover:bg-blue-50 transition-all active:scale-95"
+            title={t.download_pdf}
+          >
+            <FileText className="w-6 h-6" />
+          </button>
+          <button 
+            onClick={() => {
+              resetForm();
+              setIsModalOpen(true);
+            }}
+            className="p-3 bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+          >
+            <Plus className="w-6 h-6" />
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 p-6 space-y-6 max-w-md mx-auto w-full">
@@ -238,10 +321,24 @@ export default function AccountsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className={`font-black ${tx.type === "income" ? "text-emerald-500" : "text-rose-500"}`}>
-                    {tx.type === "income" ? "+" : "-"} Rs. {tx.amount.toLocaleString()}
-                  </p>
+                <div className="flex items-center gap-1">
+                  <div className="text-right mr-2">
+                    <p className={`font-black text-sm ${tx.type === "income" ? "text-emerald-500" : "text-rose-500"}`}>
+                      {tx.type === "income" ? "+" : "-"} Rs. {tx.amount.toLocaleString()}
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => setEditingTransaction(tx)}
+                    className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={() => deleteTransaction(tx.id)}
+                    className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             ))
