@@ -83,9 +83,9 @@ export default function MasjidLoginPage() {
           <p className="text-slate-400 text-xs font-bold uppercase tracking-widest"> 
             Want to add your Masjid?
           </p>
-          <button className="text-emerald-500 font-black text-sm mt-2 hover:underline"> 
+          <Link href="/register" className="text-emerald-500 font-black text-sm mt-2 block hover:underline"> 
             REGISTER HERE 
-          </button> 
+          </Link> 
         </div>
       </div> 
     </div> 
