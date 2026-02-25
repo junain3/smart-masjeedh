@@ -16,6 +16,7 @@ type MasjidProfile = {
 export default function DashboardPage() {
   const [time, setTime] = useState(new Date());
   const [familyCount, setFamilyCount] = useState<number | null>(null);
+  const [memberCount, setMemberCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [masjid, setMasjid] = useState<MasjidProfile | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -55,6 +56,14 @@ export default function DashboardPage() {
         
         if (countError) throw countError;
         setFamilyCount(count || 0);
+
+        // Fetch member count
+        const { count: mCount, error: mError } = await supabase
+          .from("members")
+          .select("*", { count: "exact", head: true })
+          .eq("masjid_id", session.user.id);
+        
+        if (!mError) setMemberCount(mCount || 0);
 
         // Fetch dynamic masjid profile (Optional table - fallback to MJM if not exists)
         try {
@@ -223,11 +232,17 @@ export default function DashboardPage() {
         </Link>
 
         {/* Stats Section */}
-        <div className="space-y-4 pt-2">
-          <h3 className="text-2xl font-bold text-black">{t.total_families}</h3>
-          <div className="w-full bg-white border border-gray-200 rounded-2xl p-5 flex items-center h-16">
-            <span className="text-2xl font-medium text-black">
+        <div className="grid grid-cols-2 gap-4 pt-2">
+          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col gap-1">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.total_families}</span>
+            <span className="text-3xl font-black text-emerald-600">
               {loading ? "..." : familyCount}
+            </span>
+          </div>
+          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col gap-1">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.total_members}</span>
+            <span className="text-3xl font-black text-[#003d5b]">
+              {loading ? "..." : memberCount}
             </span>
           </div>
         </div>
