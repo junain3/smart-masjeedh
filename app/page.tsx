@@ -254,10 +254,10 @@ export default function DashboardPage() {
             <span className="text-[10px] font-bold text-[#00c853]">{t.families}</span>
           </Link>
           
-          <div className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7] opacity-80">
+          <Link href="/accounts" className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7]">
             <Edit className="w-6 h-6 text-[#00c853]" />
             <span className="text-[10px] font-bold text-[#00c853]">{t.accounts}</span>
-          </div>
+          </Link>
 
           <div className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7] opacity-80">
             <User className="w-6 h-6 text-[#00c853]" />
