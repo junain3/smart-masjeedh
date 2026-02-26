@@ -187,11 +187,11 @@ export default function DashboardPage() {
         if (error) throw error;
         
         if (data && data.length > 0) {
-          setScanStatus({ type: 'success', message: "சேவை வழங்கப்பட்டது! (Service Marked as Received)" });
+          setScanStatus({ type: 'success', message: t.service_marked_received });
           // Reset message after 2 seconds
           setTimeout(() => setScanStatus({ type: 'idle', message: '' }), 2000);
         } else {
-          setScanStatus({ type: 'error', message: "இந்தக் குடும்பத்திற்கு இந்தப் பதிவு இல்லை. (No record for this family)" });
+          setScanStatus({ type: 'error', message: t.service_no_record });
           setTimeout(() => setScanStatus({ type: 'idle', message: '' }), 3000);
         }
       }
@@ -498,7 +498,7 @@ export default function DashboardPage() {
         {resultType !== "none" && (
           <div className="space-y-3">
             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">
-              {resultType === "members" ? (lang === "tm" ? "உறுப்பினர் முடிவுகள்" : "Member Results") : (lang === "tm" ? "குடும்ப முடிவுகள்" : "Family Results")}
+              {resultType === "members" ? t.member_results : t.family_results}
             </h3>
             {resultType === "members" ? (
               memberResults.length === 0 ? (
@@ -507,7 +507,7 @@ export default function DashboardPage() {
                     <User className="w-8 h-8" />
                   </div>
                   <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">
-                    {lang === "tm" ? "பொருத்தங்கள் இல்லை" : "No matches"}
+                    {t.no_matches}
                   </p>
                 </div>
               ) : (
@@ -531,7 +531,7 @@ export default function DashboardPage() {
                   <Users className="w-8 h-8" />
                 </div>
                 <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">
-                  {lang === "tm" ? "பொருத்தங்கள் இல்லை" : "No matches"}
+                  {t.no_matches}
                 </p>
               </div>
             ) : (
@@ -612,7 +612,7 @@ export default function DashboardPage() {
                   activeServiceTab === "create" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400"
                 }`}
               >
-                {lang === 'tm' ? 'புதிய சேவை உருவாக்கு' : 'Create New'}
+                {t.create_new}
               </button>
               <button 
                 onClick={() => setActiveServiceTab("scan")}
@@ -620,7 +620,7 @@ export default function DashboardPage() {
                   activeServiceTab === "scan" ? "bg-white text-blue-600 shadow-sm" : "text-slate-400"
                 }`}
               >
-                {lang === 'tm' ? 'QR ஸ்கேன் செய்' : 'QR Scan Distribution'}
+                {t.qr_scan_distribution}
               </button>
             </div>
 
@@ -651,7 +651,7 @@ export default function DashboardPage() {
 
                 <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 mb-6">
                   <p className="text-[10px] text-emerald-700 font-bold leading-relaxed uppercase tracking-tight">
-                    This will create a pending service record for ALL families in your masjid.
+                    {t.service_create_info}
                   </p>
                 </div>
 
@@ -660,19 +660,19 @@ export default function DashboardPage() {
                   disabled={submittingService}
                   className="w-full py-5 rounded-3xl font-black text-white bg-emerald-500 shadow-xl shadow-emerald-500/20 transition-all active:scale-[0.97] disabled:opacity-50"
                 >
-                  {submittingService ? "CREATING..." : "DISTRIBUTE TO ALL FAMILIES"}
+                  {submittingService ? "CREATING..." : t.distribute_all}
                 </button>
               </form>
             ) : (
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{lang === 'tm' ? 'சேவையைத் தேர்ந்தெடுக்கவும்' : 'Select Service'}</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.select_service}</label>
                   <select 
                     value={selectedScanService}
                     onChange={e => setSelectedScanService(e.target.value)}
                     className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-blue-500/10 outline-none appearance-none"
                   >
-                    <option value="">-- {lang === 'tm' ? 'தேர்ந்தெடுக்கவும்' : 'Select'} --</option>
+                    <option value="">-- {t.select_service} --</option>
                     {activeServices.map(s => (
                       <option key={s.name} value={s.name}>{s.name}</option>
                     ))}
@@ -683,7 +683,7 @@ export default function DashboardPage() {
                   <button
                     onClick={() => {
                       if (!selectedScanService) {
-                        alert(lang === 'tm' ? 'தயவுசெய்து ஒரு சேவையைத் தேர்ந்தெடுக்கவும்' : 'Please select a service first');
+                        alert(t.select_service_first);
                         return;
                       }
                       setIsScannerOpen(true);
@@ -709,7 +709,7 @@ export default function DashboardPage() {
                       onClick={() => setIsScannerOpen(false)}
                       className="w-full py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold text-xs uppercase tracking-widest"
                     >
-                      {lang === 'tm' ? 'ஸ்கேனரை நிறுத்து' : 'Stop Scanner'}
+                      {t.stop_scanner}
                     </button>
                   </div>
                 )}

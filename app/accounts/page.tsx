@@ -3,11 +3,12 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Search, TrendingUp, TrendingDown, Wallet, Calendar, Tag, MoreVertical, X, Edit, Trash2, FileText } from "lucide-react";
+import { ArrowLeft, Plus, Search, TrendingUp, TrendingDown, Wallet, Calendar, Tag, MoreVertical, X, Edit, Trash2, FileText, QrCode } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import { Html5QrcodeScanner } from "html5-qrcode";
 
 declare module "jspdf" {
   interface jsPDF {
@@ -50,6 +51,7 @@ export default function AccountsPage() {
   const [category, setCategory] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   const t = translations[lang];
 
@@ -58,6 +60,31 @@ export default function AccountsPage() {
     if (savedLang) setLang(savedLang);
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (isScannerOpen) {
+      const scanner = new Html5QrcodeScanner(
+        "accounts-reader",
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        false
+      );
+      scanner.render(onScanSuccess, onScanFailure);
+      function onScanSuccess(decodedText: string) {
+        if (decodedText.startsWith("smart-masjeedh:family:")) {
+          const familyId = decodedText.split(":")[2];
+          setSelectedFamilyId(familyId);
+          setType("subscription");
+          setIsModalOpen(true);
+          scanner.clear();
+          setIsScannerOpen(false);
+        }
+      }
+      function onScanFailure(_err: any) {}
+      return () => {
+        scanner.clear();
+      };
+    }
+  }, [isScannerOpen]);
 
   useEffect(() => {
     if (editingTransaction) {
@@ -235,6 +262,13 @@ export default function AccountsPage() {
         </div>
         <div className="flex items-center gap-2">
           <button 
+            onClick={() => setIsScannerOpen(true)}
+            className="p-3 bg-slate-50 text-slate-600 rounded-2xl hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95"
+            title={t.scan_qr}
+          >
+            <QrCode className="w-6 h-6" />
+          </button>
+          <button 
             onClick={generatePDF}
             className="p-3 bg-slate-50 text-blue-600 rounded-2xl hover:bg-blue-50 transition-all active:scale-95"
             title={t.download_pdf}
@@ -345,6 +379,23 @@ export default function AccountsPage() {
           )}
         </div>
       </main>
+
+      {isScannerOpen && (
+        <div className="fixed inset-0 z-[60] bg-black flex flex-col">
+          <header className="p-6 flex items-center justify-between text-white">
+            <h2 className="text-xl font-black uppercase tracking-widest">{t.scan_qr}</h2>
+            <button onClick={() => setIsScannerOpen(false)} className="p-3 bg-white/10 rounded-full">
+              <X className="w-6 h-6" />
+            </button>
+          </header>
+          <div className="flex-1 flex flex-col items-center justify-center p-6">
+            <div id="accounts-reader" className="w-full max-w-sm rounded-[2.5rem] overflow-hidden border-4 border-emerald-500 shadow-2xl shadow-emerald-500/20"></div>
+            <p className="mt-8 text-white/60 text-sm font-bold uppercase tracking-widest text-center">
+              Align QR Code within the frame to scan
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Add Transaction Modal */}
       {isModalOpen && (

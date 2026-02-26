@@ -62,6 +62,8 @@ export default function FamiliesPage() {
   const [lang, setLang] = useState<Language>("en");
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [editingFamily, setEditingFamily] = useState<Family | null>(null);
+  const [isPdfOptionsOpen, setIsPdfOptionsOpen] = useState(false);
+  const [pdfCols, setPdfCols] = useState<{code:boolean; head:boolean; address:boolean; phone:boolean; sub:boolean}>({code:true, head:true, address:true, phone:true, sub:true});
 
   const t = translations[lang];
 
@@ -250,17 +252,26 @@ export default function FamiliesPage() {
     const doc = new jsPDF();
     doc.text("Masjid Families List", 14, 15);
     
-    const tableData = filteredFamilies.map(f => [
-      f.family_code,
-      f.head_name,
-      f.address,
-      f.phone,
-      f.subscription_amount || 0
-    ]);
+    const headers: string[] = [];
+    if (pdfCols.code) headers.push("Code");
+    if (pdfCols.head) headers.push("Head Name");
+    if (pdfCols.address) headers.push("Address");
+    if (pdfCols.phone) headers.push("Phone");
+    if (pdfCols.sub) headers.push("Sub. Amt");
+
+    const tableData = filteredFamilies.map(f => {
+      const row: (string|number)[] = [];
+      if (pdfCols.code) row.push(f.family_code);
+      if (pdfCols.head) row.push(f.head_name);
+      if (pdfCols.address) row.push(f.address);
+      if (pdfCols.phone) row.push(f.phone);
+      if (pdfCols.sub) row.push(f.subscription_amount || 0);
+      return row;
+    });
 
     doc.autoTable({
       startY: 20,
-      head: [["Code", "Head Name", "Address", "Phone", "Sub. Amt"]],
+      head: [headers],
       body: tableData,
     });
 
@@ -283,13 +294,13 @@ export default function FamiliesPage() {
           <div>
             <h1 className="text-lg font-black leading-none">{t.families}</h1>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">
-              {isLive ? "• Live Data" : "• Demo Mode"}
+              {isLive ? t.live_data : t.demo_mode}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button 
-            onClick={generatePDF}
+            onClick={() => setIsPdfOptionsOpen(true)}
             className="p-2.5 bg-slate-50 text-blue-600 rounded-xl hover:bg-blue-50 transition-all active:scale-95"
             title={t.download_pdf}
           >
@@ -417,6 +428,29 @@ export default function FamiliesPage() {
           )}
         </div>
       </section>
+
+      {isPdfOptionsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-[2rem] p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black">PDF Columns</h3>
+              <button onClick={() => setIsPdfOptionsOpen(false)} className="p-2 hover:bg-slate-50 rounded-full">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.code} onChange={e=>setPdfCols(s=>({...s,code:e.target.checked}))}/> Code</label>
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.head} onChange={e=>setPdfCols(s=>({...s,head:e.target.checked}))}/> Head</label>
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.address} onChange={e=>setPdfCols(s=>({...s,address:e.target.checked}))}/> Address</label>
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.phone} onChange={e=>setPdfCols(s=>({...s,phone:e.target.checked}))}/> Phone</label>
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.sub} onChange={e=>setPdfCols(s=>({...s,sub:e.target.checked}))}/> Sub. Amt</label>
+            </div>
+            <button onClick={() => { setIsPdfOptionsOpen(false); generatePDF(); }} className="w-full py-3 rounded-2xl bg-blue-600 text-white font-black">
+              Generate PDF
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* QR Scanner Modal */}
       {isScannerOpen && (
