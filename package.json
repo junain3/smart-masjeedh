@@ -6,7 +6,8 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "quick:push": "node scripts/quick-push.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
