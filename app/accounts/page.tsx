@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 
 declare module "jspdf" {
   interface jsPDF {
@@ -65,7 +65,14 @@ export default function AccountsPage() {
     if (isScannerOpen) {
       const scanner = new Html5QrcodeScanner(
         "accounts-reader",
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+        { 
+          fps: 10, 
+          qrbox: { width: 250, height: 250 },
+          supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+          rememberLastUsedCamera: true,
+          showTorchButtonIfSupported: true,
+          showZoomSliderIfSupported: true
+        },
         false
       );
       scanner.render(onScanSuccess, onScanFailure);

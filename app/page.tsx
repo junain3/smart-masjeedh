@@ -207,7 +207,14 @@ export default function DashboardPage() {
       import("html5-qrcode").then((lib) => {
         scanner = new lib.Html5QrcodeScanner(
           "service-reader",
-          { fps: 10, qrbox: { width: 250, height: 250 } },
+          { 
+            fps: 10, 
+            qrbox: { width: 250, height: 250 },
+            supportedScanTypes: [lib.Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+            rememberLastUsedCamera: true,
+            showTorchButtonIfSupported: true,
+            showZoomSliderIfSupported: true
+          },
           false
         );
         scanner.render(onScanSuccess, (err: any) => {});
