@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar } from "lucide-react";
+import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 
@@ -26,9 +26,201 @@ export default function DashboardPage() {
   const t = translations[lang];
 
   const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
+  const [activeServiceTab, setActiveServiceTab] = useState<"create" | "scan">("create");
   const [serviceName, setServiceName] = useState("");
   const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [submittingService, setSubmittingService] = useState(false);
+  
+  const [activeServices, setActiveServices] = useState<{name: string}[]>([]);
+  const [selectedScanService, setSelectedScanService] = useState("");
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scanStatus, setScanStatus] = useState<{type: 'success' | 'error' | 'idle', message: string}>({type: 'idle', message: ''});
+
+  type MemberRes = { id: string; family_id: string; full_name: string; age: number; gender: string };
+  type FamilyRes = { id: string; family_code: string; head_name: string; is_widow_head?: boolean };
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [memberResults, setMemberResults] = useState<MemberRes[]>([]);
+  const [familyResults, setFamilyResults] = useState<FamilyRes[]>([]);
+  const [resultType, setResultType] = useState<"none" | "members" | "families">("none");
+
+  const parseQuery = (q: string) => {
+    const s = q.trim().toLowerCase();
+    const hasWidow = /(விதவை|விதவைகள்|widow)/.test(s);
+    if (hasWidow) {
+      return { kind: "widows" as const };
+    }
+    const male = /(ஆண்|ஆண்கள்|male)/.test(s) ? "Male" : /(பெண்|பெண்கள்|female)/.test(s) ? "Female" : undefined;
+    const range1 = s.match(/(\d{1,3})\s*[-–]\s*(\d{1,3})/);
+    const range2 = s.match(/(\d{1,3})\s*(?:to|முதல்)\s*(\d{1,3})/);
+    if (range1 || range2) {
+      const m = range1 || range2;
+      const a = parseInt(m![1], 10);
+      const b = parseInt(m![2], 10);
+      const minAge = Math.min(a, b);
+      const maxAge = Math.max(a, b);
+      return { kind: "ageRange" as const, minAge, maxAge, gender: male };
+    }
+    const exactAgeMatch = s.match(/(\d{1,3})\s*(?:வயது|years?|yr|age)?/);
+    if (exactAgeMatch && exactAgeMatch[1]) {
+      const age = parseInt(exactAgeMatch[1], 10);
+      return { kind: "ageExact" as const, age, gender: male };
+    }
+    return { kind: "free" as const, text: q.trim() };
+  };
+
+  const handleSearch = async () => {
+    if (!supabase) return;
+    setSearchLoading(true);
+    setSearchError("");
+    setMemberResults([]);
+    setFamilyResults([]);
+    setResultType("none");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setSearchError(lang === "tm" ? "லாகின் தேவை" : "Login required");
+        return;
+      }
+      const p = parseQuery(searchQuery);
+      if (p.kind === "widows") {
+        const { data, error } = await supabase
+          .from("families")
+          .select("id,family_code,head_name,is_widow_head")
+          .eq("masjid_id", session.user.id)
+          .eq("is_widow_head", true)
+          .order("family_code", { ascending: true });
+        if (error) throw error;
+        setFamilyResults(data || []);
+        setResultType("families");
+        return;
+      }
+      if (p.kind === "ageExact") {
+        let q = supabase
+          .from("members")
+          .select("id,family_id,full_name,age,gender")
+          .eq("masjid_id", session.user.id)
+          .eq("age", p.age);
+        if (p.gender) q = q.eq("gender", p.gender);
+        const { data, error } = await q;
+        if (error) throw error;
+        setMemberResults(data || []);
+        setResultType("members");
+        return;
+      }
+      if (p.kind === "ageRange") {
+        let q = supabase
+          .from("members")
+          .select("id,family_id,full_name,age,gender")
+          .eq("masjid_id", session.user.id)
+          .gte("age", p.minAge)
+          .lte("age", p.maxAge);
+        if (p.gender) q = q.eq("gender", p.gender);
+        const { data, error } = await q;
+        if (error) throw error;
+        setMemberResults(data || []);
+        setResultType("members");
+        return;
+      }
+      if (p.kind === "free") {
+        const text = p.text.toLowerCase();
+        const { data, error } = await supabase
+          .from("families")
+          .select("id,family_code,head_name,is_widow_head")
+          .eq("masjid_id", session.user.id)
+          .or(`head_name.ilike.%${text}%,family_code.ilike.%${text}%`)
+          .order("family_code", { ascending: true });
+        if (error) throw error;
+        setFamilyResults(data || []);
+        setResultType("families");
+        return;
+      }
+    } catch (e: any) {
+      setSearchError(e.message || "Search failed");
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const fetchActiveServices = async () => {
+    if (!supabase) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data } = await supabase
+      .from("service_distributions")
+      .select("name")
+      .eq("masjid_id", session.user.id)
+      .eq("status", "Pending");
+    
+    if (data) {
+      // Get unique names
+      const uniqueNames = Array.from(new Set(data.map(s => s.name))).map(name => ({ name }));
+      setActiveServices(uniqueNames);
+    }
+  };
+
+  useEffect(() => {
+    if (isServicesModalOpen) {
+      fetchActiveServices();
+    }
+  }, [isServicesModalOpen]);
+
+  const handleServiceScan = async (decodedText: string) => {
+    if (!supabase || !selectedScanService) return;
+    
+    try {
+      if (decodedText.startsWith("smart-masjeedh:family:")) {
+        const familyId = decodedText.split(":")[2];
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const { data, error } = await supabase
+          .from("service_distributions")
+          .update({ status: 'Received' })
+          .eq("family_id", familyId)
+          .eq("name", selectedScanService)
+          .eq("masjid_id", session.user.id)
+          .select();
+
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          setScanStatus({ type: 'success', message: "சேவை வழங்கப்பட்டது! (Service Marked as Received)" });
+          // Reset message after 2 seconds
+          setTimeout(() => setScanStatus({ type: 'idle', message: '' }), 2000);
+        } else {
+          setScanStatus({ type: 'error', message: "இந்தக் குடும்பத்திற்கு இந்தப் பதிவு இல்லை. (No record for this family)" });
+          setTimeout(() => setScanStatus({ type: 'idle', message: '' }), 3000);
+        }
+      }
+    } catch (err: any) {
+      setScanStatus({ type: 'error', message: err.message });
+      setTimeout(() => setScanStatus({ type: 'idle', message: '' }), 3000);
+    }
+  };
+
+  useEffect(() => {
+    let scanner: any = null;
+    if (isScannerOpen) {
+      import("html5-qrcode").then((lib) => {
+        scanner = new lib.Html5QrcodeScanner(
+          "service-reader",
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          false
+        );
+        scanner.render(onScanSuccess, (err: any) => {});
+
+        function onScanSuccess(decodedText: string) {
+          handleServiceScan(decodedText);
+        }
+      });
+    }
+    return () => {
+      if (scanner) scanner.clear().catch(console.error);
+    };
+  }, [isScannerOpen, selectedScanService]);
 
   const createServiceDistribution = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -278,14 +470,87 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Action Button */}
-        <Link 
-          href="/families"
-          className="w-full bg-[#00c853] text-white py-4 rounded-xl flex items-center justify-center gap-2 font-bold text-lg shadow-sm active:scale-[0.98] transition-all"
-        >
-          <HomeIcon className="w-5 h-5" />
-          {t.add_new_family}
-        </Link>
+        <div className="space-y-3">
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={lang === "tm" ? "எதை வேண்டுமானாலும் தேடுக..." : "Search anything..."}
+              className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm"
+            />
+          </div>
+          <button
+            onClick={handleSearch}
+            disabled={searchLoading}
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
+          >
+            {searchLoading ? (lang === "tm" ? "தேடப்படுகிறது..." : "Searching...") : (lang === "tm" ? "தேடுக" : "Search")}
+          </button>
+          {searchError && (
+            <div className="bg-amber-50 border border-amber-100 text-amber-700 px-4 py-3 rounded-2xl text-[10px] font-bold">
+              {searchError}
+            </div>
+          )}
+        </div>
+
+        {resultType !== "none" && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">
+              {resultType === "members" ? (lang === "tm" ? "உறுப்பினர் முடிவுகள்" : "Member Results") : (lang === "tm" ? "குடும்ப முடிவுகள்" : "Family Results")}
+            </h3>
+            {resultType === "members" ? (
+              memberResults.length === 0 ? (
+                <div className="py-10 text-center bg-white rounded-[2rem] border border-slate-50">
+                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200">
+                    <User className="w-8 h-8" />
+                  </div>
+                  <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">
+                    {lang === "tm" ? "பொருத்தங்கள் இல்லை" : "No matches"}
+                  </p>
+                </div>
+              ) : (
+                memberResults.map(m => (
+                  <Link key={m.id} href={`/families/${m.family_id}`} className="block bg-white rounded-2xl p-4 border border-slate-50 shadow-sm group hover:border-emerald-100 transition-all">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500">
+                        <User className="w-6 h-6" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-black text-slate-800 truncate">{m.full_name}</h4>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">{m.gender} • {m.age}</p>
+                      </div>
+                    </div>
+                  </Link>
+                ))
+              )
+            ) : familyResults.length === 0 ? (
+              <div className="py-10 text-center bg-white rounded-[2rem] border border-slate-50">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200">
+                  <Users className="w-8 h-8" />
+                </div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">
+                  {lang === "tm" ? "பொருத்தங்கள் இல்லை" : "No matches"}
+                </p>
+              </div>
+            ) : (
+              familyResults.map(f => (
+                <Link key={f.id} href={`/families/${f.id}`} className="block bg-white rounded-2xl p-4 border border-slate-50 shadow-sm group hover:border-emerald-100 transition-all">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-black text-slate-800 truncate">{f.head_name}</h4>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">{f.family_code}</p>
+                    </div>
+                    {f.is_widow_head && (
+                      <span className="px-2 py-1 bg-rose-50 text-rose-500 text-[9px] font-black uppercase rounded-full border border-rose-100">Widow</span>
+                    )}
+                  </div>
+                </Link>
+              ))
+            )}
+          </div>
+        )}
 
         {/* Stats Section */}
         <div className="grid grid-cols-2 gap-4 pt-2">
@@ -325,52 +590,131 @@ export default function DashboardPage() {
       {/* Services Distribution Modal */}
       {isServicesModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-300">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-300 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-black text-slate-900">{t.services_received}</h2>
-              <button onClick={() => setIsServicesModalOpen(false)} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
+              <button onClick={() => {
+                setIsServicesModalOpen(false);
+                setIsScannerOpen(false);
+              }} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
                 <X className="w-6 h-6 text-slate-300" />
               </button>
             </div>
 
-            <form onSubmit={createServiceDistribution} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.name}</label>
-                <input 
-                  required
-                  type="text"
-                  value={serviceName}
-                  onChange={e => setServiceName(e.target.value)}
-                  className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-amber-500/10 outline-none"
-                  placeholder="E.g. Ramadan Dates"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.date}</label>
-                <input 
-                  required
-                  type="date"
-                  value={serviceDate}
-                  onChange={e => setServiceDate(e.target.value)}
-                  className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-amber-500/10 outline-none"
-                />
-              </div>
-
-              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 mb-6">
-                <p className="text-[10px] text-amber-700 font-bold leading-relaxed uppercase tracking-tight">
-                  This will create a pending service record for ALL families in your masjid.
-                </p>
-              </div>
-
-              <button
-                type="submit"
-                disabled={submittingService}
-                className="w-full py-5 rounded-3xl font-black text-white bg-amber-500 shadow-xl shadow-amber-500/20 transition-all active:scale-[0.97] disabled:opacity-50"
+            {/* Modal Tabs */}
+            <div className="flex p-1 bg-slate-100 rounded-2xl mb-8">
+              <button 
+                onClick={() => {
+                  setActiveServiceTab("create");
+                  setIsScannerOpen(false);
+                }}
+                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  activeServiceTab === "create" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400"
+                }`}
               >
-                {submittingService ? "CREATING..." : "DISTRIBUTE TO ALL FAMILIES"}
+                {lang === 'tm' ? 'புதிய சேவை உருவாக்கு' : 'Create New'}
               </button>
-            </form>
+              <button 
+                onClick={() => setActiveServiceTab("scan")}
+                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  activeServiceTab === "scan" ? "bg-white text-blue-600 shadow-sm" : "text-slate-400"
+                }`}
+              >
+                {lang === 'tm' ? 'QR ஸ்கேன் செய்' : 'QR Scan Distribution'}
+              </button>
+            </div>
+
+            {activeServiceTab === "create" ? (
+              <form onSubmit={createServiceDistribution} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.name}</label>
+                  <input 
+                    required
+                    type="text"
+                    value={serviceName}
+                    onChange={e => setServiceName(e.target.value)}
+                    className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
+                    placeholder="E.g. Ramadan Dates"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.date}</label>
+                  <input 
+                    required
+                    type="date"
+                    value={serviceDate}
+                    onChange={e => setServiceDate(e.target.value)}
+                    className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
+                  />
+                </div>
+
+                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 mb-6">
+                  <p className="text-[10px] text-emerald-700 font-bold leading-relaxed uppercase tracking-tight">
+                    This will create a pending service record for ALL families in your masjid.
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submittingService}
+                  className="w-full py-5 rounded-3xl font-black text-white bg-emerald-500 shadow-xl shadow-emerald-500/20 transition-all active:scale-[0.97] disabled:opacity-50"
+                >
+                  {submittingService ? "CREATING..." : "DISTRIBUTE TO ALL FAMILIES"}
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{lang === 'tm' ? 'சேவையைத் தேர்ந்தெடுக்கவும்' : 'Select Service'}</label>
+                  <select 
+                    value={selectedScanService}
+                    onChange={e => setSelectedScanService(e.target.value)}
+                    className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-blue-500/10 outline-none appearance-none"
+                  >
+                    <option value="">-- {lang === 'tm' ? 'தேர்ந்தெடுக்கவும்' : 'Select'} --</option>
+                    {activeServices.map(s => (
+                      <option key={s.name} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {!isScannerOpen ? (
+                  <button
+                    onClick={() => {
+                      if (!selectedScanService) {
+                        alert(lang === 'tm' ? 'தயவுசெய்து ஒரு சேவையைத் தேர்ந்தெடுக்கவும்' : 'Please select a service first');
+                        return;
+                      }
+                      setIsScannerOpen(true);
+                    }}
+                    className="w-full py-8 rounded-3xl border-4 border-dashed border-slate-200 text-slate-400 hover:border-blue-500 hover:text-blue-500 transition-all flex flex-col items-center gap-3"
+                  >
+                    <QrCode className="w-12 h-12" />
+                    <span className="font-black text-xs uppercase tracking-widest">{t.scan_qr}</span>
+                  </button>
+                ) : (
+                  <div className="space-y-4">
+                    <div id="service-reader" className="w-full overflow-hidden rounded-[2rem] border-4 border-blue-500 shadow-lg shadow-blue-500/10"></div>
+                    
+                    {scanStatus.type !== 'idle' && (
+                      <div className={`p-4 rounded-2xl font-bold text-center text-xs animate-in zoom-in duration-300 ${
+                        scanStatus.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                      }`}>
+                        {scanStatus.message}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => setIsScannerOpen(false)}
+                      className="w-full py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold text-xs uppercase tracking-widest"
+                    >
+                      {lang === 'tm' ? 'ஸ்கேனரை நிறுத்து' : 'Stop Scanner'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
