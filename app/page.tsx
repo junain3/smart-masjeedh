@@ -397,16 +397,14 @@ export default function DashboardPage() {
             <Settings className="w-5 h-5" />
             <span>{t.settings}</span>
           </Link>
-          <button 
-            onClick={() => {
-              setIsSidebarOpen(false);
-              setIsServicesModalOpen(true);
-            }} 
-            className="w-full flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all text-left"
+          <Link 
+            href="/events"
+            onClick={() => setIsSidebarOpen(false)}
+            className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all"
           >
             <Calendar className="w-5 h-5 text-amber-500" />
-            <span>{t.services_received}</span>
-          </button>
+            <span>{t.events || "Events"}</span>
+          </Link>
           <div className="flex items-center gap-4 p-4 opacity-40 text-slate-600 rounded-2xl font-bold cursor-not-allowed">
               <HelpCircle className="w-5 h-5" />
               <span>Help & Support</span>
