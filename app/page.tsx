@@ -430,7 +430,9 @@ export default function DashboardPage() {
           <Menu className="w-6 h-6" />
         </button>
         <h1 className="text-xl font-semibold">{t.home}</h1>
-        <div className="w-10"></div>
+        <Link href="/scan" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors">
+          <QrCode className="w-6 h-6" />
+        </Link>
       </header>
 
       {/* Main Content */}

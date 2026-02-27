@@ -86,6 +86,7 @@ export const translations = {
     pending: "Pending",
     attendance_report: "Attendance Report",
     event_marked_received: "Marked as Received",
+    all_families: "All Families",
   },
   tm: {
     home: "முகப்பு",
@@ -174,6 +175,7 @@ export const translations = {
     pending: "நிலுவை",
     attendance_report: "வருகை அறிக்கை",
     event_marked_received: "பெற்றதாக குறிக்கப்பட்டது",
+    all_families: "எல்லா குடும்பங்கள்",
   },
   si: {
     home: "මුල් පිටුව",
@@ -262,6 +264,7 @@ export const translations = {
     pending: "අපේක්ෂිත",
     attendance_report: "පැමිණීමේ වාර්තාව",
     event_marked_received: "ලැබුණු ලෙස සලකුණු කරන ලදී",
+    all_families: "සියලු පවුල්",
   }
 };
 
