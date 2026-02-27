@@ -23,6 +23,7 @@ type Family = {
   address: string;
   phone: string;
   subscription_amount?: number;
+  opening_balance?: number;
   is_widow_head?: boolean;
 };
 
@@ -51,6 +52,7 @@ export default function FamiliesPage() {
   const [phone, setPhone] = useState("");
   const [familyCode, setFamilyCode] = useState("");
   const [subscriptionAmount, setSubscriptionAmount] = useState("");
+  const [openingBalance, setOpeningBalance] = useState("");
   const [isWidowHead, setIsWidowHead] = useState(false);
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -64,6 +66,8 @@ export default function FamiliesPage() {
   const [editingFamily, setEditingFamily] = useState<Family | null>(null);
   const [isPdfOptionsOpen, setIsPdfOptionsOpen] = useState(false);
   const [pdfCols, setPdfCols] = useState<{code:boolean; head:boolean; address:boolean; phone:boolean; sub:boolean}>({code:true, head:true, address:true, phone:true, sub:true});
+  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid">("all");
 
   const t = translations[lang];
 
@@ -80,6 +84,7 @@ export default function FamiliesPage() {
       setPhone(editingFamily.phone);
       setFamilyCode(editingFamily.family_code);
       setSubscriptionAmount(editingFamily.subscription_amount?.toString() || "");
+      setOpeningBalance(editingFamily.opening_balance?.toString() || "");
       setIsWidowHead(editingFamily.is_widow_head || false);
       setIsOpen(true);
     }

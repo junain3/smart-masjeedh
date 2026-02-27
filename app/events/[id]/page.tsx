@@ -232,10 +232,20 @@ export default function EventDetailPage() {
                   <p className="text-[10px] font-bold text-slate-400 uppercase">{r.families.family_code} • {r.families.phone || ""}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {r.status === "Pending" ? (
-                    <button onClick={() => markStatus(r.family_id, "Received", r.families.family_code)} className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest">{t.mark_received}</button>
+                  {((r as any).received ?? r.status === "Received") === false ? (
+                    <button
+                      onClick={() => markStatus(r.family_id, true, r.families.family_code)}
+                      className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest"
+                    >
+                      {t.mark_received}
+                    </button>
                   ) : (
-                    <button onClick={() => markStatus(r.family_id, "Pending", r.families.family_code)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest">{t.unmark_received}</button>
+                    <button
+                      onClick={() => markStatus(r.family_id, false, r.families.family_code)}
+                      className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest"
+                    >
+                      {t.unmark_received}
+                    </button>
                   )}
                 </div>
               </div>
