@@ -10,10 +10,12 @@ import {
   Calendar,
   Settings,
   Briefcase,
+  Shield,
   Menu,
   X,
 } from "lucide-react";
 import { translations, Language } from "@/lib/i18n/translations";
+import { supabase } from "@/lib/supabase";
 
 type NavItem = {
   href: string;
@@ -35,30 +37,83 @@ export function AppShell(props: {
   const [open, setOpen] = useState(false);
   const t = translations[lang];
 
+  const [role, setRole] = useState<"super_admin" | "staff" | "editor" | null>(null);
+  const [permissions, setPermissions] = useState<{
+    accounts?: boolean;
+    events?: boolean;
+    members?: boolean;
+  } | null>(null);
+
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
   }, []);
 
   useEffect(() => {
+    if (!supabase) return;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        const masjidId = session.user.id;
+        const { data } = await supabase
+          .from("user_roles")
+          .select("role,permissions")
+          .eq("masjid_id", masjidId)
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+        if (data) {
+          setRole((data as any).role || null);
+          setPermissions(((data as any).permissions || null) as any);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     setOpen(false);
   }, [pathname]);
 
-  const items: NavItem[] = useMemo(
-    () => [
+  const items: NavItem[] = useMemo(() => {
+    const isSuper = role === "super_admin" || !role;
+    const perms = permissions || {};
+    const canAccounts = isSuper || perms.accounts !== false;
+    const canEvents = isSuper || perms.events !== false;
+    const canMembers = isSuper || perms.members !== false;
+
+    const base: NavItem[] = [
       { href: "/", label: t.dashboard, icon: <Home className="w-5 h-5" /> },
-      { href: "/families", label: t.families, icon: <Users className="w-5 h-5" /> },
-      { href: "/accounts", label: t.accounts, icon: <CreditCard className="w-5 h-5" /> },
-      { href: "/events", label: t.events || "Events", icon: <Calendar className="w-5 h-5" /> },
-      {
+    ];
+
+    if (canMembers) {
+      base.push({ href: "/families", label: t.families, icon: <Users className="w-5 h-5" /> });
+    }
+    if (canAccounts) {
+      base.push({ href: "/accounts", label: t.accounts, icon: <CreditCard className="w-5 h-5" /> });
+    }
+    if (canEvents) {
+      base.push({ href: "/events", label: t.events || "Events", icon: <Calendar className="w-5 h-5" /> });
+    }
+
+    // Staff & admin only for super_admin
+    if (isSuper) {
+      base.push({
         href: "/staff",
         label: (t as any).staff_management || t.staff,
         icon: <Briefcase className="w-5 h-5" />,
-      },
-      { href: "/settings", label: t.settings, icon: <Settings className="w-5 h-5" /> },
-    ],
-    [t]
-  );
+      });
+      base.push({
+        href: "/admin",
+        label: (t as any).admin_settings || "Admin",
+        icon: <Shield className="w-5 h-5" />,
+      });
+    }
+
+    base.push({ href: "/settings", label: t.settings, icon: <Settings className="w-5 h-5" /> });
+    return base;
+  }, [t, role, permissions]);
 
   const linkClass = (href: string) => {
     const active = pathname === href || (href !== "/" && pathname?.startsWith(href));
