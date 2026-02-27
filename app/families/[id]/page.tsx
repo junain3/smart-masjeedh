@@ -37,7 +37,8 @@ type Family = {
   head_name: string;
   address: string;
   phone: string;
-  subscription_amount: number;
+  subscription_amount: number; // Annual fee
+  opening_balance?: number;
   is_widow_head: boolean;
 };
 
@@ -69,6 +70,7 @@ export default function FamilyDetailsPage() {
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"members" | "payments" | "services">("members");
   const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   
   // Form states
   const [fullName, setFullName] = useState("");
@@ -143,10 +145,10 @@ export default function FamilyDetailsPage() {
         setMembers(membersData);
       }
 
-      // Fetch payment history (subscriptions)
+      // Fetch payment history (family-linked incomes; treat as subscription payments)
       const { data: paymentData } = await supabase
         .from("transactions")
-        .select("id, amount, date, description")
+        .select("id, amount, date, description, type, category")
         .eq("family_id", id)
         .eq("masjid_id", session.user.id)
         .order("date", { ascending: false });
@@ -289,7 +291,20 @@ export default function FamilyDetailsPage() {
     member.relationship.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const subBalance = (family?.subscription_amount || 0) * 12 - payments.reduce((sum, p) => sum + p.amount, 0);
+  // Annual subscription model
+  const annualFee = family?.subscription_amount || 0;
+  const openingBal = family?.opening_balance || 0;
+  const paidThisYear = payments
+    .filter(p => {
+      const y = new Date(p.date).getFullYear();
+      return y === selectedYear && p.amount > 0;
+    })
+    .reduce((s, p) => s + p.amount, 0);
+  const paidPrevYear = payments
+    .filter(p => new Date(p.date).getFullYear() === selectedYear - 1 && p.amount > 0)
+    .reduce((s, p) => s + p.amount, 0);
+  const prevYearArrears = Math.max(0, annualFee - paidPrevYear);
+  const finalDue = Math.max(0, (openingBal + annualFee + prevYearArrears) - paidThisYear);
 
   const toggleServiceStatus = async (serviceId: string) => {
     if (!supabase) return;
@@ -374,13 +389,29 @@ export default function FamilyDetailsPage() {
           <p className="text-xs font-bold text-slate-700">Ramadan Dates</p>
           <p className="text-[9px] font-black text-emerald-600/60 uppercase">MARCH 2024</p>
         </div>
-        <div className="bg-rose-50 rounded-[2rem] p-5 border border-rose-100 space-y-2">
+        <div className="bg-rose-50 rounded-[2rem] p-5 border border-rose-100 space-y-3">
           <div className="flex items-center gap-2 text-rose-600">
             <Clock className="w-4 h-4" />
             <span className="text-[10px] font-black uppercase tracking-widest">{t.subscription_balance}</span>
           </div>
-          <p className="text-sm font-black text-slate-900">Rs. {subBalance.toLocaleString()}</p>
-          <p className="text-[9px] font-black text-rose-600/60 uppercase tracking-tighter">Due for 2024</p>
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.year}</label>
+            <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))}
+              className="text-xs font-bold bg-white border border-rose-100 rounded-lg px-2 py-1">
+              {Array.from({length: 6}).map((_,i)=> {
+                const y = new Date().getFullYear() - i;
+                return <option key={y} value={y}>{y}</option>;
+              })}
+            </select>
+          </div>
+          <div className="text-[11px] space-y-1 font-bold text-slate-700">
+            <div className="flex items-center justify-between"><span className="text-slate-400 uppercase tracking-widest">{t.opening_balance}</span><span>Rs. {(openingBal).toLocaleString()}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400 uppercase tracking-widest">{t.annual_fee}</span><span>Rs. {annualFee.toLocaleString()}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400 uppercase tracking-widest">{t.paid}</span><span>Rs. {paidThisYear.toLocaleString()}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400 uppercase tracking-widest">Prev Arrears</span><span>Rs. {prevYearArrears.toLocaleString()}</span></div>
+          </div>
+          <p className="text-sm font-black text-slate-900">Rs. {finalDue.toLocaleString()}</p>
+          <p className="text-[9px] font-black text-rose-600/60 uppercase tracking-tighter">Due for {selectedYear}</p>
         </div>
       </div>
 

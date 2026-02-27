@@ -94,6 +94,13 @@ export const translations = {
     filter_all: "All",
     filter_received: "Received",
     filter_pending: "Pending",
+    annual_fee: "Annual Fee",
+    opening_balance: "Opening Balance",
+    year: "Year",
+    paid: "Paid",
+    unpaid: "Unpaid",
+    payment_status: "Payment Status",
+    download_subscription_report: "Download Subscription Report",
   },
   tm: {
     home: "முகப்பு",
@@ -190,6 +197,13 @@ export const translations = {
     filter_all: "அனைத்தும்",
     filter_received: "பெற்றவர்கள்",
     filter_pending: "நிலுவை",
+    annual_fee: "வருட சந்தா",
+    opening_balance: "தொடக்க நிலுவை",
+    year: "ஆண்டு",
+    paid: "செலுத்தியவர்கள்",
+    unpaid: "செலுத்தாதவர்கள்",
+    payment_status: "கட்டண நிலை",
+    download_subscription_report: "சந்தா அறிக்கை PDF",
   },
   si: {
     home: "මුල් පිටුව",
@@ -286,6 +300,13 @@ export const translations = {
     filter_all: "සියල්ල",
     filter_received: "ලැබුණු",
     filter_pending: "පැඳිමින්",
+    annual_fee: "වාර්ෂික ගාස්තුව",
+    opening_balance: "ආරම්භක ශේෂය",
+    year: "වර්ෂය",
+    paid: "ගෙවූ",
+    unpaid: "ගෙවූ නොවන",
+    payment_status: "ගෙවුම් තත්ත්වය",
+    download_subscription_report: "දායකත්ව වාර්තා PDF",
   }
 };
 

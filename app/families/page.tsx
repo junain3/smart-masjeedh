@@ -196,6 +196,7 @@ export default function FamiliesPage() {
             address,
             phone,
             subscription_amount: parseFloat(subscriptionAmount) || 0,
+            opening_balance: parseFloat(openingBalance) || 0,
             is_widow_head: isWidowHead
           })
           .eq("id", editingFamily.id)
@@ -212,6 +213,7 @@ export default function FamiliesPage() {
             address,
             phone,
             subscription_amount: parseFloat(subscriptionAmount) || 0,
+            opening_balance: parseFloat(openingBalance) || 0,
             is_widow_head: isWidowHead,
             masjid_id: session.user.id // Include masjid ID
           }
@@ -237,6 +239,7 @@ export default function FamiliesPage() {
     setPhone("");
     setFamilyCode("");
     setSubscriptionAmount("");
+    setOpeningBalance("");
     setIsWidowHead(false);
     setEditingFamily(null);
   };
@@ -300,9 +303,21 @@ export default function FamiliesPage() {
           </Link>
           <div>
             <h1 className="text-lg font-black leading-none">{t.families}</h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">
-              {isLive ? t.live_data : t.demo_mode}
-            </p>
+            <div className="flex items-center gap-3 mt-1">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{isLive ? t.live_data : t.demo_mode}</p>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{t.year}</label>
+              <select value={year} onChange={e=>setYear(parseInt(e.target.value))} className="text-xs font-bold bg-white border border-slate-200 rounded-lg px-2 py-1">
+                {Array.from({length:6}).map((_,i)=> {
+                  const y=new Date().getFullYear()-i;
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </select>
+              <div className="flex items-center gap-1">
+                <button onClick={()=>setStatusFilter("all")} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${statusFilter==="all"?"bg-emerald-50 text-emerald-600":"text-slate-500 border border-slate-200"}`}>{t.filter_all}</button>
+                <button onClick={()=>setStatusFilter("paid")} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${statusFilter==="paid"?"bg-emerald-50 text-emerald-600":"text-slate-500 border border-slate-200"}`}>{t.paid}</button>
+                <button onClick={()=>setStatusFilter("unpaid")} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${statusFilter==="unpaid"?"bg-emerald-50 text-emerald-600":"text-slate-500 border border-slate-200"}`}>{t.unpaid}</button>
+              </div>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -563,11 +578,21 @@ export default function FamiliesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.subscription_amount}</label>
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.annual_fee}</label>
                   <input
                     type="number"
                     value={subscriptionAmount}
                     onChange={(event) => setSubscriptionAmount(event.target.value)}
+                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.opening_balance}</label>
+                  <input
+                    type="number"
+                    value={openingBalance}
+                    onChange={(event) => setOpeningBalance(event.target.value)}
                     className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
                     placeholder="0.00"
                   />
