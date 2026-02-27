@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import { AppShell } from "@/components/AppShell";
 
 type EventRow = { id: string; name: string; date: string };
 type Family = { id: string; family_code: string; head_name: string };
@@ -113,35 +114,30 @@ export default function EventsPage() {
   if (loading) return <div className="p-8 text-center">{t.loading}</div>;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans pb-10">
-      <header className="bg-white px-4 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 z-20">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="p-2 hover:bg-slate-50 rounded-full transition-colors">
-            <ArrowLeft className="w-6 h-6 text-emerald-600" />
-          </Link>
-          <h1 className="text-xl font-black">{t.events}</h1>
-        </div>
-        <div className="flex items-center gap-2">
+    <AppShell
+      title={t.events}
+      actions={
+        <>
           <button
             onClick={generatePDF}
-            className="p-3 bg-slate-50 text-blue-600 rounded-2xl hover:bg-blue-50 transition-all active:scale-95"
+            className="p-3 bg-slate-50 text-blue-600 rounded-3xl hover:bg-blue-50 transition-all active:scale-95"
             title={t.download_pdf}
           >
             <FileText className="w-6 h-6" />
           </button>
           <button
             onClick={openNewEvent}
-            className="p-3 bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+            className="p-3 bg-emerald-500 text-white rounded-3xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+            title={t.new_event}
           >
             <Plus className="w-6 h-6" />
           </button>
-        </div>
-      </header>
-
-      <main className="flex-1 p-6 space-y-4 max-w-md mx-auto w-full">
-        <div className="space-y-3">
+        </>
+      }
+    >
+      <div className="space-y-3">
           {events.length === 0 ? (
-            <div className="py-16 text-center bg-white rounded-[2rem] border border-slate-50">
+            <div className="py-16 text-center app-card">
               <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200">
                 <Calendar className="w-8 h-8" />
               </div>
@@ -149,7 +145,11 @@ export default function EventsPage() {
             </div>
           ) : (
             events.map(ev => (
-              <Link key={ev.id} href={`/events/${ev.id}`} className="block bg-white rounded-2xl p-4 border border-slate-50 shadow-sm group hover:border-emerald-100 transition-all">
+              <Link
+                key={ev.id}
+                href={`/events/${ev.id}`}
+                className="block app-card p-4 group hover:border-emerald-200 transition-all"
+              >
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase">{ev.date}</p>
@@ -162,8 +162,7 @@ export default function EventsPage() {
               </Link>
             ))
           )}
-        </div>
-      </main>
+      </div>
 
       {isOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
@@ -218,6 +217,6 @@ export default function EventsPage() {
           </div>
         </div>
       )}
-    </div>
+    </AppShell>
   );
 }

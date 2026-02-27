@@ -3,13 +3,28 @@
  @tailwind components; 
  @tailwind utilities; 
  
- body { 
-   background-color: #f8fafc; /* Soft background */ 
-   -webkit-tap-highlight-color: transparent; /* Smooth mobile touch */ 
- } 
- 
- /* Custom card shadow for professional look */ 
- .professional-card { 
-   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); 
-   border: 1px solid rgba(226, 232, 240, 1); 
- }
+@layer base {
+  body {
+    background-color: #f8fafc;
+    color: #0f172a; /* slate-900 */
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .app-card {
+    @apply bg-white border border-slate-100 shadow-sm rounded-3xl;
+  }
+
+  .app-btn {
+    @apply rounded-3xl font-black uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .app-btn-primary {
+    @apply app-btn bg-emerald-500 text-white shadow-xl shadow-emerald-500/20 hover:bg-emerald-600;
+  }
+
+  .app-btn-soft {
+    @apply app-btn bg-slate-50 text-slate-700 hover:bg-slate-100;
+  }
+}

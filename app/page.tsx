@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search } from "lucide-react";
+import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search, Briefcase } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 
@@ -385,6 +385,10 @@ export default function DashboardPage() {
               <CreditCard className="w-5 h-5" />
               <span>{t.accounts}</span>
             </Link>
+            <Link href="/staff" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
+              <Briefcase className="w-5 h-5 text-emerald-600" />
+              <span>{t.staff_management || t.staff}</span>
+            </Link>
           <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
             <Settings className="w-5 h-5" />
             <span>{t.settings}</span>
@@ -579,10 +583,10 @@ export default function DashboardPage() {
             <span className="text-[10px] font-bold text-[#00c853]">{t.accounts}</span>
           </Link>
 
-          <div className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7] opacity-80">
-            <User className="w-6 h-6 text-[#00c853]" />
+          <Link href="/staff" className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7]">
+            <Briefcase className="w-6 h-6 text-[#00c853]" />
             <span className="text-[10px] font-bold text-[#00c853]">{t.staff}</span>
-          </div>
+          </Link>
         </div>
       </main>
 

@@ -95,7 +95,11 @@ export default function EventDetailPage() {
     setLastScanned(familyId);
   }
 
-  async function markStatus(familyId: string, toReceived: boolean, familyCode?: string) {
+  async function markStatus(
+    familyId: string,
+    toReceived: boolean,
+    familyCode?: string | false
+  ) {
     if (!supabase) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -114,7 +118,7 @@ export default function EventDetailPage() {
           masjid_id: session.user.id,
           family_id: familyId,
           amount: 0,
-          description: `Event: ${ev.name} (${familyCode || ""})`,
+          description: `Event: ${ev.name} (${familyCode === false ? "" : (familyCode || "")})`,
           type: "income",
           category: `Event: ${ev.name}`,
           date: ev.date || new Date().toISOString().split("T")[0]
@@ -234,14 +238,14 @@ export default function EventDetailPage() {
                 <div className="flex items-center gap-2">
                   {((r as any).received ?? r.status === "Received") === false ? (
                     <button
-                      onClick={() => markStatus(r.family_id, true, r.families.family_code)}
+                      onClick={() => markStatus(r.family_id, true, false)}
                       className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest"
                     >
                       {t.mark_received}
                     </button>
                   ) : (
                     <button
-                      onClick={() => markStatus(r.family_id, false, r.families.family_code)}
+                      onClick={() => markStatus(r.family_id, false, false)}
                       className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest"
                     >
                       {t.unmark_received}
