@@ -202,30 +202,22 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    let scanner: any = null;
+    let html5QrCode: any = null;
     if (isScannerOpen) {
-      import("html5-qrcode").then((lib) => {
-        scanner = new lib.Html5QrcodeScanner(
-          "service-reader",
-          { 
-            fps: 10, 
-            qrbox: { width: 250, height: 250 },
-            supportedScanTypes: [lib.Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-            rememberLastUsedCamera: true,
-            showTorchButtonIfSupported: true,
-            showZoomSliderIfSupported: true
-          },
-          false
-        );
-        scanner.render(onScanSuccess, (err: any) => {});
-
-        function onScanSuccess(decodedText: string) {
-          handleServiceScan(decodedText);
-        }
+      import("html5-qrcode").then((lib: any) => {
+        html5QrCode = new lib.Html5Qrcode("service-reader");
+        const config = { fps: 12, qrbox: { width: 260, height: 260 } };
+        html5QrCode
+          .start({ facingMode: "environment" }, config,
+            (decodedText: string) => handleServiceScan(decodedText),
+            (_err: any) => {})
+          .catch((_e: any) => {});
       });
     }
     return () => {
-      if (scanner) scanner.clear().catch(console.error);
+      if (html5QrCode && html5QrCode.stop) {
+        html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
+      }
     };
   }, [isScannerOpen, selectedScanService]);
 

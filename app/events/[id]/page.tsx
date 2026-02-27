@@ -13,7 +13,8 @@ import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 type Ev = { id: string; name: string; date: string };
 type Att = {
   id: string;
-  status: "Pending" | "Received";
+  status?: "Pending" | "Received";
+  received?: boolean;
   family_id: string;
   families: { id: string; family_code: string; head_name: string; phone?: string; address?: string };
 };
@@ -56,7 +57,7 @@ export default function EventDetailPage() {
       setEv(e || null);
       const { data: a } = await supabase
         .from("event_attendance")
-        .select("id,status,family_id,families(id,family_code,head_name,phone,address)")
+        .select("id,received,status,family_id,families(id,family_code,head_name,phone,address)")
         .eq("event_id", eventId)
         .eq("masjid_id", session.user.id)
         .order("created_at", { ascending: true });
@@ -67,27 +68,23 @@ export default function EventDetailPage() {
   }
 
   useEffect(() => {
+    let html5QrCode: any = null;
     if (isScannerOpen) {
-      const scanner = new Html5QrcodeScanner(
-        "event-reader",
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-          rememberLastUsedCamera: true,
-          showTorchButtonIfSupported: true,
-          showZoomSliderIfSupported: true
-        },
-        false
-      );
-      scanner.render(onScanSuccess, () => {});
-      function onScanSuccess(decodedText: string) {
-        handleScan(decodedText);
-      }
-      return () => {
-        scanner.clear();
-      };
+      import("html5-qrcode").then((lib: any) => {
+        html5QrCode = new lib.Html5Qrcode("event-reader");
+        const config = { fps: 12, qrbox: { width: 260, height: 260 } };
+        html5QrCode
+          .start({ facingMode: "environment" }, config,
+            (decodedText: string) => handleScan(decodedText),
+            (_err: any) => {})
+          .catch((_e: any) => {});
+      });
     }
+    return () => {
+      if (html5QrCode && html5QrCode.stop) {
+        html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
+      }
+    };
   }, [isScannerOpen, eventId]);
 
   async function handleScan(decodedText: string) {
@@ -98,21 +95,21 @@ export default function EventDetailPage() {
     setLastScanned(familyId);
   }
 
-  async function markStatus(familyId: string, toStatus: "Received"|"Pending", familyCode?: string) {
+  async function markStatus(familyId: string, toReceived: boolean, familyCode?: string) {
     if (!supabase) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       const { error } = await supabase
         .from("event_attendance")
-        .update({ status: toStatus })
+        .update({ received: toReceived, status: toReceived ? "Received" : "Pending" })
         .eq("event_id", eventId)
         .eq("family_id", familyId)
         .eq("masjid_id", session.user.id);
       if (error) throw error;
-      setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: toStatus } : r));
+      setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, received: toReceived, status: toReceived ? "Received" : "Pending" } : r));
       // Log to accounts as zero-amount info row when marking Received
-      if (toStatus === "Received" && ev) {
+      if (toReceived && ev) {
         await supabase.from("transactions").insert([{
           masjid_id: session.user.id,
           family_id: familyId,
@@ -133,13 +130,14 @@ export default function EventDetailPage() {
     return rows.filter(r => {
       const blob = `${r.families.family_code} ${r.families.head_name} ${r.families.phone || ""} ${r.families.address || ""}`.toLowerCase();
       const matchesSearch = blob.includes(q);
-      const matchesFilter = filter === "all" ? true : r.status === (filter === "received" ? "Received" : "Pending");
+      const isReceived = (r as any).received ?? r.status === "Received";
+      const matchesFilter = filter === "all" ? true : isReceived === (filter === "received");
       return matchesSearch && matchesFilter;
     });
   }, [rows, search, filter]);
 
   const total = rows.length;
-  const receivedCount = rows.filter(r => r.status === "Received").length;
+  const receivedCount = rows.filter(r => (r as any).received ?? r.status === "Received").length;
   const remainingCount = total - receivedCount;
 
   const generatePDF = () => {
@@ -261,15 +259,15 @@ export default function EventDetailPage() {
                     <h4 className="text-sm font-black text-slate-800">{r.families.head_name}</h4>
                     <p className="text-[10px] font-bold text-slate-400 uppercase">{r.families.family_code} • {r.families.phone || ""}</p>
                   </div>
-                  <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${r.status === "Received" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
-                    {r.status === "Received" ? t.received : t.pending}
+                  <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${((r as any).received ?? r.status === "Received") ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
+                    {((r as any).received ?? r.status === "Received") ? t.received : t.pending}
                   </div>
                 </div>
                 <div className="mt-3 flex justify-end">
-                  {r.status === "Pending" ? (
-                    <button onClick={() => markStatus(r.family_id, "Received", r.families.family_code)} className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest">{t.mark_received}</button>
+                  {((r as any).received ?? r.status === "Received") === false ? (
+                    <button onClick={() => markStatus(r.family_id, true, r.families.family_code)} className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest">{t.mark_received}</button>
                   ) : (
-                    <button onClick={() => markStatus(r.family_id, "Pending", r.families.family_code)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest">{t.unmark_received}</button>
+                    <button onClick={() => markStatus(r.family_id, false, r.families.family_code)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest">{t.unmark_received}</button>
                   )}
                 </div>
               </div>
