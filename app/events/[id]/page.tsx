@@ -15,7 +15,7 @@ type Att = {
   id: string;
   status: "Pending" | "Received";
   family_id: string;
-  families: { id: string; family_code: string; head_name: string };
+  families: { id: string; family_code: string; head_name: string; phone?: string; address?: string };
 };
 
 export default function EventDetailPage() {
@@ -29,6 +29,8 @@ export default function EventDetailPage() {
   const [loading, setLoading] = useState(true);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"all"|"received"|"pending">("all");
+  const [lastScanned, setLastScanned] = useState<string | null>(null);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -54,7 +56,7 @@ export default function EventDetailPage() {
       setEv(e || null);
       const { data: a } = await supabase
         .from("event_attendance")
-        .select("id,status,family_id,families(id,family_code,head_name)")
+        .select("id,status,family_id,families(id,family_code,head_name,phone,address)")
         .eq("event_id", eventId)
         .eq("masjid_id", session.user.id)
         .order("created_at", { ascending: true });
@@ -91,35 +93,54 @@ export default function EventDetailPage() {
   async function handleScan(decodedText: string) {
     if (!supabase) return;
     if (!decodedText.startsWith("smart-masjeedh:family:")) return;
+    // Do NOT auto-mark received; just highlight scanned family
+    const familyId = decodedText.split(":")[2];
+    setLastScanned(familyId);
+  }
+
+  async function markStatus(familyId: string, toStatus: "Received"|"Pending", familyCode?: string) {
+    if (!supabase) return;
     try {
-      const familyId = decodedText.split(":")[2];
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("event_attendance")
-        .update({ status: "Received" })
+        .update({ status: toStatus })
         .eq("event_id", eventId)
         .eq("family_id", familyId)
-        .eq("masjid_id", session.user.id)
-        .select();
+        .eq("masjid_id", session.user.id);
       if (error) throw error;
-      if (data && data.length > 0) {
-        setRows(prev =>
-          prev.map(r => (r.family_id === familyId ? { ...r, status: "Received" } : r))
-        );
+      setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: toStatus } : r));
+      // Log to accounts as zero-amount info row when marking Received
+      if (toStatus === "Received" && ev) {
+        await supabase.from("transactions").insert([{
+          masjid_id: session.user.id,
+          family_id: familyId,
+          amount: 0,
+          description: `Event: ${ev.name} (${familyCode || ""})`,
+          type: "income",
+          category: `Event: ${ev.name}`,
+          date: ev.date || new Date().toISOString().split("T")[0]
+        }]);
       }
     } catch (e: any) {
       alert(e.message);
     }
   }
 
-  const filtered = useMemo(
-    () =>
-      rows.filter(r =>
-        `${r.families.family_code} ${r.families.head_name}`.toLowerCase().includes(search.toLowerCase())
-      ),
-    [rows, search]
-  );
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return rows.filter(r => {
+      const blob = `${r.families.family_code} ${r.families.head_name} ${r.families.phone || ""} ${r.families.address || ""}`.toLowerCase();
+      const matchesSearch = blob.includes(q);
+      const matchesFilter = filter === "all" ? true : r.status === (filter === "received" ? "Received" : "Pending");
+      return matchesSearch && matchesFilter;
+    });
+  }, [rows, search, filter]);
+
+  const total = rows.length;
+  const receivedCount = rows.filter(r => r.status === "Received").length;
+  const remainingCount = total - receivedCount;
 
   const generatePDF = () => {
     const doc = new jsPDF();
@@ -167,6 +188,28 @@ export default function EventDetailPage() {
       </header>
 
       <main className="flex-1 p-6 space-y-4 max-w-md mx-auto w-full">
+        {/* Summary */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 text-center">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.total_families}</p>
+            <p className="text-2xl font-black text-slate-800">{total}</p>
+          </div>
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 text-center">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.received_count}</p>
+            <p className="text-2xl font-black text-emerald-600">{receivedCount}</p>
+          </div>
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 text-center">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.remaining_count}</p>
+            <p className="text-2xl font-black text-amber-600">{remainingCount}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button onClick={() => setFilter("all")} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${filter==="all" ? "bg-emerald-50 text-emerald-600" : "bg-white border border-slate-100 text-slate-500"}`}>{t.filter_all}</button>
+          <button onClick={() => setFilter("received")} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${filter==="received" ? "bg-emerald-50 text-emerald-600" : "bg-white border border-slate-100 text-slate-500"}`}>{t.filter_received}</button>
+          <button onClick={() => setFilter("pending")} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${filter==="pending" ? "bg-emerald-50 text-emerald-600" : "bg-white border border-slate-100 text-slate-500"}`}>{t.filter_pending}</button>
+        </div>
+
         <div className="relative group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
           <input
@@ -178,6 +221,30 @@ export default function EventDetailPage() {
           />
         </div>
 
+        {/* Last scanned highlight */}
+        {lastScanned && (() => {
+          const r = rows.find(x => x.family_id === lastScanned);
+          if (!r) return null;
+          return (
+            <div className="bg-white rounded-2xl p-4 border border-emerald-100 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-bold text-emerald-600 uppercase">Scanned</p>
+                  <h4 className="text-sm font-black text-slate-800">{r.families.head_name}</h4>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">{r.families.family_code} • {r.families.phone || ""}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {r.status === "Pending" ? (
+                    <button onClick={() => markStatus(r.family_id, "Received", r.families.family_code)} className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest">{t.mark_received}</button>
+                  ) : (
+                    <button onClick={() => markStatus(r.family_id, "Pending", r.families.family_code)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest">{t.unmark_received}</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="space-y-3">
           {filtered.length === 0 ? (
             <div className="py-16 text-center bg-white rounded-[2rem] border border-slate-50">
@@ -188,13 +255,22 @@ export default function EventDetailPage() {
             </div>
           ) : (
             filtered.map(r => (
-              <div key={r.id} className="bg-white rounded-2xl p-4 flex items-center justify-between border border-slate-50 shadow-sm">
-                <div>
-                  <h4 className="text-sm font-black text-slate-800">{r.families.head_name}</h4>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">{r.families.family_code}</p>
+              <div key={r.id} className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-black text-slate-800">{r.families.head_name}</h4>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">{r.families.family_code} • {r.families.phone || ""}</p>
+                  </div>
+                  <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${r.status === "Received" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
+                    {r.status === "Received" ? t.received : t.pending}
+                  </div>
                 </div>
-                <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${r.status === "Received" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
-                  {r.status === "Received" ? t.received : t.pending}
+                <div className="mt-3 flex justify-end">
+                  {r.status === "Pending" ? (
+                    <button onClick={() => markStatus(r.family_id, "Received", r.families.family_code)} className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest">{t.mark_received}</button>
+                  ) : (
+                    <button onClick={() => markStatus(r.family_id, "Pending", r.families.family_code)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest">{t.unmark_received}</button>
+                  )}
                 </div>
               </div>
             ))

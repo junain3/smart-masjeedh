@@ -87,6 +87,13 @@ export const translations = {
     attendance_report: "Attendance Report",
     event_marked_received: "Marked as Received",
     all_families: "All Families",
+    mark_received: "Mark Received",
+    unmark_received: "Mark Pending",
+    received_count: "Received",
+    remaining_count: "Remaining",
+    filter_all: "All",
+    filter_received: "Received",
+    filter_pending: "Pending",
   },
   tm: {
     home: "முகப்பு",
@@ -176,6 +183,13 @@ export const translations = {
     attendance_report: "வருகை அறிக்கை",
     event_marked_received: "பெற்றதாக குறிக்கப்பட்டது",
     all_families: "எல்லா குடும்பங்கள்",
+    mark_received: "பெற்றதாக குறி",
+    unmark_received: "நிலுவை என குறி",
+    received_count: "பெற்றவர்கள்",
+    remaining_count: "மீதமுள்ளவர்கள்",
+    filter_all: "அனைத்தும்",
+    filter_received: "பெற்றவர்கள்",
+    filter_pending: "நிலுவை",
   },
   si: {
     home: "මුල් පිටුව",
@@ -265,6 +279,13 @@ export const translations = {
     attendance_report: "පැමිණීමේ වාර්තාව",
     event_marked_received: "ලැබුණු ලෙස සලකුණු කරන ලදී",
     all_families: "සියලු පවුල්",
+    mark_received: "ලැබුණු ලෙස සලකුණු",
+    unmark_received: "පැඳිමින් සලකුණු",
+    received_count: "ලැබුණු",
+    remaining_count: "ඉතිරි",
+    filter_all: "සියල්ල",
+    filter_received: "ලැබුණු",
+    filter_pending: "පැඳිමින්",
   }
 };
 
