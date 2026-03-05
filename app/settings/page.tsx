@@ -123,7 +123,7 @@ export default function SettingsPage() {
         throw error;
       }
 
-      alert(t.saved_successfully);
+      alert(lang === "tm" ? "சேமிக்கப்பட்டது" : lang === "si" ? "සුරකින ලදී" : "Saved successfully");
     } catch (e: any) {
       alert(e.message || "Failed to save");
     } finally {
