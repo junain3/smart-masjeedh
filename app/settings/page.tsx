@@ -38,14 +38,14 @@ export default function SettingsPage() {
       try {
         const { data, error } = await supabase
           .from("masjids")
-          .select("id, name, tagline, logo_url")
+          .select("id, masjid_name, tagline, logo_url")
           .eq("id", ctx.masjidId)
           .maybeSingle();
 
         if (error) throw error;
 
         if (data) {
-          setName((data as any).name || "");
+          setName((data as any).masjid_name || "");
           setTagline((data as any).tagline || "");
           setLogoUrl((data as any).logo_url || "");
         }
@@ -100,7 +100,7 @@ export default function SettingsPage() {
         .from("masjids")
         .upsert({
           id: ctx.masjidId,
-          name,
+          masjid_name: name,
           tagline,
           logo_url: logoUrl
         });

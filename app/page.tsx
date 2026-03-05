@@ -309,14 +309,18 @@ export default function DashboardPage() {
         try {
           const { data: masjidData, error: masjidErr } = await supabase
             .from("masjids")
-            .select("id, name, tagline, logo_url")
+            .select("id, masjid_name, tagline, logo_url")
             .eq("id", ctx.masjidId)
             .maybeSingle();
 
           if (masjidErr) throw masjidErr;
 
           if (masjidData) {
-            setMasjid(masjidData as any);
+            setMasjid({
+              name: (masjidData as any).masjid_name || "MJM",
+              logo_url: (masjidData as any).logo_url || "",
+              tagline: (masjidData as any).tagline || "Mubeen Jummah Masjid",
+            });
           } else {
             // Default Fallback
             setMasjid({
