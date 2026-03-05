@@ -89,7 +89,10 @@ export default function SettingsPage() {
     setSaving(true);
 
     const ctx = await getTenantContext();
-    if (!ctx) return;
+    if (!ctx) {
+      setSaving(false);
+      return;
+    }
 
     try {
       // Save profile
@@ -103,16 +106,26 @@ export default function SettingsPage() {
         });
 
       if (error) {
-        if (error.message.includes("logo_url")) {
+        const msg = error.message || "";
+        if (msg.includes("schema cache") || msg.includes("Could not find") || msg.includes("column")) {
+          throw new Error(
+            "Supabase schema cache error. Please run this once in Supabase SQL Editor: NOTIFY pgrst, 'reload schema'; and verify Vercel is using the same Supabase project URL where you ran the migration."
+          );
+        }
+        if (msg.includes("logo_url")) {
           throw new Error("உங்கள் டேட்டாபேஸில் 'logo_url' என்ற காலம் (Column) இல்லை. தயவுசெய்து நான் கொடுத்த SQL குறியீட்டை Supabase-இல் இயக்கவும்.");
+        }
+        if (msg.includes("name")) {
+          throw new Error(
+            "உங்கள் Supabase-ல் 'masjids.name' column கிடைக்கவில்லை / schema cache update ஆகவில்லை. SQL Editor-ல் NOTIFY pgrst, 'reload schema'; run பண்ணி, Vercel-ல் சரியான Supabase URL set பண்ணியிருக்கீங்களா check பண்ணுங்க."
+          );
         }
         throw error;
       }
-      
-      alert(lang === "en" ? "Profile saved!" : lang === "tm" ? "விபரங்கள் சேமிக்கப்பட்டன!" : "විස්තර සුරකින ලදී!");
-      router.refresh();
-    } catch (err: any) {
-      alert(err.message);
+
+      alert(t.saved_successfully);
+    } catch (e: any) {
+      alert(e.message || "Failed to save");
     } finally {
       setSaving(false);
     }
