@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, Globe, Camera, Tag, Home, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+import { getTenantContext } from "@/lib/tenant";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -23,8 +24,8 @@ export default function SettingsPage() {
     async function loadSettings() {
       if (!supabase) return;
       
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const ctx = await getTenantContext();
+      if (!ctx) {
         router.push("/login");
         return;
       }
@@ -34,16 +35,29 @@ export default function SettingsPage() {
       if (savedLang) setLang(savedLang);
 
       // Load masjid profile
-      const { data, error } = await supabase
-        .from("masjids")
-        .select("*")
-        .eq("id", session.user.id)
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from("masjids")
+          .select("id, name, tagline, logo_url")
+          .eq("id", ctx.masjidId)
+          .maybeSingle();
 
-      if (data) {
-        setName(data.name || "");
-        setTagline(data.tagline || "");
-        setLogoUrl(data.logo_url || "");
+        if (error) throw error;
+
+        if (data) {
+          setName((data as any).name || "");
+          setTagline((data as any).tagline || "");
+          setLogoUrl((data as any).logo_url || "");
+        }
+      } catch (e: any) {
+        // If table exists but schema cache is stale or columns don't exist, keep defaults.
+        // The user should run the Supabase SQL migration to add the required columns.
+        const msg = e?.message || "";
+        if (msg.includes("schema cache") || msg.includes("column") || msg.includes("Could not find")) {
+          // ignore - allow settings screen to render
+        } else {
+          throw e;
+        }
       }
       setLoading(false);
     }
@@ -74,15 +88,15 @@ export default function SettingsPage() {
     if (!supabase) return;
     setSaving(true);
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const ctx = await getTenantContext();
+    if (!ctx) return;
 
     try {
       // Save profile
       const { error } = await supabase
         .from("masjids")
         .upsert({
-          id: session.user.id,
+          id: ctx.masjidId,
           name,
           tagline,
           logo_url: logoUrl

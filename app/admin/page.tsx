@@ -283,7 +283,7 @@ export default function AdminSettingsPage() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-50 border-none rounded-2xl pl-10 pr-4 py-3 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
+                    className="w-full bg-slate-50 border-none rounded-3xl pl-10 pr-4 py-3 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
                     placeholder="user@example.com"
                     required
                   />
@@ -296,7 +296,7 @@ export default function AdminSettingsPage() {
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value as any)}
-                  className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
+                  className="w-full bg-slate-50 border-none rounded-3xl px-4 py-3 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
                 >
                   <option value="staff">{t.staff_role}</option>
                   <option value="editor">{t.editor_role}</option>

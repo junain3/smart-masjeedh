@@ -150,6 +150,47 @@ using (public.is_masjid_admin(masjid_id));
 -- Core app tables (optional) - tenant isolation + permissions
 -- =========================
 
+-- masjids (profile)
+do $$
+begin
+  if to_regclass('public.masjids') is null then
+    execute 'create table public.masjids (
+      id uuid primary key,
+      name text,
+      tagline text,
+      logo_url text,
+      created_at timestamptz not null default now()
+    )';
+  else
+    if not exists (
+      select 1 from information_schema.columns
+      where table_schema = ''public'' and table_name = ''masjids'' and column_name = ''name''
+    ) then
+      execute 'alter table public.masjids add column name text';
+    end if;
+    if not exists (
+      select 1 from information_schema.columns
+      where table_schema = ''public'' and table_name = ''masjids'' and column_name = ''tagline''
+    ) then
+      execute 'alter table public.masjids add column tagline text';
+    end if;
+    if not exists (
+      select 1 from information_schema.columns
+      where table_schema = ''public'' and table_name = ''masjids'' and column_name = ''logo_url''
+    ) then
+      execute 'alter table public.masjids add column logo_url text';
+    end if;
+  end if;
+
+  execute 'alter table public.masjids enable row level security';
+  execute 'drop policy if exists masjids_select_tenant on public.masjids';
+  execute 'create policy masjids_select_tenant on public.masjids for select to authenticated using (exists (select 1 from public.user_roles ur where ur.masjid_id = masjids.id and ur.user_id = auth.uid()) or masjids.id = auth.uid())';
+  execute 'drop policy if exists masjids_upsert_admin on public.masjids';
+  execute 'create policy masjids_upsert_admin on public.masjids for insert to authenticated with check (public.is_masjid_admin(id) or id = auth.uid())';
+  execute 'drop policy if exists masjids_update_admin on public.masjids';
+  execute 'create policy masjids_update_admin on public.masjids for update to authenticated using (public.is_masjid_admin(id) or id = auth.uid()) with check (public.is_masjid_admin(id) or id = auth.uid())';
+end $$;
+
 -- families
 do $$
 begin

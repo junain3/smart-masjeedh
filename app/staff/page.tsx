@@ -181,7 +181,7 @@ export default function StaffManagementPage() {
             {isLive ? t.live_data : t.demo_mode}
           </p>
         </div>
-        <div className="flex p-1 bg-slate-100 rounded-2xl">
+        <div className="flex p-1 bg-slate-100 rounded-3xl">
           <button
             onClick={() => setTab("board")}
             className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
