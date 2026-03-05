@@ -316,9 +316,6 @@ export default function DashboardPage() {
           if (masjidErr) throw masjidErr;
 
           if (masjidData) {
-            setMasjidName((masjidData as any).name || "");
-            setMasjidTagline((masjidData as any).tagline || "");
-            setMasjidLogo((masjidData as any).logo_url || "");
             setMasjid(masjidData as any);
           } else {
             // Default Fallback
