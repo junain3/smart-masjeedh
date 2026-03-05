@@ -24,7 +24,14 @@ export default function DirectScanPage() {
         false
       );
       scanner.render(
-        (decodedText: string) => {
+        (decoded: any) => {
+          const decodedText =
+            typeof decoded === "string"
+              ? decoded
+              : (decoded?.decodedText as string | undefined) ||
+                (decoded?.text as string | undefined) ||
+                String(decoded ?? "");
+
           if (decodedText.startsWith("smart-masjeedh:family:")) {
             const id = decodedText.split(":")[2];
             // Clear before navigate to free camera

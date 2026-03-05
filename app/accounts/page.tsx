@@ -120,7 +120,14 @@ export default function AccountsPage() {
 
         scanner.render(onScanSuccess, onScanFailure);
 
-        function onScanSuccess(decodedText: string) {
+        function onScanSuccess(decoded: any) {
+          const decodedText =
+            typeof decoded === "string"
+              ? decoded
+              : (decoded?.decodedText as string | undefined) ||
+                (decoded?.text as string | undefined) ||
+                String(decoded ?? "");
+
           if (decodedText.startsWith("smart-masjeedh:family:")) {
             const familyId = decodedText.split(":")[2];
             setSelectedFamilyId(familyId);
