@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { translations, Language } from "@/lib/i18n/translations";
 import { supabase } from "@/lib/supabase";
+import { getTenantContext } from "@/lib/tenant";
 import { AppShell } from "@/components/AppShell";
 import { Shield, Mail, Trash2 } from "lucide-react";
 
@@ -12,7 +13,7 @@ type RoleRow = {
   masjid_id: string;
   user_id: string;
   email: string | null;
-  role: "super_admin" | "staff" | "editor";
+  role: "super_admin" | "co_admin" | "staff" | "editor";
   permissions?: {
     accounts?: boolean;
     events?: boolean;
@@ -34,10 +35,12 @@ export default function AdminSettingsPage() {
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
 
+  const [masjidId, setMasjidId] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [invites, setInvites] = useState<InviteRow[]>([]);
-  const [selfRole, setSelfRole] = useState<"super_admin" | "staff" | "editor" | null>(null);
+  const [selfRole, setSelfRole] = useState<"super_admin" | "co_admin" | "staff" | "editor" | null>(null);
   const [error, setError] = useState<string>("");
 
   const [email, setEmail] = useState("");
@@ -55,48 +58,47 @@ export default function AdminSettingsPage() {
       setLoading(true);
       setError("");
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        const ctx = await getTenantContext();
+        if (!ctx) {
           router.push("/login");
           return;
         }
-        const masjidId = session.user.id;
 
-        // Ensure current user has a role; default to super_admin for owner
-        let currentRole: RoleRow | null = null;
-        const { data: existing, error: roleErr } = await supabase
-          .from("user_roles")
-          .select("*")
-          .eq("masjid_id", masjidId)
-          .eq("user_id", session.user.id)
-          .maybeSingle();
+        setMasjidId(ctx.masjidId);
 
-        if (roleErr && !roleErr.message?.includes("No rows")) {
-          throw roleErr;
-        }
-
-        if (!existing) {
-          const { data: inserted, error: insErr } = await supabase
+        // Bootstrap owner role row if missing (only when masjid owner is logged in)
+        if (ctx.masjidId === ctx.userId) {
+          const { data: existing, error: roleErr } = await supabase
             .from("user_roles")
-            .insert([
-              {
-                masjid_id: masjidId,
-                user_id: session.user.id,
-                email: session.user.email,
-                role: "super_admin",
-              },
-            ])
             .select("*")
-            .single();
-          if (insErr) throw insErr;
-          currentRole = inserted as any;
+            .eq("masjid_id", ctx.masjidId)
+            .eq("user_id", ctx.userId)
+            .maybeSingle();
+          if (roleErr && !roleErr.message?.includes("No rows")) throw roleErr;
+          if (!existing) {
+            const { data: inserted, error: insErr } = await supabase
+              .from("user_roles")
+              .insert([
+                {
+                  masjid_id: ctx.masjidId,
+                  user_id: ctx.userId,
+                  email: ctx.email,
+                  role: "super_admin",
+                },
+              ])
+              .select("*")
+              .single();
+            if (insErr) throw insErr;
+            setSelfRole((inserted as any)?.role || ctx.role || null);
+          } else {
+            setSelfRole((existing as any)?.role || ctx.role || null);
+          }
         } else {
-          currentRole = existing as any;
+          setSelfRole(ctx.role || null);
         }
 
-        setSelfRole(currentRole?.role || null);
-        if (currentRole?.role !== "super_admin") {
-          setError("Access denied. Only Super Admin can manage users.");
+        if (!(ctx.role === "super_admin" || ctx.role === "co_admin")) {
+          setError("Access denied. Only Masjid Admin can manage users.");
           setRoles([]);
           setInvites([]);
           return;
@@ -105,14 +107,14 @@ export default function AdminSettingsPage() {
         const { data: allRoles } = await supabase
           .from("user_roles")
           .select("*")
-          .eq("masjid_id", masjidId)
+          .eq("masjid_id", ctx.masjidId)
           .order("created_at", { ascending: true });
         setRoles((allRoles as any) || []);
 
         const { data: allInvites } = await supabase
           .from("role_invitations")
           .select("*")
-          .eq("masjid_id", masjidId)
+          .eq("masjid_id", ctx.masjidId)
           .order("created_at", { ascending: false });
         setInvites((allInvites as any) || []);
       } catch (e: any) {
@@ -126,6 +128,7 @@ export default function AdminSettingsPage() {
 
   const roleLabel = (r: RoleRow["role"]) => {
     if (r === "super_admin") return t.super_admin;
+    if (r === "co_admin") return "Co Admin";
     if (r === "staff") return t.staff_role;
     return t.editor_role;
   };
@@ -135,7 +138,7 @@ export default function AdminSettingsPage() {
     return t.editor_role;
   };
 
-  const canManage = selfRole === "super_admin";
+  const canManage = selfRole === "super_admin" || selfRole === "co_admin";
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,12 +146,7 @@ export default function AdminSettingsPage() {
     setInviting(true);
     setError("");
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/login");
-        return;
-      }
-      const masjidId = session.user.id;
+      if (!masjidId) return;
 
       if (!email.trim()) {
         setError("Email is required.");
@@ -186,9 +184,7 @@ export default function AdminSettingsPage() {
     if (row.role === "super_admin") return;
     if (!confirm(t.confirm_delete)) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const masjidId = session.user.id;
+      if (!masjidId) return;
       const { error } = await supabase
         .from("user_roles")
         .delete()
@@ -205,6 +201,22 @@ export default function AdminSettingsPage() {
     () => roles.filter((r) => r.role !== "super_admin"),
     [roles]
   );
+
+  const updateRole = async (row: RoleRow, nextRole: RoleRow["role"]) => {
+    if (!supabase || !canManage) return;
+    if (row.role === "super_admin") return;
+    try {
+      const { error } = await supabase
+        .from("user_roles")
+        .update({ role: nextRole })
+        .eq("id", row.id)
+        .eq("masjid_id", row.masjid_id);
+      if (error) throw error;
+      setRoles((prev) => prev.map((r) => (r.id === row.id ? { ...r, role: nextRole } : r)));
+    } catch (e: any) {
+      alert(e.message || "Failed to update role");
+    }
+  };
 
   const togglePermission = async (
     row: RoleRow,
@@ -343,7 +355,15 @@ export default function AdminSettingsPage() {
                           </span>
                         </div>
                         <span className="text-[11px] font-black uppercase tracking-widest text-emerald-600">
-                          {roleLabel(r.role)}
+                          <select
+                            value={r.role}
+                            onChange={(e) => updateRole(r, e.target.value as any)}
+                            className="bg-transparent text-emerald-600 font-black text-[11px] uppercase tracking-widest outline-none"
+                          >
+                            <option value="staff">{t.staff_role}</option>
+                            <option value="editor">{t.editor_role}</option>
+                            <option value="co_admin">Co Admin</option>
+                          </select>
                         </span>
                         <div className="flex flex-col gap-1 text-[10px] font-bold text-slate-500">
                           <label className="inline-flex items-center gap-1">

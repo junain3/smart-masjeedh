@@ -7,6 +7,7 @@ import { ArrowLeft, UserPlus, Trash2, User, Edit2, Search, MoreVertical, QrCode,
 import { supabase } from "@/lib/supabase";
 import { QRCodeSVG } from "qrcode.react";
 import { translations, Language } from "@/lib/i18n/translations";
+import { getTenantContext } from "@/lib/tenant";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
@@ -83,6 +84,8 @@ export default function FamilyDetailsPage() {
   const [civilStatus, setCivilStatus] = useState("Single");
   const [submitting, setSubmitting] = useState(false);
 
+  const [allowed, setAllowed] = useState(true);
+
   const t = translations[lang];
 
   useEffect(() => {
@@ -110,10 +113,20 @@ export default function FamilyDetailsPage() {
     setErrorMessage(""); 
     
     try {
-      // Get current masjid ID
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const ctx = await getTenantContext();
+      if (!ctx) {
         router.push("/login");
+        return;
+      }
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      setAllowed(canMembers);
+      if (!canMembers) {
+        setFamily(null);
+        setMembers([]);
+        setPayments([]);
+        setServices([]);
         return;
       }
 
@@ -121,7 +134,7 @@ export default function FamilyDetailsPage() {
         .from("families")
         .select("*")
         .eq("id", id)
-        .eq("masjid_id", session.user.id) // Ensure user can only see their own masjid's family
+        .eq("masjid_id", ctx.masjidId)
         .single();
       
       if (familyError) throw familyError;
@@ -131,7 +144,7 @@ export default function FamilyDetailsPage() {
         .from("members")
         .select("*")
         .eq("family_id", id)
-        .eq("masjid_id", session.user.id); // Ensure user can only see their own masjid's members
+        .eq("masjid_id", ctx.masjidId);
       
       if (membersError) {
         // Specifically check if the error is "Table not found"
@@ -150,7 +163,7 @@ export default function FamilyDetailsPage() {
         .from("transactions")
         .select("id, amount, date, description, type, category")
         .eq("family_id", id)
-        .eq("masjid_id", session.user.id)
+        .eq("masjid_id", ctx.masjidId)
         .order("date", { ascending: false });
       
       if (paymentData) setPayments(paymentData);
@@ -160,7 +173,7 @@ export default function FamilyDetailsPage() {
         .from("service_distributions")
         .select("id, name, date, status")
         .eq("family_id", id)
-        .eq("masjid_id", session.user.id)
+        .eq("masjid_id", ctx.masjidId)
         .order("date", { ascending: false });
       
       if (serviceData) setServices(serviceData);
@@ -187,8 +200,12 @@ export default function FamilyDetailsPage() {
     setSuccessMessage("");
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("லாகின் செய்யப்படவில்லை.");
+      const ctx = await getTenantContext();
+      if (!ctx) throw new Error("லாகின் செய்யப்படவில்லை.");
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      if (!canMembers) throw new Error("Access denied");
 
       if (editingMember) {
         const { error } = await supabase
@@ -203,7 +220,8 @@ export default function FamilyDetailsPage() {
             phone,
             civil_status: civilStatus
           })
-          .eq("id", editingMember.id);
+          .eq("id", editingMember.id)
+          .eq("masjid_id", ctx.masjidId);
         if (error) throw error;
         setSuccessMessage("உறுப்பினர் விபரம் மாற்றப்பட்டது!");
       } else {
@@ -218,7 +236,7 @@ export default function FamilyDetailsPage() {
             nic,
             phone,
             civil_status: civilStatus,
-            masjid_id: session.user.id
+            masjid_id: ctx.masjidId
           }
         ]);
         if (error) throw error;
@@ -253,10 +271,20 @@ export default function FamilyDetailsPage() {
   const deleteMember = async (memberId: string) => {
     if (!supabase || !confirm(t.confirm_delete)) return;
     try {
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      if (!canMembers) {
+        alert("Access denied");
+        return;
+      }
       const { error } = await supabase
         .from("members")
         .delete()
-        .eq("id", memberId);
+        .eq("id", memberId)
+        .eq("masjid_id", ctx.masjidId);
       if (error) throw error;
       fetchData();
     } catch (error: any) {
@@ -309,6 +337,15 @@ export default function FamilyDetailsPage() {
   const toggleServiceStatus = async (serviceId: string) => {
     if (!supabase) return;
     try {
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      if (!canMembers) {
+        alert("Access denied");
+        return;
+      }
       const service = services.find(s => s.id === serviceId);
       if (!service) return;
 
@@ -316,7 +353,8 @@ export default function FamilyDetailsPage() {
       const { error } = await supabase
         .from("service_distributions")
         .update({ status: newStatus })
-        .eq("id", serviceId);
+        .eq("id", serviceId)
+        .eq("masjid_id", ctx.masjidId);
       
       if (error) throw error;
       fetchData();
@@ -324,6 +362,26 @@ export default function FamilyDetailsPage() {
       alert(error.message);
     }
   };
+
+  if (!allowed && !loading) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-6 font-sans">
+        <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/families" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-emerald-600">
+              <ArrowLeft className="h-6 w-6" />
+            </Link>
+            <h1 className="text-lg font-black">{t.family}</h1>
+          </div>
+        </header>
+        <main className="p-6 max-w-md mx-auto w-full">
+          <div className="app-card p-6 text-center text-[11px] font-bold text-slate-400">
+            Access denied.
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

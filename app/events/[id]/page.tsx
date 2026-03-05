@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Users, CheckCircle, Clock, QrCode, FileText, Search } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+import { getTenantContext } from "@/lib/tenant";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
@@ -32,6 +33,7 @@ export default function EventDetailPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all"|"received"|"pending">("all");
   const [lastScanned, setLastScanned] = useState<string | null>(null);
+  const [allowed, setAllowed] = useState(true);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -43,23 +45,32 @@ export default function EventDetailPage() {
     if (!supabase) return;
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const ctx = await getTenantContext();
+      if (!ctx) {
         router.push("/login");
+        return;
+      }
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canEvents = isAdmin || ctx.permissions?.events !== false;
+      setAllowed(canEvents);
+      if (!canEvents) {
+        setEv(null);
+        setRows([]);
         return;
       }
       const { data: e } = await supabase
         .from("events")
         .select("id,name,date")
         .eq("id", eventId)
-        .eq("masjid_id", session.user.id)
+        .eq("masjid_id", ctx.masjidId)
         .single();
       setEv(e || null);
       const { data: a } = await supabase
         .from("event_attendance")
         .select("id,received,status,family_id,families(id,family_code,head_name,phone,address)")
         .eq("event_id", eventId)
-        .eq("masjid_id", session.user.id)
+        .eq("masjid_id", ctx.masjidId)
         .order("created_at", { ascending: true });
       setRows((a as any) || []);
     } finally {
@@ -70,15 +81,26 @@ export default function EventDetailPage() {
   useEffect(() => {
     let html5QrCode: any = null;
     if (isScannerOpen) {
-      import("html5-qrcode").then((lib: any) => {
-        html5QrCode = new lib.Html5Qrcode("event-reader");
-        const config = { fps: 12, qrbox: { width: 260, height: 260 } };
-        html5QrCode
-          .start({ facingMode: "environment" }, config,
-            (decodedText: string) => handleScan(decodedText),
-            (_err: any) => {})
-          .catch((_e: any) => {});
-      });
+      (async () => {
+        try {
+          const granted = localStorage.getItem("camera_permission_granted") === "1";
+          if (!granted && navigator?.mediaDevices?.getUserMedia) {
+            await navigator.mediaDevices.getUserMedia({ video: true });
+            localStorage.setItem("camera_permission_granted", "1");
+          }
+        } catch {
+          // ignore
+        }
+        import("html5-qrcode").then((lib: any) => {
+          html5QrCode = new lib.Html5Qrcode("event-reader");
+          const config = { fps: 15, qrbox: { width: 260, height: 260 } };
+          html5QrCode
+            .start({ facingMode: "environment" }, config,
+              (decodedText: string) => handleScan(decodedText),
+              (_err: any) => {})
+            .catch((_e: any) => {});
+        });
+      })();
     }
     return () => {
       if (html5QrCode && html5QrCode.stop) {
@@ -93,6 +115,7 @@ export default function EventDetailPage() {
     // Do NOT auto-mark received; just highlight scanned family
     const familyId = decodedText.split(":")[2];
     setLastScanned(familyId);
+    setIsScannerOpen(false);
   }
 
   async function markStatus(
@@ -102,20 +125,27 @@ export default function EventDetailPage() {
   ) {
     if (!supabase) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canEvents = isAdmin || ctx.permissions?.events !== false;
+      if (!canEvents) {
+        alert("Access denied");
+        return;
+      }
       const { error } = await supabase
         .from("event_attendance")
         .update({ received: toReceived, status: toReceived ? "Received" : "Pending" })
         .eq("event_id", eventId)
         .eq("family_id", familyId)
-        .eq("masjid_id", session.user.id);
+        .eq("masjid_id", ctx.masjidId);
       if (error) throw error;
       setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, received: toReceived, status: toReceived ? "Received" : "Pending" } : r));
       // Log to accounts as zero-amount info row when marking Received
       if (toReceived && ev) {
         await supabase.from("transactions").insert([{
-          masjid_id: session.user.id,
+          masjid_id: ctx.masjidId,
           family_id: familyId,
           amount: 0,
           description: `Event: ${ev.name} (${familyCode === false ? "" : (familyCode || "")})`,
@@ -158,6 +188,28 @@ export default function EventDetailPage() {
   };
 
   if (loading) return <div className="p-8 text-center">{t.loading}</div>;
+
+  if (!allowed) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans pb-10">
+        <header className="bg-white px-4 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 z-20">
+          <div className="flex items-center gap-4">
+            <Link href="/events" className="p-2 hover:bg-slate-50 rounded-full transition-colors">
+              <ArrowLeft className="w-6 h-6 text-emerald-600" />
+            </Link>
+            <div>
+              <h1 className="text-xl font-black">{t.events}</h1>
+            </div>
+          </div>
+        </header>
+        <main className="flex-1 p-6 max-w-md mx-auto w-full">
+          <div className="app-card p-6 text-center text-[11px] font-bold text-slate-400">
+            Access denied.
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans pb-10">

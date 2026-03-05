@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Search, TrendingUp, TrendingDown, Wallet, Calendar, Tag, MoreVertical, X, Edit, Trash2, FileText, QrCode } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+import { getTenantContext } from "@/lib/tenant";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
@@ -53,6 +54,7 @@ export default function AccountsPage() {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [allowed, setAllowed] = useState(true);
 
   const t = translations[lang];
 
@@ -91,10 +93,22 @@ export default function AccountsPage() {
 
   useEffect(() => {
     if (isScannerOpen) {
-      const scanner = new Html5QrcodeScanner(
+      let scanner: Html5QrcodeScanner | null = null;
+      (async () => {
+        try {
+          const granted = localStorage.getItem("camera_permission_granted") === "1";
+          if (!granted && navigator?.mediaDevices?.getUserMedia) {
+            await navigator.mediaDevices.getUserMedia({ video: true });
+            localStorage.setItem("camera_permission_granted", "1");
+          }
+        } catch {
+          // ignore - browser will prompt via scanner
+        }
+
+        scanner = new Html5QrcodeScanner(
         "accounts-reader",
         { 
-          fps: 10, 
+          fps: 15, 
           qrbox: { width: 250, height: 250 },
           supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
           rememberLastUsedCamera: true,
@@ -103,20 +117,28 @@ export default function AccountsPage() {
         },
         false
       );
-      scanner.render(onScanSuccess, onScanFailure);
-      function onScanSuccess(decodedText: string) {
-        if (decodedText.startsWith("smart-masjeedh:family:")) {
-          const familyId = decodedText.split(":")[2];
-          setSelectedFamilyId(familyId);
-          setType("subscription");
-          setIsModalOpen(true);
-          scanner.clear();
-          setIsScannerOpen(false);
+
+        scanner.render(onScanSuccess, onScanFailure);
+
+        function onScanSuccess(decodedText: string) {
+          if (decodedText.startsWith("smart-masjeedh:family:")) {
+            const familyId = decodedText.split(":")[2];
+            setSelectedFamilyId(familyId);
+            setType("subscription");
+            setIsModalOpen(true);
+            try {
+              scanner?.clear();
+            } catch {}
+            setIsScannerOpen(false);
+          }
         }
-      }
-      function onScanFailure(_err: any) {}
+        function onScanFailure(_err: any) {}
+      })();
+
       return () => {
-        scanner.clear();
+        try {
+          scanner?.clear();
+        } catch {}
       };
     }
   }, [isScannerOpen]);
@@ -137,9 +159,18 @@ export default function AccountsPage() {
     if (!supabase) return;
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const ctx = await getTenantContext();
+      if (!ctx) {
         router.push("/login");
+        return;
+      }
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canAccounts = isAdmin || ctx.permissions?.accounts !== false;
+      setAllowed(canAccounts);
+      if (!canAccounts) {
+        setTransactions([]);
+        setFamilies([]);
         return;
       }
 
@@ -147,7 +178,7 @@ export default function AccountsPage() {
       const { data: txData, error: txError } = await supabase
         .from("transactions")
         .select("*")
-        .eq("masjid_id", session.user.id)
+        .eq("masjid_id", ctx.masjidId)
         .order("date", { ascending: false });
 
       if (txError) {
@@ -160,7 +191,7 @@ export default function AccountsPage() {
       const { data: famData } = await supabase
         .from("families")
         .select("id, family_code, head_name")
-        .eq("masjid_id", session.user.id)
+        .eq("masjid_id", ctx.masjidId)
         .order("family_code", { ascending: true });
       
       if (famData) setFamilies(famData);
@@ -178,8 +209,15 @@ export default function AccountsPage() {
     setSubmitting(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canAccounts = isAdmin || ctx.permissions?.accounts !== false;
+      if (!canAccounts) {
+        alert("Access denied");
+        return;
+      }
 
       const finalType = type === "subscription" ? "income" : type;
       const finalCategory = type === "subscription" ? t.subscription : category;
@@ -208,7 +246,7 @@ export default function AccountsPage() {
             type: finalType,
             category: finalCategory,
             date,
-            masjid_id: session.user.id,
+            masjid_id: ctx.masjidId,
             family_id: type === "subscription" ? selectedFamilyId : null
           }
         ]);
@@ -286,6 +324,16 @@ export default function AccountsPage() {
   );
 
   if (loading) return <div className="p-8 text-center">Loading...</div>;
+
+  if (!allowed) {
+    return (
+      <AppShell title={t.accounts}>
+        <div className="app-card p-6 text-center text-[11px] font-bold text-slate-400">
+          Access denied.
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell

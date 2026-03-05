@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search, Briefcase } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+import { getTenantContext } from "@/lib/tenant";
 
 type MasjidProfile = {
   name: string;
@@ -78,8 +79,8 @@ export default function DashboardPage() {
     setFamilyResults([]);
     setResultType("none");
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const ctx = await getTenantContext();
+      if (!ctx) {
         setSearchError(lang === "tm" ? "லாகின் தேவை" : "Login required");
         return;
       }
@@ -88,7 +89,7 @@ export default function DashboardPage() {
         const { data, error } = await supabase
           .from("families")
           .select("id,family_code,head_name,is_widow_head")
-          .eq("masjid_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
           .eq("is_widow_head", true)
           .order("family_code", { ascending: true });
         if (error) throw error;
@@ -100,7 +101,7 @@ export default function DashboardPage() {
         let q = supabase
           .from("members")
           .select("id,family_id,full_name,age,gender")
-          .eq("masjid_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
           .eq("age", p.age);
         if (p.gender) q = q.eq("gender", p.gender);
         const { data, error } = await q;
@@ -113,7 +114,7 @@ export default function DashboardPage() {
         let q = supabase
           .from("members")
           .select("id,family_id,full_name,age,gender")
-          .eq("masjid_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
           .gte("age", p.minAge)
           .lte("age", p.maxAge);
         if (p.gender) q = q.eq("gender", p.gender);
@@ -128,7 +129,7 @@ export default function DashboardPage() {
         const { data, error } = await supabase
           .from("families")
           .select("id,family_code,head_name,is_widow_head")
-          .eq("masjid_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
           .or(`head_name.ilike.%${text}%,family_code.ilike.%${text}%`)
           .order("family_code", { ascending: true });
         if (error) throw error;
@@ -145,13 +146,13 @@ export default function DashboardPage() {
 
   const fetchActiveServices = async () => {
     if (!supabase) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const ctx = await getTenantContext();
+    if (!ctx) return;
 
     const { data } = await supabase
       .from("service_distributions")
       .select("name")
-      .eq("masjid_id", session.user.id)
+      .eq("masjid_id", ctx.masjidId)
       .eq("status", "Pending");
     
     if (data) {
@@ -173,21 +174,22 @@ export default function DashboardPage() {
     try {
       if (decodedText.startsWith("smart-masjeedh:family:")) {
         const familyId = decodedText.split(":")[2];
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        const ctx = await getTenantContext();
+        if (!ctx) return;
 
         const { data, error } = await supabase
           .from("service_distributions")
           .update({ status: 'Received' })
           .eq("family_id", familyId)
           .eq("name", selectedScanService)
-          .eq("masjid_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
           .select();
 
         if (error) throw error;
         
         if (data && data.length > 0) {
           setScanStatus({ type: 'success', message: t.service_marked_received });
+          setIsScannerOpen(false);
           // Reset message after 2 seconds
           setTimeout(() => setScanStatus({ type: 'idle', message: '' }), 2000);
         } else {
@@ -204,15 +206,26 @@ export default function DashboardPage() {
   useEffect(() => {
     let html5QrCode: any = null;
     if (isScannerOpen) {
-      import("html5-qrcode").then((lib: any) => {
-        html5QrCode = new lib.Html5Qrcode("service-reader");
-        const config = { fps: 12, qrbox: { width: 260, height: 260 } };
-        html5QrCode
-          .start({ facingMode: "environment" }, config,
-            (decodedText: string) => handleServiceScan(decodedText),
-            (_err: any) => {})
-          .catch((_e: any) => {});
-      });
+      (async () => {
+        try {
+          const granted = localStorage.getItem("camera_permission_granted") === "1";
+          if (!granted && navigator?.mediaDevices?.getUserMedia) {
+            await navigator.mediaDevices.getUserMedia({ video: true });
+            localStorage.setItem("camera_permission_granted", "1");
+          }
+        } catch {
+          // ignore
+        }
+        import("html5-qrcode").then((lib: any) => {
+          html5QrCode = new lib.Html5Qrcode("service-reader");
+          const config = { fps: 15, qrbox: { width: 260, height: 260 } };
+          html5QrCode
+            .start({ facingMode: "environment" }, config,
+              (decodedText: string) => handleServiceScan(decodedText),
+              (_err: any) => {})
+            .catch((_e: any) => {});
+        });
+      })();
     }
     return () => {
       if (html5QrCode && html5QrCode.stop) {
@@ -226,14 +239,14 @@ export default function DashboardPage() {
     if (!supabase) return;
     setSubmittingService(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const ctx = await getTenantContext();
+      if (!ctx) return;
 
       // 1. Fetch all families for this masjid
       const { data: families } = await supabase
         .from("families")
         .select("id")
-        .eq("masjid_id", session.user.id);
+        .eq("masjid_id", ctx.masjidId);
       
       if (!families || families.length === 0) {
         alert("No families found to distribute to.");
@@ -243,7 +256,7 @@ export default function DashboardPage() {
       // 2. Create distribution records for each family
       const distributions = families.map(f => ({
         family_id: f.id,
-        masjid_id: session.user.id,
+        masjid_id: ctx.masjidId,
         name: serviceName,
         date: serviceDate,
         status: 'Pending'
@@ -279,8 +292,8 @@ export default function DashboardPage() {
         if (savedLang) setLang(savedLang);
 
         // Check if user is logged in
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        const ctx = await getTenantContext();
+        if (!ctx) {
           router.push('/login');
           return;
         }
@@ -289,7 +302,7 @@ export default function DashboardPage() {
         const { count, error: countError } = await supabase
           .from("families")
           .select("*", { count: "exact", head: true })
-          .eq("masjid_id", session.user.id); // Filter by masjid ID
+          .eq("masjid_id", ctx.masjidId); // Filter by masjid ID
         
         if (countError) throw countError;
         setFamilyCount(count || 0);
@@ -298,7 +311,7 @@ export default function DashboardPage() {
         const { count: mCount, error: mError } = await supabase
           .from("members")
           .select("*", { count: "exact", head: true })
-          .eq("masjid_id", session.user.id);
+          .eq("masjid_id", ctx.masjidId);
         
         if (!mError) setMemberCount(mCount || 0);
 
@@ -308,7 +321,7 @@ export default function DashboardPage() {
           const { data: masjidData } = await supabase
             .from("masjids")
             .select("*")
-            .eq("id", session.user.id)
+            .eq("id", ctx.masjidId)
             .single();
           
           if (masjidData) {

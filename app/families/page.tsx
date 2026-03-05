@@ -7,6 +7,7 @@ import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit,
 import { supabase } from "@/lib/supabase";
 import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 import { translations, Language } from "@/lib/i18n/translations";
+import { getTenantContext } from "@/lib/tenant";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
@@ -68,6 +69,7 @@ export default function FamiliesPage() {
   const [pdfCols, setPdfCols] = useState<{code:boolean; head:boolean; address:boolean; phone:boolean; sub:boolean}>({code:true, head:true, address:true, phone:true, sub:true});
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid">("all");
+  const [allowed, setAllowed] = useState(true);
 
   const t = translations[lang];
 
@@ -92,10 +94,22 @@ export default function FamiliesPage() {
 
   useEffect(() => {
     if (isScannerOpen) {
-      const scanner = new Html5QrcodeScanner(
+      let scanner: Html5QrcodeScanner | null = null;
+      (async () => {
+        try {
+          const granted = localStorage.getItem("camera_permission_granted") === "1";
+          if (!granted && navigator?.mediaDevices?.getUserMedia) {
+            await navigator.mediaDevices.getUserMedia({ video: true });
+            localStorage.setItem("camera_permission_granted", "1");
+          }
+        } catch {
+          // ignore - browser will prompt via scanner
+        }
+
+        scanner = new Html5QrcodeScanner(
         "reader",
         { 
-          fps: 10, 
+          fps: 15, 
           qrbox: { width: 250, height: 250 },
           supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
           rememberLastUsedCamera: true,
@@ -105,24 +119,29 @@ export default function FamiliesPage() {
         /* verbose= */ false
       );
 
-      scanner.render(onScanSuccess, onScanFailure);
+        scanner.render(onScanSuccess, onScanFailure);
 
-      function onScanSuccess(decodedText: string) {
-        // smart-masjeedh:family:UUID
-        if (decodedText.startsWith("smart-masjeedh:family:")) {
-          const familyId = decodedText.split(":")[2];
-          scanner.clear();
-          setIsScannerOpen(false);
-          router.push(`/families/${familyId}`);
+        function onScanSuccess(decodedText: string) {
+          // smart-masjeedh:family:UUID
+          if (decodedText.startsWith("smart-masjeedh:family:")) {
+            const familyId = decodedText.split(":")[2];
+            try {
+              scanner?.clear();
+            } catch {}
+            setIsScannerOpen(false);
+            router.push(`/families/${familyId}`);
+          }
         }
-      }
 
-      function onScanFailure(error: any) {
-        // handle scan failure, usually better to ignore and keep scanning
-      }
+        function onScanFailure(_error: any) {
+          // ignore
+        }
+      })();
 
       return () => {
-        scanner.clear();
+        try {
+          scanner?.clear();
+        } catch {}
       };
     }
   }, [isScannerOpen]);
@@ -152,13 +171,22 @@ export default function FamiliesPage() {
     if (!supabase) return;
     setIsFetching(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      setAllowed(canMembers);
+      if (!canMembers) {
+        setFamilies([]);
+        setIsLive(false);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("families")
         .select("*")
-        .eq("masjid_id", session.user.id)
+        .eq("masjid_id", ctx.masjidId)
         .order("family_code", { ascending: true });
 
       if (error) throw error;
@@ -188,8 +216,12 @@ export default function FamiliesPage() {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("லாகின் செய்யப்படவில்லை.");
+      const ctx = await getTenantContext();
+      if (!ctx) throw new Error("லாகின் செய்யப்படவில்லை.");
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      if (!canMembers) throw new Error("Access denied");
 
       if (editingFamily) {
         // Update existing
@@ -205,7 +237,7 @@ export default function FamiliesPage() {
             is_widow_head: isWidowHead
           })
           .eq("id", editingFamily.id)
-          .eq("masjid_id", session.user.id);
+          .eq("masjid_id", ctx.masjidId);
 
         if (error) throw error;
         setSuccessMessage("குடும்ப விபரம் திருத்தப்பட்டது.");
@@ -220,7 +252,7 @@ export default function FamiliesPage() {
             subscription_amount: parseFloat(subscriptionAmount) || 0,
             opening_balance: parseFloat(openingBalance) || 0,
             is_widow_head: isWidowHead,
-            masjid_id: session.user.id // Include masjid ID
+            masjid_id: ctx.masjidId // Include masjid ID
           }
         ]);
 
@@ -252,10 +284,21 @@ export default function FamiliesPage() {
   async function deleteFamily(id: string) {
     if (!supabase || !confirm(t.confirm_delete)) return;
     try {
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      if (!canMembers) {
+        alert("Access denied");
+        return;
+      }
+
       const { error } = await supabase
         .from("families")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .eq("masjid_id", ctx.masjidId);
       if (error) throw error;
       fetchFamilies();
     } catch (err: any) {

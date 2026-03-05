@@ -7,6 +7,7 @@ import { ArrowLeft, Users, Briefcase, Building2, Phone, MapPin, ChevronRight } f
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { AppShell } from "@/components/AppShell";
+import { getTenantContext } from "@/lib/tenant";
 
 type BoardMember = {
   id: string;
@@ -123,8 +124,8 @@ export default function StaffManagementPage() {
       if (!supabase) return;
       setLoading(true);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        const ctx = await getTenantContext();
+        if (!ctx) {
           router.push("/login");
           return;
         }
@@ -133,7 +134,7 @@ export default function StaffManagementPage() {
         const { data: boardData, error: boardErr } = await supabase
           .from("board_members")
           .select("id, masjid_id, full_name, designation, photo_url")
-          .eq("masjid_id", session.user.id);
+          .eq("masjid_id", ctx.masjidId);
 
         if (!boardErr && boardData) {
           setBoard(boardData as any);
@@ -144,7 +145,7 @@ export default function StaffManagementPage() {
         const { data: empData, error: empErr } = await supabase
           .from("employees")
           .select("id, masjid_id, name, role, address, phone, photo_url")
-          .eq("masjid_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
           .order("name", { ascending: true });
 
         if (!empErr && empData) {

@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Briefcase, Phone, MapPin, Wallet, Plus, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+import { getTenantContext } from "@/lib/tenant";
 
 type Employee = {
   id: string;
@@ -68,8 +69,8 @@ export default function EmployeeProfilePage() {
     if (!supabase) return;
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const ctx = await getTenantContext();
+      if (!ctx) {
         router.push("/login");
         return;
       }
@@ -78,7 +79,7 @@ export default function EmployeeProfilePage() {
         .from("employees")
         .select("id, masjid_id, name, role, address, phone, photo_url")
         .eq("id", employeeId)
-        .eq("masjid_id", session.user.id)
+        .eq("masjid_id", ctx.masjidId)
         .single();
 
       if (empErr) throw empErr;
@@ -88,7 +89,7 @@ export default function EmployeeProfilePage() {
         .from("employee_payments")
         .select("id, masjid_id, employee_id, amount, date, notes, transaction_id, created_at")
         .eq("employee_id", employeeId)
-        .eq("masjid_id", session.user.id)
+        .eq("masjid_id", ctx.masjidId)
         .order("date", { ascending: false });
 
       if (payErr) {
@@ -114,8 +115,15 @@ export default function EmployeeProfilePage() {
     if (!supabase || !employee) return;
     setSubmitting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canAccounts = isAdmin || ctx.permissions?.accounts !== false;
+      if (!canAccounts) {
+        alert("Access denied");
+        return;
+      }
 
       const amt = parseFloat(amount);
       if (!Number.isFinite(amt) || amt <= 0) {
@@ -138,7 +146,7 @@ export default function EmployeeProfilePage() {
             type: "expense",
             category: t.salary,
             date,
-            masjid_id: session.user.id,
+            masjid_id: ctx.masjidId,
             employee_id: employee.id,
           } as any,
         ])
@@ -150,7 +158,7 @@ export default function EmployeeProfilePage() {
       // 2) Add to employee payment history
       const { error: payErr } = await supabase.from("employee_payments").insert([
         {
-          masjid_id: session.user.id,
+          masjid_id: ctx.masjidId,
           employee_id: employee.id,
           amount: amt,
           date,

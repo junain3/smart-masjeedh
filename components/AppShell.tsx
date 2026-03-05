@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { translations, Language } from "@/lib/i18n/translations";
 import { supabase } from "@/lib/supabase";
+import { getTenantContext } from "@/lib/tenant";
 
 type NavItem = {
   href: string;
@@ -37,7 +38,7 @@ export function AppShell(props: {
   const [open, setOpen] = useState(false);
   const t = translations[lang];
 
-  const [role, setRole] = useState<"super_admin" | "staff" | "editor" | null>(null);
+  const [role, setRole] = useState<"super_admin" | "co_admin" | "staff" | "editor" | null>(null);
   const [permissions, setPermissions] = useState<{
     accounts?: boolean;
     events?: boolean;
@@ -50,22 +51,12 @@ export function AppShell(props: {
   }, []);
 
   useEffect(() => {
-    if (!supabase) return;
     (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-        const masjidId = session.user.id;
-        const { data } = await supabase
-          .from("user_roles")
-          .select("role,permissions")
-          .eq("masjid_id", masjidId)
-          .eq("user_id", session.user.id)
-          .maybeSingle();
-        if (data) {
-          setRole((data as any).role || null);
-          setPermissions(((data as any).permissions || null) as any);
-        }
+        const ctx = await getTenantContext();
+        if (!ctx) return;
+        setRole(ctx.role || null);
+        setPermissions((ctx.permissions || null) as any);
       } catch {
         // ignore
       }
@@ -77,7 +68,7 @@ export function AppShell(props: {
   }, [pathname]);
 
   const items: NavItem[] = useMemo(() => {
-    const isSuper = role === "super_admin" || !role;
+    const isSuper = role === "super_admin" || role === "co_admin" || !role;
     const perms = permissions || {};
     const canAccounts = isSuper || perms.accounts !== false;
     const canEvents = isSuper || perms.events !== false;
@@ -97,7 +88,7 @@ export function AppShell(props: {
       base.push({ href: "/events", label: t.events || "Events", icon: <Calendar className="w-5 h-5" /> });
     }
 
-    // Staff & admin only for super_admin
+    // Staff & admin only for masjid admins
     if (isSuper) {
       base.push({
         href: "/staff",

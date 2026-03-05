@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Calendar, Plus, ArrowLeft, FileText, QrCode } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+import { getTenantContext } from "@/lib/tenant";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { AppShell } from "@/components/AppShell";
@@ -24,6 +25,7 @@ export default function EventsPage() {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [submitting, setSubmitting] = useState(false);
   const [families, setFamilies] = useState<Family[]>([]);
+  const [allowed, setAllowed] = useState(true);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -35,15 +37,24 @@ export default function EventsPage() {
     if (!supabase) return;
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const ctx = await getTenantContext();
+      if (!ctx) {
         router.push("/login");
         return;
       }
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canEvents = isAdmin || ctx.permissions?.events !== false;
+      setAllowed(canEvents);
+      if (!canEvents) {
+        setEvents([]);
+        return;
+      }
+
       const { data } = await supabase
         .from("events")
         .select("id,name,date")
-        .eq("masjid_id", session.user.id)
+        .eq("masjid_id", ctx.masjidId)
         .order("date", { ascending: false });
       setEvents(data || []);
     } finally {
@@ -58,12 +69,12 @@ export default function EventsPage() {
 
   async function preloadFamilies() {
     if (!supabase) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const ctx = await getTenantContext();
+    if (!ctx) return;
     const { data } = await supabase
       .from("families")
       .select("id,family_code,head_name")
-      .eq("masjid_id", session.user.id)
+      .eq("masjid_id", ctx.masjidId)
       .order("family_code", { ascending: true });
     setFamilies(data || []);
   }
@@ -73,11 +84,19 @@ export default function EventsPage() {
     if (!supabase) return;
     setSubmitting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canEvents = isAdmin || ctx.permissions?.events !== false;
+      if (!canEvents) {
+        alert("Access denied");
+        return;
+      }
+
       const { data: ev, error: evErr } = await supabase
         .from("events")
-        .insert([{ name, date, masjid_id: session.user.id }])
+        .insert([{ name, date, masjid_id: ctx.masjidId }])
         .select()
         .single();
       if (evErr) throw evErr;
@@ -85,7 +104,7 @@ export default function EventsPage() {
         const rows = families.map(f => ({
           event_id: ev.id,
           family_id: f.id,
-          masjid_id: session.user.id,
+          masjid_id: ctx.masjidId,
           status: "Pending"
         }));
         const { error: atErr } = await supabase.from("event_attendance").insert(rows);
@@ -112,6 +131,16 @@ export default function EventsPage() {
   };
 
   if (loading) return <div className="p-8 text-center">{t.loading}</div>;
+
+  if (!allowed) {
+    return (
+      <AppShell title={t.events}>
+        <div className="app-card p-6 text-center text-[11px] font-bold text-slate-400">
+          Access denied.
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell
