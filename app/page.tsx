@@ -168,8 +168,15 @@ export default function DashboardPage() {
     }
   }, [isServicesModalOpen]);
 
-  const handleServiceScan = async (decodedText: string) => {
+  const handleServiceScan = async (decoded: any) => {
     if (!supabase || !selectedScanService) return;
+
+    const decodedText =
+      typeof decoded === "string"
+        ? decoded
+        : (decoded?.decodedText as string | undefined) ||
+          (decoded?.text as string | undefined) ||
+          String(decoded ?? "");
     
     try {
       if (decodedText.startsWith("smart-masjeedh:family:")) {
@@ -221,7 +228,7 @@ export default function DashboardPage() {
           const config = { fps: 15, qrbox: { width: 260, height: 260 } };
           html5QrCode
             .start({ facingMode: "environment" }, config,
-              (decodedText: string) => handleServiceScan(decodedText),
+              (decoded: any) => handleServiceScan(decoded),
               (_err: any) => {})
             .catch((_e: any) => {});
         });
@@ -298,10 +305,47 @@ export default function DashboardPage() {
           return;
         }
 
+        // Load masjid profile
+        try {
+          const { data: masjidData, error: masjidErr } = await supabase
+            .from("masjids")
+            .select("id, name, tagline, logo_url")
+            .eq("id", ctx.masjidId)
+            .maybeSingle();
+
+          if (masjidErr) throw masjidErr;
+
+          if (masjidData) {
+            setMasjidName((masjidData as any).name || "");
+            setMasjidTagline((masjidData as any).tagline || "");
+            setMasjidLogo((masjidData as any).logo_url || "");
+            setMasjid(masjidData as any);
+          } else {
+            // Default Fallback
+            setMasjid({
+              name: "MJM",
+              logo_url: "",
+              tagline: "Mubeen Jummah Masjid",
+            });
+          }
+        } catch (e: any) {
+          const msg = e?.message || "";
+          if (msg.includes("schema cache") || msg.includes("column") || msg.includes("Could not find")) {
+            // ignore - allow dashboard to render
+            setMasjid({
+              name: "MJM",
+              logo_url: "",
+              tagline: "Mubeen Jummah Masjid",
+            });
+          } else {
+            throw e;
+          }
+        }
+
         // Fetch family count
         const { count, error: countError } = await supabase
           .from("families")
-          .select("*", { count: "exact", head: true })
+          .select("id", { count: "exact", head: true })
           .eq("masjid_id", ctx.masjidId); // Filter by masjid ID
         
         if (countError) throw countError;
@@ -314,34 +358,6 @@ export default function DashboardPage() {
           .eq("masjid_id", ctx.masjidId);
         
         if (!mError) setMemberCount(mCount || 0);
-
-        // Fetch dynamic masjid profile (Optional table - fallback to MJM if not exists)
-        try {
-          if (!supabase) return;
-          const { data: masjidData } = await supabase
-            .from("masjids")
-            .select("*")
-            .eq("id", ctx.masjidId)
-            .single();
-          
-          if (masjidData) {
-            setMasjid(masjidData);
-          } else {
-            // Default Fallback
-            setMasjid({
-              name: "MJM",
-              logo_url: "",
-              tagline: "Mubeen Jummah Masjid"
-            });
-          }
-        } catch (e) {
-          // If table masjids doesn't exist yet
-          setMasjid({
-            name: "MJM",
-            logo_url: "",
-            tagline: "Mubeen Jummah Masjid"
-          });
-        }
 
       } catch (err) {
         console.error("Error fetching data:", err);

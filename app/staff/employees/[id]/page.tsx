@@ -13,8 +13,8 @@ type Employee = {
   masjid_id: string;
   name: string;
   role: string;
-  address: string;
-  phone: string;
+  address?: string;
+  phone?: string;
   photo_url?: string | null;
 };
 
@@ -75,15 +75,26 @@ export default function EmployeeProfilePage() {
         return;
       }
 
-      const { data: empData, error: empErr } = await supabase
-        .from("employees")
-        .select("id, masjid_id, name, role, address, phone, photo_url")
-        .eq("id", employeeId)
+      const { data: roleRow, error: roleErr } = await supabase
+        .from("user_roles")
+        .select("user_id, masjid_id, role, email")
+        .eq("user_id", employeeId)
         .eq("masjid_id", ctx.masjidId)
-        .single();
+        .maybeSingle();
 
-      if (empErr) throw empErr;
-      setEmployee(empData as any);
+      if (roleErr) throw roleErr;
+      if (!roleRow) throw new Error("Employee not found");
+      const email = (roleRow as any).email as string | null;
+      const display = email ? email.split("@")[0] : (roleRow as any).user_id;
+      setEmployee({
+        id: (roleRow as any).user_id,
+        masjid_id: (roleRow as any).masjid_id,
+        name: display,
+        role: (roleRow as any).role || "staff",
+        address: "",
+        phone: "",
+        photo_url: null,
+      });
 
       const { data: payData, error: payErr } = await supabase
         .from("employee_payments")
@@ -134,8 +145,8 @@ export default function EmployeeProfilePage() {
       // 1) Create an expense transaction in main accounts
       const txDescription =
         lang === "tm"
-          ? `${t.salary_payment} - ${employee.name} (${employee.role})`
-          : `${t.salary_payment} - ${employee.name} (${employee.role})`;
+          ? `${t.salary_payment} - ${employee.name || ""} (${employee.role || ""})`
+          : `${t.salary_payment} - ${employee.name || ""} (${employee.role || ""})`;
 
       const { data: txInserted, error: txErr } = await supabase
         .from("transactions")
@@ -239,14 +250,18 @@ export default function EmployeeProfilePage() {
           </div>
 
           <div className="mt-5 space-y-2">
-            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
-              <MapPin className="w-4 h-4 text-slate-300" />
-              <span className="truncate">{employee.address}</span>
-            </div>
-            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
-              <Phone className="w-4 h-4 text-slate-300" />
-              <span className="truncate">{employee.phone}</span>
-            </div>
+            {employee.address ? (
+              <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
+                <MapPin className="w-4 h-4 text-slate-300" />
+                <span className="truncate">{employee.address}</span>
+              </div>
+            ) : null}
+            {employee.phone ? (
+              <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
+                <Phone className="w-4 h-4 text-slate-300" />
+                <span className="truncate">{employee.phone}</span>
+              </div>
+            ) : null}
           </div>
         </div>
 

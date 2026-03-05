@@ -41,11 +41,28 @@ export default function SuperAdminPage() {
         }
         setAllowed(true);
 
-        const { data, error } = await supabase
-          .from("masjids")
-          .select("id,name,tagline,status,subscription_status,created_at,admin_email");
-        if (error) throw error;
-        setRows((data as any) || []);
+        try {
+          const { data, error } = await supabase
+            .from("masjids")
+            .select("id,name,tagline,status,subscription_status,created_at,admin_email");
+          if (error) throw error;
+          setRows((data as any) || []);
+        } catch (e: any) {
+          const msg = e?.message || "";
+          if (msg.includes("schema cache") || msg.includes("column") || msg.includes("Could not find")) {
+            const { data: fallback, error: fbErr } = await supabase.from("masjids").select("id");
+            if (fbErr) throw fbErr;
+            setRows(
+              ((fallback as any[]) || []).map((r) => ({
+                id: (r as any).id,
+                name: (r as any).id,
+                tagline: null,
+              }))
+            );
+          } else {
+            throw e;
+          }
+        }
       } catch (e: any) {
         setError(e.message || "Failed to load masjids");
       } finally {

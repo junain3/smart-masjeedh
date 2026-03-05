@@ -22,8 +22,8 @@ type Employee = {
   masjid_id: string;
   name: string;
   role: string;
-  address: string;
-  phone: string;
+  address?: string;
+  phone?: string;
   photo_url?: string | null;
 };
 
@@ -142,14 +142,27 @@ export default function StaffManagementPage() {
         }
 
         // Employees (optional table)
-        const { data: empData, error: empErr } = await supabase
-          .from("employees")
-          .select("id, masjid_id, name, role, address, phone, photo_url")
+        const { data: staffData, error: staffErr } = await supabase
+          .from("user_roles")
+          .select("user_id, masjid_id, role, email")
           .eq("masjid_id", ctx.masjidId)
-          .order("name", { ascending: true });
+          .order("created_at", { ascending: true });
 
-        if (!empErr && empData) {
-          setEmployees(empData as any);
+        if (!staffErr && staffData) {
+          const mapped = (staffData as any[]).map((r) => {
+            const email = (r as any).email as string | null;
+            const display = email ? email.split("@")[0] : (r as any).user_id;
+            return {
+              id: (r as any).user_id,
+              masjid_id: (r as any).masjid_id,
+              name: display,
+              role: (r as any).role || "staff",
+              address: "",
+              phone: "",
+              photo_url: null,
+            } as Employee;
+          });
+          setEmployees(mapped);
           setIsLive(true);
         }
       } catch (_e) {
@@ -247,14 +260,18 @@ export default function StaffManagementPage() {
                         <h4 className="text-sm font-black text-slate-800 truncate">{e.name}</h4>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{e.role}</p>
                         <div className="mt-2 space-y-1">
-                          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
-                            <MapPin className="w-3.5 h-3.5 text-slate-300" />
-                            <span className="truncate">{e.address}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
-                            <Phone className="w-3.5 h-3.5 text-slate-300" />
-                            <span className="truncate">{e.phone}</span>
-                          </div>
+                          {e.address ? (
+                            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+                              <MapPin className="w-3.5 h-3.5 text-slate-300" />
+                              <span className="truncate">{e.address}</span>
+                            </div>
+                          ) : null}
+                          {e.phone ? (
+                            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+                              <Phone className="w-3.5 h-3.5 text-slate-300" />
+                              <span className="truncate">{e.phone}</span>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </div>

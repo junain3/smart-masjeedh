@@ -96,7 +96,7 @@ export default function EventDetailPage() {
           const config = { fps: 15, qrbox: { width: 260, height: 260 } };
           html5QrCode
             .start({ facingMode: "environment" }, config,
-              (decodedText: string) => handleScan(decodedText),
+              (decoded: any) => handleScan(decoded),
               (_err: any) => {})
             .catch((_e: any) => {});
         });
@@ -109,8 +109,14 @@ export default function EventDetailPage() {
     };
   }, [isScannerOpen, eventId]);
 
-  async function handleScan(decodedText: string) {
+  async function handleScan(decoded: any) {
     if (!supabase) return;
+    const decodedText =
+      typeof decoded === "string"
+        ? decoded
+        : (decoded?.decodedText as string | undefined) ||
+          (decoded?.text as string | undefined) ||
+          String(decoded ?? "");
     if (!decodedText.startsWith("smart-masjeedh:family:")) return;
     // Do NOT auto-mark received; just highlight scanned family
     const familyId = decodedText.split(":")[2];
