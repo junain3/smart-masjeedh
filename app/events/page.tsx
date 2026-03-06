@@ -3,24 +3,28 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Calendar, Plus, ArrowLeft, FileText, QrCode } from "lucide-react";
+import { Calendar, Plus, ArrowLeft, FileText, QrCode, Edit2, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { AppShell } from "@/components/AppShell";
+import { useAppToast } from "@/components/ToastProvider";
 
 type EventRow = { id: string; name: string; date: string };
 type Family = { id: string; family_code: string; head_name: string };
 
 export default function EventsPage() {
   const router = useRouter();
+  const { toast, confirm } = useAppToast();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [submitting, setSubmitting] = useState(false);
@@ -90,7 +94,7 @@ export default function EventsPage() {
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
       const canEvents = isAdmin || ctx.permissions?.events !== false;
       if (!canEvents) {
-        alert("Access denied");
+        toast({ kind: "error", title: "Access denied", message: "" });
         return;
       }
 
@@ -100,8 +104,15 @@ export default function EventsPage() {
         .select()
         .single();
       if (evErr) throw evErr;
-      if (families.length > 0) {
-        const rows = families.map(f => ({
+      const { data: famData } = await supabase
+        .from("families")
+        .select("id,family_code,head_name")
+        .eq("masjid_id", ctx.masjidId)
+        .order("family_code", { ascending: true });
+
+      const famRows = (famData || families || []) as Family[];
+      if (famRows.length > 0) {
+        const rows = famRows.map((f) => ({
           event_id: ev.id,
           family_id: f.id,
           masjid_id: ctx.masjidId,
@@ -115,9 +126,83 @@ export default function EventsPage() {
       fetchEvents();
       router.push(`/events/${ev.id}`);
     } catch (err: any) {
-      alert(err.message);
+      toast({ kind: "error", title: "Error", message: err.message || "Failed" });
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function openEdit(ev: EventRow) {
+    setEditingId(ev.id);
+    setName(ev.name);
+    setDate(ev.date);
+    setIsEditOpen(true);
+  }
+
+  async function handleEditSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!supabase) return;
+    if (!editingId) return;
+    setSubmitting(true);
+    try {
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canEvents = isAdmin || ctx.permissions?.events !== false;
+      if (!canEvents) {
+        toast({ kind: "error", title: "Access denied", message: "" });
+        return;
+      }
+
+      const { error } = await supabase
+        .from("events")
+        .update({ name, date })
+        .eq("id", editingId)
+        .eq("masjid_id", ctx.masjidId);
+      if (error) throw error;
+
+      setIsEditOpen(false);
+      setEditingId(null);
+      setName("");
+      fetchEvents();
+      toast({ kind: "success", title: "Updated", message: "" });
+    } catch (err: any) {
+      toast({ kind: "error", title: "Error", message: err.message || "Failed" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function deleteEvent(ev: EventRow) {
+    if (!supabase) return;
+    const ok = await confirm({
+      title: "Delete event?",
+      message: `This will remove '${ev.name}'.`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    try {
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canEvents = isAdmin || ctx.permissions?.events !== false;
+      if (!canEvents) {
+        toast({ kind: "error", title: "Access denied", message: "" });
+        return;
+      }
+
+      const { error } = await supabase.from("events").delete().eq("id", ev.id).eq("masjid_id", ctx.masjidId);
+      if (error) throw error;
+
+      toast({ kind: "success", title: "Deleted", message: "" });
+      fetchEvents();
+    } catch (err: any) {
+      toast({ kind: "error", title: "Error", message: err.message || "Failed" });
     }
   }
 
@@ -184,14 +269,87 @@ export default function EventsPage() {
                     <p className="text-[10px] font-bold text-slate-400 uppercase">{ev.date}</p>
                     <h3 className="text-sm font-black text-slate-800">{ev.name}</h3>
                   </div>
-                  <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500">
-                    <QrCode className="w-6 h-6" />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openEdit(ev);
+                      }}
+                      className="p-3 bg-slate-50 text-slate-500 rounded-2xl hover:bg-slate-100 transition-all active:scale-95"
+                      title="Edit"
+                    >
+                      <Edit2 className="w-5 h-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        deleteEvent(ev);
+                      }}
+                      className="p-3 bg-rose-50 text-rose-600 rounded-2xl hover:bg-rose-100 transition-all active:scale-95"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                    <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500">
+                      <QrCode className="w-6 h-6" />
+                    </div>
                   </div>
                 </div>
               </Link>
             ))
           )}
       </div>
+
+      {isEditOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
+          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-black text-slate-900">Edit Event</h2>
+              <button
+                onClick={() => {
+                  setIsEditOpen(false);
+                  setEditingId(null);
+                  setName("");
+                }}
+                className="p-2 hover:bg-slate-50 rounded-full transition-colors"
+              >
+                <X className="w-6 h-6 text-slate-300" />
+              </button>
+            </div>
+            <form onSubmit={handleEditSave} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.event_name}</label>
+                <input
+                  required
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.event_date}</label>
+                <input
+                  required
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-5 rounded-3xl font-black text-white bg-emerald-500 shadow-xl shadow-emerald-500/20 transition-all active:scale-[0.97] disabled:opacity-50"
+              >
+                {submitting ? "SAVING..." : t.save}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {isOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">

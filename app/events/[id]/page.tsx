@@ -10,6 +10,7 @@ import { getTenantContext } from "@/lib/tenant";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { QrScannerModal } from "@/components/QrScannerModal";
+import { useAppToast } from "@/components/ToastProvider";
 
 type Ev = { id: string; name: string; date: string };
 type Att = {
@@ -22,6 +23,7 @@ type Att = {
 
 export default function EventDetailPage() {
   const router = useRouter();
+  const { toast } = useAppToast();
   const params = useParams();
   const eventId = params?.id as string;
   const [lang, setLang] = useState<Language>("en");
@@ -33,6 +35,7 @@ export default function EventDetailPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all"|"received"|"pending">("all");
   const [lastScanned, setLastScanned] = useState<string | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [allowed, setAllowed] = useState(true);
 
   useEffect(() => {
@@ -66,13 +69,43 @@ export default function EventDetailPage() {
         .eq("masjid_id", ctx.masjidId)
         .single();
       setEv(e || null);
-      const { data: a } = await supabase
+
+      const [{ data: famData, error: famErr }, { data: a, error: attErr }] = await Promise.all([
+        supabase
+          .from("families")
+          .select("id")
+          .eq("masjid_id", ctx.masjidId),
+        supabase
+          .from("event_attendance")
+          .select("id,received,status,family_id,families(id,family_code,head_name,phone,address)")
+          .eq("event_id", eventId)
+          .eq("masjid_id", ctx.masjidId)
+          .order("created_at", { ascending: true }),
+      ]);
+      if (famErr) throw famErr;
+      if (attErr) throw attErr;
+
+      const existing = new Set(((a as any) || []).map((r: any) => r.family_id));
+      const missing = (famData || []).filter((f: any) => !existing.has(f.id));
+      if (missing.length > 0) {
+        const missingRows = missing.map((f: any) => ({
+          event_id: eventId,
+          family_id: f.id,
+          masjid_id: ctx.masjidId,
+          status: "Pending",
+        }));
+        const { error: insErr } = await supabase.from("event_attendance").insert(missingRows);
+        if (insErr) throw insErr;
+      }
+
+      const { data: a2, error: attErr2 } = await supabase
         .from("event_attendance")
         .select("id,received,status,family_id,families(id,family_code,head_name,phone,address)")
         .eq("event_id", eventId)
         .eq("masjid_id", ctx.masjidId)
         .order("created_at", { ascending: true });
-      setRows((a as any) || []);
+      if (attErr2) throw attErr2;
+      setRows((a2 as any) || []);
     } finally {
       setLoading(false);
     }
@@ -81,10 +114,16 @@ export default function EventDetailPage() {
   async function handleScan(decodedText: string) {
     if (!supabase) return;
     if (!decodedText.startsWith("smart-masjeedh:family:")) return;
-    // Do NOT auto-mark received; just highlight scanned family
     const familyId = decodedText.split(":")[2];
     setLastScanned(familyId);
     setIsScannerOpen(false);
+    setShowSuggestions(false);
+  }
+
+  function openBalloonForFamily(familyId: string) {
+    setLastScanned(familyId);
+    setSearch("");
+    setShowSuggestions(false);
   }
 
   async function markStatus(
@@ -100,7 +139,7 @@ export default function EventDetailPage() {
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
       const canEvents = isAdmin || ctx.permissions?.events !== false;
       if (!canEvents) {
-        alert("Access denied");
+        toast({ kind: "error", title: "Access denied", message: "" });
         return;
       }
       const { error } = await supabase
@@ -124,7 +163,7 @@ export default function EventDetailPage() {
         }]);
       }
     } catch (e: any) {
-      alert(e.message);
+      toast({ kind: "error", title: "Error", message: e.message || "Failed" });
     }
   }
 
@@ -138,6 +177,16 @@ export default function EventDetailPage() {
       return matchesSearch && matchesFilter;
     });
   }, [rows, search, filter]);
+
+  const suggestions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (q.length < 2) return [] as Att[];
+    const base = rows.filter((r) => {
+      const blob = `${r.families.family_code} ${r.families.head_name} ${r.families.phone || ""} ${r.families.address || ""}`.toLowerCase();
+      return blob.includes(q);
+    });
+    return base.slice(0, 6);
+  }, [rows, search]);
 
   const total = rows.length;
   const receivedCount = rows.filter(r => (r as any).received ?? r.status === "Received").length;
@@ -239,9 +288,48 @@ export default function EventDetailPage() {
             type="text"
             placeholder={t.search}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setShowSuggestions(true);
+            }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => {
+              setTimeout(() => setShowSuggestions(false), 120);
+            }}
             className="w-full bg-white border border-slate-100 rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all shadow-sm"
           />
+
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute z-20 mt-2 w-full bg-white rounded-2xl border border-slate-100 shadow-xl overflow-hidden">
+              {suggestions.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => openBalloonForFamily(r.family_id)}
+                  className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-black text-slate-800 truncate">{r.families.head_name}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase truncate">
+                        {r.families.family_code} • {r.families.phone || ""}
+                      </p>
+                    </div>
+                    <span
+                      className={`px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                        ((r as any).received ?? r.status === "Received")
+                          ? "bg-emerald-50 text-emerald-600"
+                          : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {((r as any).received ?? r.status === "Received") ? t.received : t.pending}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Last scanned highlight */}
@@ -249,7 +337,7 @@ export default function EventDetailPage() {
           const r = rows.find(x => x.family_id === lastScanned);
           if (!r) return null;
           return (
-            <div className="bg-white rounded-2xl p-4 border border-emerald-100 shadow-sm">
+            <div className="bg-white rounded-2xl p-4 border border-emerald-100 shadow-sm animate-in zoom-in duration-300">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[10px] font-bold text-emerald-600 uppercase">Scanned</p>
