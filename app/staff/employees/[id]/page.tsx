@@ -143,6 +143,17 @@ export default function EmployeeProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employeeId]);
 
+  const formatSupabaseError = (e: any) => {
+    if (!e) return "Unknown error";
+    const parts = [e.message, e.details, e.hint, e.code].filter(Boolean);
+    return parts.join(" • ");
+  };
+
+  const isMissingEmployeeIdColumnError = (e: any) => {
+    const msg = (e as any)?.message || "";
+    return msg.includes("employee_id") && msg.includes("transactions") && msg.includes("schema cache");
+  };
+
   async function addPayment() {
     if (!supabase || !employee) return;
     setSubmitting(true);
@@ -207,7 +218,16 @@ export default function EmployeeProfilePage() {
       setDate(new Date().toISOString().split("T")[0]);
       await fetchEmployeeAndPayments();
     } catch (e: any) {
-      toast({ kind: "error", title: "Error", message: e.message || "Failed to add payment" });
+      if (isMissingEmployeeIdColumnError(e)) {
+        toast({
+          kind: "error",
+          title: "Database setup",
+          message:
+            "Missing column: transactions.employee_id. Run this SQL in Supabase: ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS employee_id uuid;",
+        });
+      } else {
+        toast({ kind: "error", title: "Error", message: formatSupabaseError(e) || "Failed to add payment" });
+      }
     } finally {
       setSubmitting(false);
     }
