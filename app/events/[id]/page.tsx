@@ -16,7 +16,6 @@ type Ev = { id: string; name: string; date: string };
 type Att = {
   id: string;
   status?: "Pending" | "Received";
-  received?: boolean;
   family_id: string;
   families: { id: string; family_code: string; head_name: string; phone?: string; address?: string };
 };
@@ -77,7 +76,7 @@ export default function EventDetailPage() {
           .eq("masjid_id", ctx.masjidId),
         supabase
           .from("event_attendance")
-          .select("id,received,status,family_id,families(id,family_code,head_name,phone,address)")
+          .select("id,status,family_id,families(id,family_code,head_name,phone,address)")
           .eq("event_id", eventId)
           .eq("masjid_id", ctx.masjidId)
           .order("created_at", { ascending: true }),
@@ -107,7 +106,7 @@ export default function EventDetailPage() {
 
       const { data: a2, error: attErr2 } = await supabase
         .from("event_attendance")
-        .select("id,received,status,family_id,families(id,family_code,head_name,phone,address)")
+        .select("id,status,family_id,families(id,family_code,head_name,phone,address)")
         .eq("event_id", eventId)
         .eq("masjid_id", ctx.masjidId)
         .order("created_at", { ascending: true });
@@ -153,12 +152,12 @@ export default function EventDetailPage() {
       }
       const { error } = await supabase
         .from("event_attendance")
-        .update({ received: toReceived, status: toReceived ? "Received" : "Pending" })
+        .update({ status: toReceived ? "Received" : "Pending" })
         .eq("event_id", eventId)
         .eq("family_id", familyId)
         .eq("masjid_id", ctx.masjidId);
       if (error) throw error;
-      setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, received: toReceived, status: toReceived ? "Received" : "Pending" } : r));
+      setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: toReceived ? "Received" : "Pending" } : r));
       // Log to accounts as zero-amount info row when marking Received
       if (toReceived && ev) {
         await supabase.from("transactions").insert([{
@@ -181,7 +180,7 @@ export default function EventDetailPage() {
     return rows.filter(r => {
       const blob = `${r.families.family_code} ${r.families.head_name} ${r.families.phone || ""} ${r.families.address || ""}`.toLowerCase();
       const matchesSearch = blob.includes(q);
-      const isReceived = (r as any).received ?? r.status === "Received";
+      const isReceived = r.status === "Received";
       const matchesFilter = filter === "all" ? true : isReceived === (filter === "received");
       return matchesSearch && matchesFilter;
     });
@@ -198,7 +197,7 @@ export default function EventDetailPage() {
   }, [rows, search]);
 
   const total = rows.length;
-  const receivedCount = rows.filter(r => (r as any).received ?? r.status === "Received").length;
+  const receivedCount = rows.filter(r => r.status === "Received").length;
   const remainingCount = total - receivedCount;
 
   const generatePDF = () => {
@@ -327,12 +326,12 @@ export default function EventDetailPage() {
                     </div>
                     <span
                       className={`px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                        ((r as any).received ?? r.status === "Received")
+                        r.status === "Received"
                           ? "bg-emerald-50 text-emerald-600"
                           : "bg-slate-100 text-slate-500"
                       }`}
                     >
-                      {((r as any).received ?? r.status === "Received") ? t.received : t.pending}
+                      {r.status === "Received" ? t.received : t.pending}
                     </span>
                   </div>
                 </button>
@@ -354,7 +353,7 @@ export default function EventDetailPage() {
                   <p className="text-[10px] font-bold text-slate-400 uppercase">{r.families.family_code} • {r.families.phone || ""}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {((r as any).received ?? r.status === "Received") === false ? (
+                  {r.status !== "Received" ? (
                     <button
                       onClick={() => markStatus(r.family_id, true, false)}
                       className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest"
@@ -391,12 +390,12 @@ export default function EventDetailPage() {
                     <h4 className="text-sm font-black text-slate-800">{r.families.head_name}</h4>
                     <p className="text-[10px] font-bold text-slate-400 uppercase">{r.families.family_code} • {r.families.phone || ""}</p>
                   </div>
-                  <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${((r as any).received ?? r.status === "Received") ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
-                    {((r as any).received ?? r.status === "Received") ? t.received : t.pending}
+                  <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${r.status === "Received" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
+                    {r.status === "Received" ? t.received : t.pending}
                   </div>
                 </div>
                 <div className="mt-3 flex justify-end">
-                  {((r as any).received ?? r.status === "Received") === false ? (
+                  {r.status !== "Received" ? (
                     <button onClick={() => markStatus(r.family_id, true, r.families.family_code)} className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest">{t.mark_received}</button>
                   ) : (
                     <button onClick={() => markStatus(r.family_id, false, r.families.family_code)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest">{t.unmark_received}</button>
