@@ -615,17 +615,19 @@ export default function DashboardPage() {
           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-300 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-black text-slate-900">{t.services_received}</h2>
-              <button onClick={() => {
-                setIsServicesModalOpen(false);
-                setIsScannerOpen(false);
-              }} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
+              <button
+                onClick={() => {
+                  setIsServicesModalOpen(false);
+                  setIsScannerOpen(false);
+                }}
+                className="p-2 hover:bg-slate-50 rounded-full transition-colors"
+              >
                 <X className="w-6 h-6 text-slate-300" />
               </button>
             </div>
 
-            {/* Modal Tabs */}
             <div className="flex p-1 bg-emerald-50 rounded-3xl mb-8">
-              <button 
+              <button
                 onClick={() => {
                   setActiveServiceTab("create");
                   setIsScannerOpen(false);
@@ -636,7 +638,7 @@ export default function DashboardPage() {
               >
                 {t.create_new}
               </button>
-              <button 
+              <button
                 onClick={() => setActiveServiceTab("scan")}
                 className={`flex-1 py-3 rounded-3xl text-[10px] font-black uppercase tracking-widest transition-all ${
                   activeServiceTab === "scan" ? "bg-emerald-700 text-white shadow-sm" : "text-emerald-700"
@@ -695,8 +697,10 @@ export default function DashboardPage() {
                     className="app-select font-bold appearance-none"
                   >
                     <option value="">-- {t.select_service} --</option>
-                    {activeServices.map(s => (
-                      <option key={s.name} value={s.name}>{s.name}</option>
+                    {activeServices.map((s) => (
+                      <option key={s.name} value={s.name}>
+                        {s.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -717,20 +721,27 @@ export default function DashboardPage() {
                   </button>
                 ) : (
                   <div className="space-y-4">
-                    <div id="service-reader" className="w-full overflow-hidden rounded-[2rem] border-4 border-blue-500 shadow-lg shadow-blue-500/10"></div>
-                    
-                    {scanStatus.type !== 'idle' && (
-                      <div className={`p-4 rounded-3xl font-bold text-center text-xs animate-in zoom-in duration-300 ${
-                        scanStatus.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
-                      }`}>
+                    <QrScannerModal
+                      open={isScannerOpen}
+                      title={t.scan_qr}
+                      containerId="service-reader"
+                      onClose={() => setIsScannerOpen(false)}
+                      onDecodedText={handleServiceScan}
+                    />
+
+                    {scanStatus.type !== "idle" && (
+                      <div
+                        className={`p-4 rounded-3xl font-bold text-center text-xs animate-in zoom-in duration-300 ${
+                          scanStatus.type === "success"
+                            ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                            : "bg-rose-50 text-rose-700 border border-rose-200"
+                        }`}
+                      >
                         {scanStatus.message}
                       </div>
                     )}
 
-                    <button
-                      onClick={() => setIsScannerOpen(false)}
-                      className="w-full app-btn app-btn-soft py-4"
-                    >
+                    <button onClick={() => setIsScannerOpen(false)} className="w-full app-btn app-btn-soft py-4">
                       {t.stop_scanner}
                     </button>
                   </div>
@@ -743,10 +754,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-QrScannerMoal
-                      open={sScannerOpen}
-                      title={t.scan_qr}
-                     contanerI
-                     onCo{()=> stIsScanneOpen(as)}
-                     DecoTxt={hanlSvicScan}
-                  
