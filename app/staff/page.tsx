@@ -701,8 +701,8 @@ export default function StaffManagementPage() {
         )}
 
         {isBoardModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
-            <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[calc(100vh-2rem)] overflow-hidden">
+          <div className="fixed inset-0 z-[120] bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
+            <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
               <div className="p-8 pb-6 flex items-center justify-between">
                 <h2 className="text-2xl font-black text-neutral-900">
                   {editingBoard ? (t.edit || "Edit") : (t.add || "Add")}
@@ -712,7 +712,7 @@ export default function StaffManagementPage() {
                 </button>
               </div>
 
-              <div className="px-8 pb-40 overflow-y-auto">
+              <div className="px-8 pb-8 overflow-y-auto flex-1">
                 <div className="space-y-5">
                   <div className="app-field">
                     <label className="app-label">{t.name}</label>
@@ -729,7 +729,7 @@ export default function StaffManagementPage() {
                 </div>
               </div>
 
-              <div className="absolute bottom-0 left-0 right-0 p-6 bg-white/95 backdrop-blur border-t border-neutral-100">
+              <div className="sticky bottom-0 left-0 right-0 p-6 bg-white/95 backdrop-blur border-t border-neutral-100 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
                 <button onClick={saveBoardMember} disabled={submitting} className="w-full app-btn-primary py-5 text-lg">
                   {submitting ? (t.saving || "SAVING...") : t.save}
                 </button>
@@ -739,8 +739,8 @@ export default function StaffManagementPage() {
         )}
 
         {isEmployeeModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
-            <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[calc(100vh-2rem)] overflow-hidden">
+          <div className="fixed inset-0 z-[120] bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
+            <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
               <div className="p-8 pb-6 flex items-center justify-between">
                 <h2 className="text-2xl font-black text-neutral-900">
                   {editingEmployee ? (t.edit || "Edit") : (t.add || "Add")}
@@ -750,7 +750,7 @@ export default function StaffManagementPage() {
                 </button>
               </div>
 
-              <div className="px-8 pb-44 overflow-y-auto">
+              <div className="px-8 pb-8 overflow-y-auto flex-1">
                 <div className="space-y-5">
                   <div className="app-field">
                     <label className="app-label">{t.name}</label>
@@ -785,7 +785,7 @@ export default function StaffManagementPage() {
                 </div>
               </div>
 
-              <div className="absolute bottom-0 left-0 right-0 p-6 bg-white/95 backdrop-blur border-t border-neutral-100">
+              <div className="sticky bottom-0 left-0 right-0 p-6 bg-white/95 backdrop-blur border-t border-neutral-100 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
                 <button onClick={saveEmployee} disabled={submitting} className="w-full app-btn-primary py-5 text-lg">
                   {submitting ? (t.saving || "SAVING...") : t.save}
                 </button>
