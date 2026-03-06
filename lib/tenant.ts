@@ -9,6 +9,8 @@ export type TenantContext = {
     accounts?: boolean;
     events?: boolean;
     members?: boolean;
+    subscriptions_collect?: boolean;
+    subscriptions_approve?: boolean;
   };
 };
 

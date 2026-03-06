@@ -11,6 +11,7 @@ import {
   Settings,
   Briefcase,
   Shield,
+  Wallet,
   Menu,
   X,
 } from "lucide-react";
@@ -43,6 +44,8 @@ export function AppShell(props: {
     accounts?: boolean;
     events?: boolean;
     members?: boolean;
+    subscriptions_collect?: boolean;
+    subscriptions_approve?: boolean;
   } | null>(null);
 
   useEffect(() => {
@@ -73,6 +76,8 @@ export function AppShell(props: {
     const canAccounts = isSuper || perms.accounts !== false;
     const canEvents = isSuper || perms.events !== false;
     const canMembers = isSuper || perms.members !== false;
+    const canSubCollect = isSuper || perms.subscriptions_collect === true;
+    const canSubApprove = isSuper || perms.subscriptions_approve === true;
 
     const base: NavItem[] = [
       { href: "/", label: t.dashboard, icon: <Home className="w-5 h-5" /> },
@@ -86,6 +91,13 @@ export function AppShell(props: {
     }
     if (canEvents) {
       base.push({ href: "/events", label: t.events || "Events", icon: <Calendar className="w-5 h-5" /> });
+    }
+
+    if (canSubCollect) {
+      base.push({ href: "/subscriptions/collect", label: (t as any).subscription || "Subscription", icon: <Wallet className="w-5 h-5" /> });
+    }
+    if (canSubApprove) {
+      base.push({ href: "/subscriptions/pending", label: "Pending", icon: <Wallet className="w-5 h-5" /> });
     }
 
     // Staff & admin only for masjid admins

@@ -19,6 +19,8 @@ type RoleRow = {
     accounts?: boolean;
     events?: boolean;
     members?: boolean;
+    subscriptions_collect?: boolean;
+    subscriptions_approve?: boolean;
   } | null;
 };
 
@@ -228,7 +230,7 @@ export default function AdminSettingsPage() {
 
   const togglePermission = async (
     row: RoleRow,
-    key: "accounts" | "events" | "members"
+    key: "accounts" | "events" | "members" | "subscriptions_collect" | "subscriptions_approve"
   ) => {
     if (!supabase || !canManage) return;
     try {
@@ -348,6 +350,8 @@ export default function AdminSettingsPage() {
                     const accountsOn = perms.accounts ?? true;
                     const eventsOn = perms.events ?? true;
                     const membersOn = perms.members ?? true;
+                    const subCollectOn = perms.subscriptions_collect ?? false;
+                    const subApproveOn = perms.subscriptions_approve ?? false;
                     return (
                       <div
                         key={r.id}
@@ -396,6 +400,24 @@ export default function AdminSettingsPage() {
                               onChange={() => togglePermission(r, "members")}
                             />
                             <span>Members</span>
+                          </label>
+                          <label className="inline-flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              className="w-3.5 h-3.5 rounded border-neutral-300 text-emerald-600"
+                              checked={subCollectOn}
+                              onChange={() => togglePermission(r, "subscriptions_collect")}
+                            />
+                            <span>Subscription Collect</span>
+                          </label>
+                          <label className="inline-flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              className="w-3.5 h-3.5 rounded border-neutral-300 text-emerald-600"
+                              checked={subApproveOn}
+                              onChange={() => togglePermission(r, "subscriptions_approve")}
+                            />
+                            <span>Subscription Approve</span>
                           </label>
                         </div>
                         <div className="w-full flex justify-end">
