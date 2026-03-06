@@ -17,6 +17,7 @@ type Employee = {
   address?: string;
   phone?: string;
   photo_url?: string | null;
+  monthly_salary?: number | null;
 };
 
 type EmployeePayment = {
@@ -77,26 +78,44 @@ export default function EmployeeProfilePage() {
         return;
       }
 
-      const { data: roleRow, error: roleErr } = await supabase
-        .from("user_roles")
-        .select("user_id, masjid_id, role, email")
-        .eq("user_id", employeeId)
+      let loaded: Employee | null = null;
+
+      // Prefer employees table (full details) when available
+      const { data: empRow, error: empErr } = await supabase
+        .from("employees")
+        .select("id, masjid_id, name, role, address, phone, photo_url, monthly_salary")
+        .eq("id", employeeId)
         .eq("masjid_id", ctx.masjidId)
         .maybeSingle();
 
-      if (roleErr) throw roleErr;
-      if (!roleRow) throw new Error("Employee not found");
-      const email = (roleRow as any).email as string | null;
-      const display = email ? email.split("@")[0] : (roleRow as any).user_id;
-      setEmployee({
-        id: (roleRow as any).user_id,
-        masjid_id: (roleRow as any).masjid_id,
-        name: display,
-        role: (roleRow as any).role || "staff",
-        address: "",
-        phone: "",
-        photo_url: null,
-      });
+      if (!empErr && empRow) {
+        loaded = empRow as any;
+      } else {
+        // fallback to user_roles based employee listing
+        const { data: roleRow, error: roleErr } = await supabase
+          .from("user_roles")
+          .select("user_id, masjid_id, role, email")
+          .eq("user_id", employeeId)
+          .eq("masjid_id", ctx.masjidId)
+          .maybeSingle();
+
+        if (roleErr) throw roleErr;
+        if (!roleRow) throw new Error("Employee not found");
+        const email = (roleRow as any).email as string | null;
+        const display = email ? email.split("@")[0] : (roleRow as any).user_id;
+        loaded = {
+          id: (roleRow as any).user_id,
+          masjid_id: (roleRow as any).masjid_id,
+          name: display,
+          role: (roleRow as any).role || "staff",
+          address: "",
+          phone: "",
+          photo_url: null,
+          monthly_salary: null,
+        };
+      }
+
+      setEmployee(loaded);
 
       const { data: payData, error: payErr } = await supabase
         .from("employee_payments")
@@ -223,6 +242,7 @@ export default function EmployeeProfilePage() {
         <button
           onClick={() => {
             setTab("payments");
+            if (!amount && employee?.monthly_salary) setAmount(String(employee.monthly_salary));
             setIsPayModalOpen(true);
           }}
           className="p-3 bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"

@@ -27,6 +27,7 @@ type Employee = {
   address?: string;
   phone?: string;
   photo_url?: string | null;
+  monthly_salary?: number | null;
 };
 
 const demoBoard: BoardMember[] = [
@@ -114,6 +115,8 @@ export default function StaffManagementPage() {
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [canManage, setCanManage] = useState(false);
+  const [boardTableAvailable, setBoardTableAvailable] = useState(false);
+  const [employeesTableAvailable, setEmployeesTableAvailable] = useState(false);
 
   const [admins, setAdmins] = useState<BoardMember[]>([]);
   const [employeesSource, setEmployeesSource] = useState<"employees" | "user_roles" | "demo">("demo");
@@ -131,6 +134,7 @@ export default function StaffManagementPage() {
   const [empPhone, setEmpPhone] = useState("");
   const [empAddress, setEmpAddress] = useState("");
   const [empPhotoUrl, setEmpPhotoUrl] = useState("");
+  const [empMonthlySalary, setEmpMonthlySalary] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const [board, setBoard] = useState<BoardMember[]>(demoBoard);
@@ -153,6 +157,8 @@ export default function StaffManagementPage() {
         }
 
         setCanManage(ctx.role === "super_admin" || ctx.role === "co_admin");
+        setBoardTableAvailable(false);
+        setEmployeesTableAvailable(false);
 
         // Super admin / co-admin should appear under board members
         try {
@@ -189,22 +195,34 @@ export default function StaffManagementPage() {
 
         if (!boardErr && boardData) {
           setBoard(boardData as any);
+          setBoardTableAvailable(true);
           setIsLive(true);
+        } else if (boardErr) {
+          const msg = (boardErr as any)?.message || "";
+          if (msg.includes("Could not find the table") || msg.includes("schema cache") || (boardErr as any)?.code === "PGRST205") {
+            setBoardTableAvailable(false);
+          }
         }
 
         // Employees: prefer employees table (full details) if available; fallback to user_roles.
         let didSetEmployees = false;
         const { data: empData, error: empErr } = await supabase
           .from("employees")
-          .select("id, masjid_id, name, role, address, phone, photo_url")
+          .select("id, masjid_id, name, role, address, phone, photo_url, monthly_salary")
           .eq("masjid_id", ctx.masjidId)
           .order("created_at", { ascending: true } as any);
 
         if (!empErr && empData) {
           setEmployees((empData as any) || []);
           setEmployeesSource("employees");
+          setEmployeesTableAvailable(true);
           setIsLive(true);
           didSetEmployees = true;
+        } else if (empErr) {
+          const msg = (empErr as any)?.message || "";
+          if (msg.includes("Could not find the table") || msg.includes("schema cache") || (empErr as any)?.code === "PGRST205") {
+            setEmployeesTableAvailable(false);
+          }
         }
 
         if (!didSetEmployees) {
@@ -253,6 +271,12 @@ export default function StaffManagementPage() {
     if (!e) return "Unknown error";
     const parts = [e.message, e.details, e.hint, e.code].filter(Boolean);
     return parts.join(" • ");
+  };
+
+  const isMissingTableError = (e: any) => {
+    const msg = (e as any)?.message || "";
+    const code = (e as any)?.code;
+    return code === "PGRST205" || msg.includes("Could not find the table") || msg.includes("schema cache");
   };
 
   const openBoardCreate = () => {
@@ -312,7 +336,12 @@ export default function StaffManagementPage() {
         .eq("masjid_id", ctx.masjidId);
       if (boardData) setBoard(boardData as any);
     } catch (e: any) {
-      toast({ kind: "error", title: "Error", message: formatSupabaseError(e) });
+      if (isMissingTableError(e)) {
+        toast({ kind: "error", title: "Database", message: "board_members table not found in Supabase. Create the table to enable Add/Edit/Delete." });
+        setBoardTableAvailable(false);
+      } else {
+        toast({ kind: "error", title: "Error", message: formatSupabaseError(e) });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -346,7 +375,12 @@ export default function StaffManagementPage() {
       setBoard((prev) => prev.filter((x) => x.id !== m.id));
       toast({ kind: "success", title: "Deleted", message: "Removed" });
     } catch (e: any) {
-      toast({ kind: "error", title: "Error", message: formatSupabaseError(e) });
+      if (isMissingTableError(e)) {
+        toast({ kind: "error", title: "Database", message: "board_members table not found in Supabase. Create the table to enable Remove." });
+        setBoardTableAvailable(false);
+      } else {
+        toast({ kind: "error", title: "Error", message: formatSupabaseError(e) });
+      }
     }
   };
 
@@ -357,6 +391,7 @@ export default function StaffManagementPage() {
     setEmpPhone("");
     setEmpAddress("");
     setEmpPhotoUrl("");
+    setEmpMonthlySalary("");
     setIsEmployeeModalOpen(true);
   };
 
@@ -367,6 +402,11 @@ export default function StaffManagementPage() {
     setEmpPhone(e.phone || "");
     setEmpAddress(e.address || "");
     setEmpPhotoUrl((e.photo_url as any) || "");
+    setEmpMonthlySalary(
+      typeof (e as any).monthly_salary === "number" && Number.isFinite((e as any).monthly_salary)
+        ? String((e as any).monthly_salary)
+        : ""
+    );
     setIsEmployeeModalOpen(true);
   };
 
@@ -393,10 +433,16 @@ export default function StaffManagementPage() {
         phone: empPhone.trim() || null,
         address: empAddress.trim() || null,
         photo_url: empPhotoUrl.trim() || null,
+        monthly_salary: empMonthlySalary.trim() ? Number(empMonthlySalary) : null,
       } as any;
 
       if (!payload.name || !payload.role) {
         toast({ kind: "error", title: "Missing", message: "Enter name and role" });
+        return;
+      }
+
+      if (payload.monthly_salary !== null && (!Number.isFinite(payload.monthly_salary) || payload.monthly_salary < 0)) {
+        toast({ kind: "error", title: "Invalid", message: "Enter a valid monthly salary" });
         return;
       }
 
@@ -413,12 +459,17 @@ export default function StaffManagementPage() {
 
       const { data: empData } = await supabase
         .from("employees")
-        .select("id, masjid_id, name, role, address, phone, photo_url")
+        .select("id, masjid_id, name, role, address, phone, photo_url, monthly_salary")
         .eq("masjid_id", ctx.masjidId)
         .order("created_at", { ascending: true } as any);
       if (empData) setEmployees((empData as any) || []);
     } catch (e: any) {
-      toast({ kind: "error", title: "Error", message: e.message || "Failed" });
+      if (isMissingTableError(e)) {
+        toast({ kind: "error", title: "Database", message: "employees table not found in Supabase. Create the table to enable Add/Edit/Delete." });
+        setEmployeesTableAvailable(false);
+      } else {
+        toast({ kind: "error", title: "Error", message: formatSupabaseError(e) });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -456,7 +507,12 @@ export default function StaffManagementPage() {
       setEmployees((prev) => prev.filter((x) => x.id !== e.id));
       toast({ kind: "success", title: "Deleted", message: "Removed" });
     } catch (err: any) {
-      toast({ kind: "error", title: "Error", message: formatSupabaseError(err) });
+      if (isMissingTableError(err)) {
+        toast({ kind: "error", title: "Database", message: "employees table not found in Supabase. Create the table to enable Remove." });
+        setEmployeesTableAvailable(false);
+      } else {
+        toast({ kind: "error", title: "Error", message: formatSupabaseError(err) });
+      }
     }
   };
 
@@ -510,7 +566,7 @@ export default function StaffManagementPage() {
                 <Building2 className="w-5 h-5 text-amber-500" />
                 <h2 className="text-sm font-black uppercase tracking-widest">{t.board_members}</h2>
               </div>
-              {canManage ? (
+              {canManage && boardTableAvailable ? (
                 <button
                   onClick={openBoardCreate}
                   className="px-4 py-3 rounded-[999px] bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-700/25 active:scale-[0.98] transition-all"
@@ -523,7 +579,7 @@ export default function StaffManagementPage() {
               ) : (
                 <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-500">
                   <Shield className="w-4 h-4" />
-                  Admin only
+                  {canManage ? "Setup required" : "Admin only"}
                 </div>
               )}
             </div>
@@ -533,11 +589,11 @@ export default function StaffManagementPage() {
               {admins.length ? (
                 <RoleSection title={(t as any).admin_settings || "Admins"} items={admins} grid />
               ) : null}
-              <RoleSection title={t.president} items={grouped.president} onEdit={canManage ? openBoardEdit : undefined} onDelete={canManage ? deleteBoardMember : undefined} />
-              <RoleSection title={t.vice_presidents} items={grouped.vice} onEdit={canManage ? openBoardEdit : undefined} onDelete={canManage ? deleteBoardMember : undefined} />
-              <RoleSection title={t.secretary} items={grouped.secretary} onEdit={canManage ? openBoardEdit : undefined} onDelete={canManage ? deleteBoardMember : undefined} />
-              <RoleSection title={t.treasurer} items={grouped.treasurer} onEdit={canManage ? openBoardEdit : undefined} onDelete={canManage ? deleteBoardMember : undefined} />
-              <RoleSection title={t.members_list} items={grouped.member} grid onEdit={canManage ? openBoardEdit : undefined} onDelete={canManage ? deleteBoardMember : undefined} />
+              <RoleSection title={t.president} items={grouped.president} onEdit={canManage && boardTableAvailable ? openBoardEdit : undefined} onDelete={canManage && boardTableAvailable ? deleteBoardMember : undefined} />
+              <RoleSection title={t.vice_presidents} items={grouped.vice} onEdit={canManage && boardTableAvailable ? openBoardEdit : undefined} onDelete={canManage && boardTableAvailable ? deleteBoardMember : undefined} />
+              <RoleSection title={t.secretary} items={grouped.secretary} onEdit={canManage && boardTableAvailable ? openBoardEdit : undefined} onDelete={canManage && boardTableAvailable ? deleteBoardMember : undefined} />
+              <RoleSection title={t.treasurer} items={grouped.treasurer} onEdit={canManage && boardTableAvailable ? openBoardEdit : undefined} onDelete={canManage && boardTableAvailable ? deleteBoardMember : undefined} />
+              <RoleSection title={t.members_list} items={grouped.member} grid onEdit={canManage && boardTableAvailable ? openBoardEdit : undefined} onDelete={canManage && boardTableAvailable ? deleteBoardMember : undefined} />
             </div>
           </div>
         ) : (
@@ -547,7 +603,7 @@ export default function StaffManagementPage() {
                 <Briefcase className="w-5 h-5 text-emerald-600" />
                 <h2 className="text-sm font-black uppercase tracking-widest">{t.employees}</h2>
               </div>
-              {employeesSource === "employees" && canManage ? (
+              {employeesSource === "employees" && canManage && employeesTableAvailable ? (
                 <button
                   onClick={openEmployeeCreate}
                   className="px-4 py-3 rounded-[999px] bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-700/25 active:scale-[0.98] transition-all"
@@ -617,7 +673,7 @@ export default function StaffManagementPage() {
                         >
                           <ChevronRight className="w-5 h-5" />
                         </Link>
-                        {employeesSource === "employees" && canManage ? (
+                        {employeesSource === "employees" && canManage && employeesTableAvailable ? (
                           <>
                             <button
                               onClick={() => openEmployeeEdit(e)}
@@ -646,8 +702,8 @@ export default function StaffManagementPage() {
 
         {isBoardModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
-            <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
-              <div className="flex items-center justify-between mb-6">
+            <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[calc(100vh-2rem)] overflow-hidden">
+              <div className="p-8 pb-6 flex items-center justify-between">
                 <h2 className="text-2xl font-black text-neutral-900">
                   {editingBoard ? (t.edit || "Edit") : (t.add || "Add")}
                 </h2>
@@ -656,19 +712,24 @@ export default function StaffManagementPage() {
                 </button>
               </div>
 
-              <div className="space-y-5">
-                <div className="app-field">
-                  <label className="app-label">{t.name}</label>
-                  <input value={boardFullName} onChange={(e) => setBoardFullName(e.target.value)} className="app-input font-bold" />
+              <div className="px-8 pb-40 overflow-y-auto">
+                <div className="space-y-5">
+                  <div className="app-field">
+                    <label className="app-label">{t.name}</label>
+                    <input value={boardFullName} onChange={(e) => setBoardFullName(e.target.value)} className="app-input font-bold" />
+                  </div>
+                  <div className="app-field">
+                    <label className="app-label">{t.role}</label>
+                    <input value={boardDesignation} onChange={(e) => setBoardDesignation(e.target.value)} className="app-input font-bold" placeholder="President / Secretary" />
+                  </div>
+                  <div className="app-field">
+                    <label className="app-label">Photo URL</label>
+                    <input value={boardPhotoUrl} onChange={(e) => setBoardPhotoUrl(e.target.value)} className="app-input font-bold text-xs" placeholder="https://..." />
+                  </div>
                 </div>
-                <div className="app-field">
-                  <label className="app-label">{t.role}</label>
-                  <input value={boardDesignation} onChange={(e) => setBoardDesignation(e.target.value)} className="app-input font-bold" placeholder="President / Secretary" />
-                </div>
-                <div className="app-field">
-                  <label className="app-label">Photo URL</label>
-                  <input value={boardPhotoUrl} onChange={(e) => setBoardPhotoUrl(e.target.value)} className="app-input font-bold text-xs" placeholder="https://..." />
-                </div>
+              </div>
+
+              <div className="absolute bottom-0 left-0 right-0 p-6 bg-white/95 backdrop-blur border-t border-neutral-100">
                 <button onClick={saveBoardMember} disabled={submitting} className="w-full app-btn-primary py-5 text-lg">
                   {submitting ? (t.saving || "SAVING...") : t.save}
                 </button>
@@ -679,8 +740,8 @@ export default function StaffManagementPage() {
 
         {isEmployeeModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
-            <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
-              <div className="flex items-center justify-between mb-6">
+            <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[calc(100vh-2rem)] overflow-hidden">
+              <div className="p-8 pb-6 flex items-center justify-between">
                 <h2 className="text-2xl font-black text-neutral-900">
                   {editingEmployee ? (t.edit || "Edit") : (t.add || "Add")}
                 </h2>
@@ -689,27 +750,42 @@ export default function StaffManagementPage() {
                 </button>
               </div>
 
-              <div className="space-y-5">
-                <div className="app-field">
-                  <label className="app-label">{t.name}</label>
-                  <input value={empName} onChange={(e) => setEmpName(e.target.value)} className="app-input font-bold" />
+              <div className="px-8 pb-44 overflow-y-auto">
+                <div className="space-y-5">
+                  <div className="app-field">
+                    <label className="app-label">{t.name}</label>
+                    <input value={empName} onChange={(e) => setEmpName(e.target.value)} className="app-input font-bold" />
+                  </div>
+                  <div className="app-field">
+                    <label className="app-label">{t.role}</label>
+                    <input value={empRole} onChange={(e) => setEmpRole(e.target.value)} className="app-input font-bold" placeholder="Imam / Muazzin" />
+                  </div>
+                  <div className="app-field">
+                    <label className="app-label">Phone</label>
+                    <input value={empPhone} onChange={(e) => setEmpPhone(e.target.value)} className="app-input font-bold" />
+                  </div>
+                  <div className="app-field">
+                    <label className="app-label">Address</label>
+                    <input value={empAddress} onChange={(e) => setEmpAddress(e.target.value)} className="app-input font-bold" />
+                  </div>
+                  <div className="app-field">
+                    <label className="app-label">Monthly Salary</label>
+                    <input
+                      type="number"
+                      value={empMonthlySalary}
+                      onChange={(e) => setEmpMonthlySalary(e.target.value)}
+                      className="app-input font-bold"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="app-field">
+                    <label className="app-label">Photo URL</label>
+                    <input value={empPhotoUrl} onChange={(e) => setEmpPhotoUrl(e.target.value)} className="app-input font-bold text-xs" placeholder="https://..." />
+                  </div>
                 </div>
-                <div className="app-field">
-                  <label className="app-label">{t.role}</label>
-                  <input value={empRole} onChange={(e) => setEmpRole(e.target.value)} className="app-input font-bold" placeholder="Imam / Muazzin" />
-                </div>
-                <div className="app-field">
-                  <label className="app-label">Phone</label>
-                  <input value={empPhone} onChange={(e) => setEmpPhone(e.target.value)} className="app-input font-bold" />
-                </div>
-                <div className="app-field">
-                  <label className="app-label">Address</label>
-                  <input value={empAddress} onChange={(e) => setEmpAddress(e.target.value)} className="app-input font-bold" />
-                </div>
-                <div className="app-field">
-                  <label className="app-label">Photo URL</label>
-                  <input value={empPhotoUrl} onChange={(e) => setEmpPhotoUrl(e.target.value)} className="app-input font-bold text-xs" placeholder="https://..." />
-                </div>
+              </div>
+
+              <div className="absolute bottom-0 left-0 right-0 p-6 bg-white/95 backdrop-blur border-t border-neutral-100">
                 <button onClick={saveEmployee} disabled={submitting} className="w-full app-btn-primary py-5 text-lg">
                   {submitting ? (t.saving || "SAVING...") : t.save}
                 </button>
