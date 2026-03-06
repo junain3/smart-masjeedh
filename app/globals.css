@@ -5,15 +5,15 @@
  
 @layer base {
   body {
-    background-color: #f8fafc;
-    color: #0f172a; /* slate-900 */
+    background-color: #fafafa;
+    color: #171717; 
     -webkit-tap-highlight-color: transparent;
   }
 }
 
 @layer components {
   .app-card {
-    @apply bg-white border border-slate-100 shadow-sm rounded-3xl;
+    @apply bg-white border border-neutral-200 shadow-sm rounded-3xl;
   }
 
   .app-btn {
@@ -21,10 +21,36 @@
   }
 
   .app-btn-primary {
-    @apply app-btn bg-emerald-500 text-white shadow-xl shadow-emerald-500/20 hover:bg-emerald-600;
+    @apply app-btn bg-emerald-600 text-white shadow-xl shadow-emerald-600/20 hover:bg-emerald-700;
   }
 
   .app-btn-soft {
-    @apply app-btn bg-slate-50 text-slate-700 hover:bg-slate-100;
+    @apply app-btn bg-neutral-50 text-neutral-900 hover:bg-neutral-100;
+  }
+
+  .app-btn-ghost {
+    @apply app-btn bg-transparent text-neutral-900 hover:bg-neutral-50;
+  }
+
+  .app-field {
+    @apply space-y-2;
+  }
+
+  .app-label {
+    @apply block text-[11px] font-black uppercase tracking-[0.2em] text-neutral-600 ml-1;
+  }
+
+  .app-input {
+    @apply w-full px-5 py-4 bg-white border border-neutral-200 rounded-3xl outline-none transition-all text-neutral-900 placeholder:text-neutral-400;
+    @apply focus:ring-4 focus:ring-emerald-600/10 focus:border-emerald-600;
+  }
+
+  .app-select {
+    @apply w-full px-5 py-4 bg-white border border-neutral-200 rounded-3xl outline-none transition-all text-neutral-900;
+    @apply focus:ring-4 focus:ring-emerald-600/10 focus:border-emerald-600;
+  }
+
+  .app-pill {
+    @apply inline-flex items-center px-3 py-1.5 rounded-3xl text-[11px] font-black uppercase tracking-widest;
   }
 }

@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { AppShell } from "@/components/AppShell";
 import { getTenantContext } from "@/lib/tenant";
+import { EmptyState } from "@/components/EmptyState";
 
 type BoardMember = {
   id: string;
@@ -190,23 +191,23 @@ export default function StaffManagementPage() {
     <AppShell title={t.staff_management}>
       <div className="space-y-6">
         <div className="app-card p-4">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          <p className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest">
             {isLive ? t.live_data : t.demo_mode}
           </p>
         </div>
-        <div className="flex p-1 bg-slate-100 rounded-3xl">
+        <div className="flex p-1 bg-neutral-50 border border-neutral-200 rounded-3xl">
           <button
             onClick={() => setTab("board")}
-            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-              tab === "board" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400"
+            className={`flex-1 py-3 rounded-3xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              tab === "board" ? "bg-white text-emerald-700 shadow-sm" : "text-neutral-600"
             }`}
           >
             {t.board_members}
           </button>
           <button
             onClick={() => setTab("employees")}
-            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-              tab === "employees" ? "bg-white text-blue-600 shadow-sm" : "text-slate-400"
+            className={`flex-1 py-3 rounded-3xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              tab === "employees" ? "bg-white text-emerald-700 shadow-sm" : "text-neutral-600"
             }`}
           >
             {t.employees}
@@ -215,11 +216,11 @@ export default function StaffManagementPage() {
 
         {loading ? (
           <div className="py-16 text-center app-card">
-            <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t.loading}</p>
+            <p className="text-neutral-600 font-bold uppercase tracking-widest text-xs">{t.loading}</p>
           </div>
         ) : tab === "board" ? (
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-slate-500">
+            <div className="flex items-center gap-2 text-neutral-600">
               <Building2 className="w-5 h-5 text-amber-500" />
               <h2 className="text-sm font-black uppercase tracking-widest">{t.board_members}</h2>
             </div>
@@ -235,51 +236,63 @@ export default function StaffManagementPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-slate-500">
+            <div className="flex items-center gap-2 text-neutral-600">
               <Briefcase className="w-5 h-5 text-emerald-600" />
               <h2 className="text-sm font-black uppercase tracking-widest">{t.employees}</h2>
             </div>
 
-            <div className="grid grid-cols-1 gap-3">
-              {employees.map((e) => (
-                <Link
-                  key={e.id}
-                  href={`/staff/employees/${e.id}`}
-                  className="app-card p-4 hover:border-emerald-200 transition-all"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-4 min-w-0">
-                      <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden flex items-center justify-center text-slate-500 font-black">
-                        {e.photo_url ? (
-                          <img src={e.photo_url} alt={e.name} className="w-full h-full object-cover" />
-                        ) : (
-                          initials(e.name)
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-sm font-black text-slate-800 truncate">{e.name}</h4>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{e.role}</p>
-                        <div className="mt-2 space-y-1">
-                          {e.address ? (
-                            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
-                              <MapPin className="w-3.5 h-3.5 text-slate-300" />
-                              <span className="truncate">{e.address}</span>
-                            </div>
-                          ) : null}
-                          {e.phone ? (
-                            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
-                              <Phone className="w-3.5 h-3.5 text-slate-300" />
-                              <span className="truncate">{e.phone}</span>
-                            </div>
-                          ) : null}
+            {employees.length === 0 ? (
+              <EmptyState
+                title={lang === "tm" ? "பணியாளர்கள் இல்லை" : "No staff yet"}
+                description={
+                  lang === "tm"
+                    ? "Admin பக்கம் மூலம் புதிய staff-ஐ invite செய்யுங்கள்"
+                    : "Invite staff members from Admin to get started."
+                }
+                icon={<Briefcase className="w-8 h-8" />}
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-3">
+                {employees.map((e) => (
+                  <Link
+                    key={e.id}
+                    href={`/staff/employees/${e.id}`}
+                    className="app-card p-4 hover:border-emerald-200 transition-all"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-12 h-12 rounded-3xl bg-neutral-50 border border-neutral-200 overflow-hidden flex items-center justify-center text-neutral-600 font-black">
+                          {e.photo_url ? (
+                            <img src={e.photo_url} alt={e.name} className="w-full h-full object-cover" />
+                          ) : (
+                            initials(e.name)
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-black text-neutral-900 truncate">{e.name}</h4>
+                          <p className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest">{e.role}</p>
+                          <div className="mt-2 space-y-1">
+                            {e.address ? (
+                              <div className="flex items-center gap-2 text-[10px] font-bold text-neutral-600">
+                                <MapPin className="w-3.5 h-3.5 text-neutral-400" />
+                                <span className="truncate">{e.address}</span>
+                              </div>
+                            ) : null}
+                            {e.phone ? (
+                              <div className="flex items-center gap-2 text-[10px] font-bold text-neutral-600">
+                                <Phone className="w-3.5 h-3.5 text-neutral-400" />
+                                <span className="truncate">{e.phone}</span>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
+                      <ChevronRight className="w-5 h-5 text-neutral-300 shrink-0" />
                     </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 shrink-0" />
-                  </div>
-                </Link>
-              ))}
-            </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -291,9 +304,9 @@ function RoleSection(props: { title: string; items: BoardMember[]; grid?: boolea
   const { title, items, grid } = props;
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{title}</p>
+      <p className="text-[10px] font-black text-neutral-600 uppercase tracking-widest ml-1">{title}</p>
       {items.length === 0 ? (
-        <div className="bg-white rounded-2xl p-4 border border-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+        <div className="app-card p-4 text-[10px] font-bold text-neutral-600 uppercase tracking-widest">
           —
         </div>
       ) : (
@@ -301,10 +314,10 @@ function RoleSection(props: { title: string; items: BoardMember[]; grid?: boolea
           {items.map((m) => (
             <div
               key={m.id}
-              className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm hover:border-amber-100 transition-all"
+              className="app-card p-4 hover:border-amber-200 transition-all"
             >
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden flex items-center justify-center text-slate-500 font-black shrink-0">
+                <div className="w-12 h-12 rounded-3xl bg-neutral-50 border border-neutral-200 overflow-hidden flex items-center justify-center text-neutral-600 font-black shrink-0">
                   {m.photo_url ? (
                     <img src={m.photo_url} alt={m.full_name} className="w-full h-full object-cover" />
                   ) : (
@@ -312,8 +325,8 @@ function RoleSection(props: { title: string; items: BoardMember[]; grid?: boolea
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-black text-slate-800 truncate">{m.full_name}</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
+                  <p className="text-sm font-black text-neutral-900 truncate">{m.full_name}</p>
+                  <p className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest truncate">
                     {m.designation}
                   </p>
                 </div>

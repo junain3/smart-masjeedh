@@ -108,15 +108,15 @@ export function AppShell(props: {
 
   const linkClass = (href: string) => {
     const active = pathname === href || (href !== "/" && pathname?.startsWith(href));
-    return `flex items-center gap-3 px-4 py-3 rounded-2xl font-bold transition-all ${
+    return `flex items-center gap-3 px-4 py-3 rounded-3xl font-bold transition-all ${
       active
         ? "bg-emerald-50 text-emerald-700"
-        : "text-slate-600 hover:bg-slate-50"
+        : "text-neutral-600 hover:bg-neutral-50"
     }`;
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans">
+    <div className="min-h-screen bg-neutral-50 text-neutral-900 font-sans">
       {/* Mobile overlay */}
       {open && (
         <div
@@ -127,7 +127,7 @@ export function AppShell(props: {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-72 bg-white border-r border-slate-100 shadow-2xl transform transition-transform duration-300 ease-in-out
+        className={`fixed top-0 left-0 z-50 h-full w-72 bg-white border-r border-neutral-200 shadow-2xl transform transition-transform duration-300 ease-in-out
         ${open ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:shadow-none`}
       >
         <div className="p-6 flex flex-col h-full">
@@ -141,7 +141,7 @@ export function AppShell(props: {
               </p>
             </div>
             <button
-              className="md:hidden p-2 hover:bg-slate-50 rounded-2xl"
+              className="md:hidden p-2 hover:bg-neutral-50 rounded-3xl"
               onClick={() => setOpen(false)}
               aria-label="Close menu"
             >
@@ -160,7 +160,7 @@ export function AppShell(props: {
 
           <button
             onClick={() => router.push("/")}
-            className="mt-6 w-full px-4 py-3 rounded-2xl bg-slate-50 text-slate-700 font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all"
+            className="mt-6 w-full px-4 py-3 rounded-3xl bg-neutral-50 text-neutral-900 font-black text-xs uppercase tracking-widest hover:bg-neutral-100 transition-all"
           >
             Home
           </button>
@@ -169,11 +169,11 @@ export function AppShell(props: {
 
       {/* Main area */}
       <div className="md:pl-72">
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-100">
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-neutral-200">
           <div className="px-4 py-4 md:px-8 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <button
-                className="md:hidden p-2 rounded-2xl hover:bg-slate-100 transition-colors"
+                className="md:hidden p-2 rounded-3xl hover:bg-neutral-100 transition-colors"
                 onClick={() => setOpen(true)}
                 aria-label="Open menu"
               >
@@ -182,7 +182,7 @@ export function AppShell(props: {
               {backHref ? (
                 <Link
                   href={backHref}
-                  className="hidden sm:inline-flex px-3 py-2 rounded-2xl bg-slate-50 text-slate-700 font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all"
+                  className="hidden sm:inline-flex px-3 py-2 rounded-3xl bg-neutral-50 text-neutral-900 font-black text-xs uppercase tracking-widest hover:bg-neutral-100 transition-all"
                 >
                   Back
                 </Link>

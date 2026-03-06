@@ -7,9 +7,11 @@ import { ArrowLeft, Save, Globe, Camera, Tag, Home, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
+import { useAppToast } from "@/components/ToastProvider";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { toast } = useAppToast();
   const [lang, setLang] = useState<Language>("en");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -123,20 +125,31 @@ export default function SettingsPage() {
         throw error;
       }
 
-      alert(lang === "tm" ? "சேமிக்கப்பட்டது" : lang === "si" ? "සුරකින ලදී" : "Saved successfully");
+      toast({
+        kind: "success",
+        title: "Saved",
+        message: lang === "tm" ? "சேமிக்கப்பட்டது" : lang === "si" ? "සුරකින ලදී" : "Saved successfully",
+      });
     } catch (e: any) {
-      alert(e.message || "Failed to save");
+      toast({ kind: "error", title: "Error", message: e.message || "Failed to save" });
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <div className="p-8 text-center">Loading...</div>;
+  if (loading)
+    return (
+      <div className="min-h-screen bg-neutral-50 text-neutral-900 flex items-center justify-center p-6">
+        <div className="app-card p-6 w-full max-w-md text-center">
+          <p className="text-xs font-black uppercase tracking-widest text-neutral-600">Loading</p>
+        </div>
+      </div>
+    );
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans pb-10">
-      <header className="bg-white px-4 py-4 border-b border-slate-100 flex items-center gap-4 sticky top-0 z-20">
-        <Link href="/" className="p-2 hover:bg-slate-50 rounded-full transition-colors">
+    <div className="min-h-screen bg-neutral-50 text-neutral-900 flex flex-col font-sans pb-10">
+      <header className="bg-white px-4 py-4 border-b border-neutral-200 flex items-center gap-4 sticky top-0 z-20">
+        <Link href="/" className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors">
           <ArrowLeft className="w-6 h-6 text-emerald-600" />
         </Link>
         <h1 className="text-xl font-black">{t.settings}</h1>
@@ -147,24 +160,24 @@ export default function SettingsPage() {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Globe className="w-5 h-5 text-emerald-500" />
-            <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">{t.language}</h2>
+            <h2 className="text-sm font-black text-neutral-600 uppercase tracking-widest">{t.language}</h2>
           </div>
           <div className="grid grid-cols-3 gap-2">
             {(["en", "tm", "si"] as Language[]).map((l) => (
               <button
                 key={l}
                 onClick={() => handleLangChange(l)}
-                className={`py-3 rounded-2xl font-bold transition-all ${
+                className={`py-3 rounded-3xl font-bold transition-all ${
                   lang === l 
-                    ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 scale-[1.02]" 
-                    : "bg-white border border-slate-100 text-slate-600 hover:bg-slate-50"
+                    ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/20 scale-[1.02]" 
+                    : "bg-white border border-neutral-200 text-neutral-900 hover:bg-neutral-50"
                 }`}
               >
                 {l === "en" ? "English" : l === "tm" ? "தமிழ்" : "සිංහල"}
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-center text-slate-400 font-bold uppercase tracking-wider">
+          <p className="text-[10px] text-center text-neutral-600 font-bold uppercase tracking-wider">
             {lang === "en" ? "Language changes immediately" : lang === "tm" ? "மொழி உடனடியாக மாறும்" : "භාෂාව වහාම වෙනස් වේ"}
           </p>
         </section>
@@ -173,44 +186,44 @@ export default function SettingsPage() {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Home className="w-5 h-5 text-emerald-500" />
-            <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">{t.profile}</h2>
+            <h2 className="text-sm font-black text-neutral-600 uppercase tracking-widest">{t.profile}</h2>
           </div>
           
-          <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 space-y-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.name}</label>
-              <input 
+          <div className="app-card p-6 space-y-6">
+            <div className="app-field">
+              <label className="app-label">{t.name}</label>
+              <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 ring-emerald-500/10 transition-all font-bold"
+                className="app-input font-bold"
                 placeholder="Masjid Name"
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.tagline}</label>
-              <input 
+            <div className="app-field">
+              <label className="app-label">{t.tagline}</label>
+              <input
                 type="text"
                 value={tagline}
                 onChange={(e) => setTagline(e.target.value)}
-                className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 ring-emerald-500/10 transition-all font-bold"
+                className="app-input font-bold"
                 placeholder="Tagline / Motto"
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.logo_url}</label>
+            <div className="app-field">
+              <label className="app-label">{t.logo_url}</label>
               <div className="flex gap-2">
-                <input 
+                <input
                   type="text"
                   value={logoUrl}
                   onChange={(e) => setLogoUrl(e.target.value)}
-                  className="flex-1 p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 ring-emerald-500/10 transition-all font-bold text-xs"
+                  className="app-input font-bold text-xs"
                   placeholder="https://image-url.com"
                 />
-                
-                <label className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center overflow-hidden border border-emerald-100 cursor-pointer hover:bg-emerald-100 transition-colors shrink-0">
+
+                <label className="w-14 h-14 bg-emerald-50 rounded-3xl flex items-center justify-center overflow-hidden border border-emerald-100 cursor-pointer hover:bg-emerald-100 transition-colors shrink-0">
                   <input 
                     type="file" 
                     accept="image/*" 
@@ -224,7 +237,7 @@ export default function SettingsPage() {
                   )}
                 </label>
               </div>
-              <p className="text-[9px] text-slate-400 font-bold ml-1 italic uppercase tracking-tighter">
+              <p className="text-[9px] text-neutral-600 font-bold ml-1 italic uppercase tracking-tighter">
                 Click camera to open camera or upload file
               </p>
             </div>
@@ -234,7 +247,7 @@ export default function SettingsPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="w-full bg-emerald-500 text-white py-5 rounded-[2rem] font-black text-lg shadow-xl shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+          className="w-full app-btn-primary py-5 text-lg flex items-center justify-center gap-2"
         >
           <Save className="w-5 h-5" />
           {saving ? (lang === "en" ? "SAVING..." : lang === "tm" ? "சேமிக்கப்படுகிறது..." : "සුරකිමින් පවතී...") : t.save}

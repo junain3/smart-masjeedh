@@ -7,6 +7,7 @@ import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Setti
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
+import { useAppToast } from "@/components/ToastProvider";
 
 type MasjidProfile = {
   name: string;
@@ -15,6 +16,7 @@ type MasjidProfile = {
 };
 
 export default function DashboardPage() {
+  const { toast } = useAppToast();
   const [time, setTime] = useState(new Date());
   const [familyCount, setFamilyCount] = useState<number | null>(null);
   const [memberCount, setMemberCount] = useState<number | null>(null);
@@ -256,7 +258,7 @@ export default function DashboardPage() {
         .eq("masjid_id", ctx.masjidId);
       
       if (!families || families.length === 0) {
-        alert("No families found to distribute to.");
+        toast({ kind: "info", title: "No data", message: "No families found to distribute to." });
         return;
       }
 
@@ -272,11 +274,11 @@ export default function DashboardPage() {
       const { error } = await supabase.from("service_distributions").insert(distributions);
       if (error) throw error;
 
-      alert("Service distribution created for all families!");
+      toast({ kind: "success", title: "Created", message: "Service distribution created for all families!" });
       setIsServicesModalOpen(false);
       setServiceName("");
     } catch (err: any) {
-      alert(err.message);
+      toast({ kind: "error", title: "Error", message: err.message || "Failed" });
     } finally {
       setSubmittingService(false);
     }
@@ -383,7 +385,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-white text-black font-sans pb-24 relative overflow-x-hidden">
+    <div className="flex flex-col min-h-screen bg-neutral-50 text-neutral-900 font-sans pb-24 relative overflow-x-hidden">
       {/* Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
@@ -397,41 +399,41 @@ export default function DashboardPage() {
         <div className="p-6 flex flex-col h-full">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-xl font-black text-emerald-600 uppercase tracking-tighter">Menu</h2>
-            <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
-              <X className="w-6 h-6 text-slate-400" />
+            <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors">
+              <X className="w-6 h-6 text-neutral-600" />
             </button>
           </div>
 
           <div className="flex-1 space-y-2">
-            <Link href="/" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 bg-emerald-50 text-emerald-600 rounded-2xl font-bold transition-all">
+            <Link href="/" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 bg-emerald-50 text-emerald-700 rounded-3xl font-bold transition-all">
               <HomeIcon className="w-5 h-5" />
               <span>{t.dashboard}</span>
             </Link>
-            <Link href="/families" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
+            <Link href="/families" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
               <Users className="w-5 h-5" />
               <span>{t.families}</span>
             </Link>
-            <Link href="/accounts" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
+            <Link href="/accounts" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
               <CreditCard className="w-5 h-5" />
               <span>{t.accounts}</span>
             </Link>
-            <Link href="/staff" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
+            <Link href="/staff" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
               <Briefcase className="w-5 h-5 text-emerald-600" />
               <span>{t.staff_management || t.staff}</span>
             </Link>
-          <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
+          <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
             <Settings className="w-5 h-5" />
             <span>{t.settings}</span>
           </Link>
           <Link 
             href="/events"
             onClick={() => setIsSidebarOpen(false)}
-            className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all"
+            className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
           >
             <Calendar className="w-5 h-5 text-amber-500" />
             <span>{t.events || "Events"}</span>
           </Link>
-          <div className="flex items-center gap-4 p-4 opacity-40 text-slate-600 rounded-2xl font-bold cursor-not-allowed">
+          <div className="flex items-center gap-4 p-4 opacity-40 text-neutral-600 rounded-3xl font-bold cursor-not-allowed">
               <HelpCircle className="w-5 h-5" />
               <span>Help & Support</span>
             </div>
@@ -439,7 +441,7 @@ export default function DashboardPage() {
 
           <button 
             onClick={handleLogout}
-            className="mt-auto flex items-center gap-4 p-4 text-red-500 hover:bg-red-50 rounded-2xl font-bold transition-all"
+            className="mt-auto flex items-center gap-4 p-4 text-red-600 hover:bg-red-50 rounded-3xl font-bold transition-all"
           >
             <LogOut className="w-5 h-5" />
             <span>{t.logout}</span>
@@ -448,15 +450,15 @@ export default function DashboardPage() {
       </aside>
 
       {/* Header */}
-      <header className="p-4 flex items-center justify-between sticky top-0 bg-white z-20">
+      <header className="p-4 flex items-center justify-between sticky top-0 bg-white/80 backdrop-blur-md z-20 border-b border-neutral-200">
         <button 
           onClick={() => setIsSidebarOpen(true)}
-          className="p-2 text-gray-600 hover:bg-slate-50 rounded-xl transition-colors"
+          className="p-2 text-neutral-600 hover:bg-neutral-50 rounded-3xl transition-colors"
         >
           <Menu className="w-6 h-6" />
         </button>
-        <h1 className="text-xl font-semibold">{t.home}</h1>
-        <Link href="/scan" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors">
+        <h1 className="text-lg font-black tracking-tight">{t.home}</h1>
+        <Link href="/scan" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-3xl transition-colors">
           <QrCode className="w-6 h-6" />
         </Link>
       </header>
@@ -505,24 +507,24 @@ export default function DashboardPage() {
 
         <div className="space-y-3">
           <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400 group-focus-within:text-emerald-600 transition-colors" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={lang === "tm" ? "எதை வேண்டுமானாலும் தேடுக..." : "Search anything..."}
-              className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm"
+              className="app-input pl-12 font-bold"
             />
           </div>
           <button
             onClick={handleSearch}
             disabled={searchLoading}
-            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
+            className="w-full app-btn-primary py-5 text-lg"
           >
             {searchLoading ? (lang === "tm" ? "தேடப்படுகிறது..." : "Searching...") : (lang === "tm" ? "தேடுக" : "Search")}
           </button>
           {searchError && (
-            <div className="bg-amber-50 border border-amber-100 text-amber-700 px-4 py-3 rounded-2xl text-[10px] font-bold">
+            <div className="app-card bg-amber-50 border-amber-200 px-4 py-3 text-[10px] font-bold text-amber-800">
               {searchError}
             </div>
           )}
@@ -530,53 +532,53 @@ export default function DashboardPage() {
 
         {resultType !== "none" && (
           <div className="space-y-3">
-            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">
+            <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest">
               {resultType === "members" ? t.member_results : t.family_results}
             </h3>
             {resultType === "members" ? (
               memberResults.length === 0 ? (
-                <div className="py-10 text-center bg-white rounded-[2rem] border border-slate-50">
-                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200">
+                <div className="py-10 text-center app-card">
+                  <div className="w-16 h-16 bg-neutral-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-neutral-300 border border-neutral-200">
                     <User className="w-8 h-8" />
                   </div>
-                  <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">
+                  <p className="text-neutral-600 font-bold uppercase tracking-widest text-xs">
                     {t.no_matches}
                   </p>
                 </div>
               ) : (
                 memberResults.map(m => (
-                  <Link key={m.id} href={`/families/${m.family_id}`} className="block bg-white rounded-2xl p-4 border border-slate-50 shadow-sm group hover:border-emerald-100 transition-all">
+                  <Link key={m.id} href={`/families/${m.family_id}`} className="block app-card p-4 group hover:border-emerald-200 transition-all">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500">
+                      <div className="w-12 h-12 rounded-3xl bg-emerald-50 flex items-center justify-center text-emerald-700 border border-emerald-100">
                         <User className="w-6 h-6" />
                       </div>
                       <div className="min-w-0">
-                        <h4 className="text-sm font-black text-slate-800 truncate">{m.full_name}</h4>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">{m.gender} • {m.age}</p>
+                        <h4 className="text-sm font-black text-neutral-900 truncate">{m.full_name}</h4>
+                        <p className="text-[10px] font-bold text-neutral-600 uppercase">{m.gender} • {m.age}</p>
                       </div>
                     </div>
                   </Link>
                 ))
               )
             ) : familyResults.length === 0 ? (
-              <div className="py-10 text-center bg-white rounded-[2rem] border border-slate-50">
-                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200">
+              <div className="py-10 text-center app-card">
+                <div className="w-16 h-16 bg-neutral-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-neutral-300 border border-neutral-200">
                   <Users className="w-8 h-8" />
                 </div>
-                <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">
+                <p className="text-neutral-600 font-bold uppercase tracking-widest text-xs">
                   {t.no_matches}
                 </p>
               </div>
             ) : (
               familyResults.map(f => (
-                <Link key={f.id} href={`/families/${f.id}`} className="block bg-white rounded-2xl p-4 border border-slate-50 shadow-sm group hover:border-emerald-100 transition-all">
+                <Link key={f.id} href={`/families/${f.id}`} className="block app-card p-4 group hover:border-emerald-200 transition-all">
                   <div className="flex items-center justify-between">
                     <div className="min-w-0">
-                      <h4 className="text-sm font-black text-slate-800 truncate">{f.head_name}</h4>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">{f.family_code}</p>
+                      <h4 className="text-sm font-black text-neutral-900 truncate">{f.head_name}</h4>
+                      <p className="text-[10px] font-bold text-neutral-600 uppercase">{f.family_code}</p>
                     </div>
                     {f.is_widow_head && (
-                      <span className="px-2 py-1 bg-rose-50 text-rose-500 text-[9px] font-black uppercase rounded-full border border-rose-100">Widow</span>
+                      <span className="app-pill bg-rose-50 text-rose-700 border border-rose-200">Widow</span>
                     )}
                   </div>
                 </Link>
@@ -587,15 +589,15 @@ export default function DashboardPage() {
 
         {/* Stats Section */}
         <div className="grid grid-cols-2 gap-4 pt-2">
-          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col gap-1">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.total_families}</span>
-            <span className="text-3xl font-black text-emerald-600">
+          <div className="app-card p-5 flex flex-col gap-1">
+            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">{t.total_families}</span>
+            <span className="text-3xl font-black text-neutral-900">
               {loading ? "..." : familyCount}
             </span>
           </div>
-          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col gap-1">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.total_members}</span>
-            <span className="text-3xl font-black text-[#003d5b]">
+          <div className="app-card p-5 flex flex-col gap-1">
+            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">{t.total_members}</span>
+            <span className="text-3xl font-black text-neutral-900">
               {loading ? "..." : memberCount}
             </span>
           </div>
@@ -603,19 +605,19 @@ export default function DashboardPage() {
 
         {/* Custom Bottom Grid Navigation */}
         <div className="grid grid-cols-3 gap-3 pt-4">
-          <Link href="/families" className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7]">
-            <Users className="w-6 h-6 text-[#00c853]" />
-            <span className="text-[10px] font-bold text-[#00c853]">{t.families}</span>
+          <Link href="/families" className="app-card p-4 flex flex-col items-center justify-center gap-1 hover:border-emerald-200 transition-all">
+            <Users className="w-6 h-6 text-emerald-600" />
+            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">{t.families}</span>
           </Link>
           
-          <Link href="/accounts" className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7]">
-            <Edit className="w-6 h-6 text-[#00c853]" />
-            <span className="text-[10px] font-bold text-[#00c853]">{t.accounts}</span>
+          <Link href="/accounts" className="app-card p-4 flex flex-col items-center justify-center gap-1 hover:border-emerald-200 transition-all">
+            <Edit className="w-6 h-6 text-emerald-600" />
+            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">{t.accounts}</span>
           </Link>
 
-          <Link href="/staff" className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7]">
-            <Briefcase className="w-6 h-6 text-[#00c853]" />
-            <span className="text-[10px] font-bold text-[#00c853]">{t.staff}</span>
+          <Link href="/staff" className="app-card p-4 flex flex-col items-center justify-center gap-1 hover:border-emerald-200 transition-all">
+            <Briefcase className="w-6 h-6 text-emerald-600" />
+            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">{t.staff}</span>
           </Link>
         </div>
       </main>
@@ -635,22 +637,22 @@ export default function DashboardPage() {
             </div>
 
             {/* Modal Tabs */}
-            <div className="flex p-1 bg-slate-100 rounded-2xl mb-8">
+            <div className="flex p-1 bg-emerald-50 rounded-3xl mb-8">
               <button 
                 onClick={() => {
                   setActiveServiceTab("create");
                   setIsScannerOpen(false);
                 }}
-                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                  activeServiceTab === "create" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400"
+                className={`flex-1 py-3 rounded-3xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  activeServiceTab === "create" ? "bg-emerald-700 text-white shadow-sm" : "text-emerald-700"
                 }`}
               >
                 {t.create_new}
               </button>
               <button 
                 onClick={() => setActiveServiceTab("scan")}
-                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                  activeServiceTab === "scan" ? "bg-white text-blue-600 shadow-sm" : "text-slate-400"
+                className={`flex-1 py-3 rounded-3xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  activeServiceTab === "scan" ? "bg-emerald-700 text-white shadow-sm" : "text-emerald-700"
                 }`}
               >
                 {t.qr_scan_distribution}
@@ -659,30 +661,30 @@ export default function DashboardPage() {
 
             {activeServiceTab === "create" ? (
               <form onSubmit={createServiceDistribution} className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.name}</label>
-                  <input 
+                <div className="app-field">
+                  <label className="app-label">{t.name}</label>
+                  <input
                     required
                     type="text"
                     value={serviceName}
-                    onChange={e => setServiceName(e.target.value)}
-                    className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
+                    onChange={(e) => setServiceName(e.target.value)}
+                    className="app-input font-bold"
                     placeholder="E.g. Ramadan Dates"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.date}</label>
-                  <input 
+                <div className="app-field">
+                  <label className="app-label">{t.date}</label>
+                  <input
                     required
                     type="date"
                     value={serviceDate}
-                    onChange={e => setServiceDate(e.target.value)}
-                    className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
+                    onChange={(e) => setServiceDate(e.target.value)}
+                    className="app-input font-bold"
                   />
                 </div>
 
-                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 mb-6">
+                <div className="bg-emerald-50 p-4 rounded-3xl border border-emerald-100 mb-6">
                   <p className="text-[10px] text-emerald-700 font-bold leading-relaxed uppercase tracking-tight">
                     {t.service_create_info}
                   </p>
@@ -691,19 +693,19 @@ export default function DashboardPage() {
                 <button
                   type="submit"
                   disabled={submittingService}
-                  className="w-full py-5 rounded-3xl font-black text-white bg-emerald-500 shadow-xl shadow-emerald-500/20 transition-all active:scale-[0.97] disabled:opacity-50"
+                  className="w-full app-btn-primary py-5 text-lg"
                 >
                   {submittingService ? "CREATING..." : t.distribute_all}
                 </button>
               </form>
             ) : (
               <div className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.select_service}</label>
-                  <select 
+                <div className="app-field">
+                  <label className="app-label">{t.select_service}</label>
+                  <select
                     value={selectedScanService}
-                    onChange={e => setSelectedScanService(e.target.value)}
-                    className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-blue-500/10 outline-none appearance-none"
+                    onChange={(e) => setSelectedScanService(e.target.value)}
+                    className="app-select font-bold appearance-none"
                   >
                     <option value="">-- {t.select_service} --</option>
                     {activeServices.map(s => (
@@ -716,12 +718,12 @@ export default function DashboardPage() {
                   <button
                     onClick={() => {
                       if (!selectedScanService) {
-                        alert(t.select_service_first);
+                        toast({ kind: "info", title: "Select service", message: t.select_service_first });
                         return;
                       }
                       setIsScannerOpen(true);
                     }}
-                    className="w-full py-8 rounded-3xl border-4 border-dashed border-slate-200 text-slate-400 hover:border-blue-500 hover:text-blue-500 transition-all flex flex-col items-center gap-3"
+                    className="w-full py-8 rounded-3xl border-2 border-dashed border-neutral-200 text-neutral-600 hover:border-emerald-300 hover:text-emerald-700 transition-all flex flex-col items-center gap-3 bg-white"
                   >
                     <QrCode className="w-12 h-12" />
                     <span className="font-black text-xs uppercase tracking-widest">{t.scan_qr}</span>
@@ -731,8 +733,8 @@ export default function DashboardPage() {
                     <div id="service-reader" className="w-full overflow-hidden rounded-[2rem] border-4 border-blue-500 shadow-lg shadow-blue-500/10"></div>
                     
                     {scanStatus.type !== 'idle' && (
-                      <div className={`p-4 rounded-2xl font-bold text-center text-xs animate-in zoom-in duration-300 ${
-                        scanStatus.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                      <div className={`p-4 rounded-3xl font-bold text-center text-xs animate-in zoom-in duration-300 ${
+                        scanStatus.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
                       }`}>
                         {scanStatus.message}
                       </div>
@@ -740,7 +742,7 @@ export default function DashboardPage() {
 
                     <button
                       onClick={() => setIsScannerOpen(false)}
-                      className="w-full py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold text-xs uppercase tracking-widest"
+                      className="w-full app-btn app-btn-soft py-4"
                     >
                       {t.stop_scanner}
                     </button>
