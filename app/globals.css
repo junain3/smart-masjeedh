@@ -92,4 +92,24 @@
     @apply bg-white text-emerald-700 shadow-md;
     @apply -translate-y-0.5;
   }
+
+  .app-title-outline-emerald {
+    color: #ffffff;
+    text-shadow:
+      -1px -1px 0 rgba(4, 120, 87, 0.95),
+      1px -1px 0 rgba(4, 120, 87, 0.95),
+      -1px 1px 0 rgba(4, 120, 87, 0.95),
+      1px 1px 0 rgba(4, 120, 87, 0.95),
+      0 10px 30px rgba(0, 0, 0, 0.25);
+  }
+
+  .app-title-outline-gold {
+    color: #ffffff;
+    text-shadow:
+      -1px -1px 0 rgba(161, 98, 7, 0.95),
+      1px -1px 0 rgba(161, 98, 7, 0.95),
+      -1px 1px 0 rgba(161, 98, 7, 0.95),
+      1px 1px 0 rgba(161, 98, 7, 0.95),
+      0 10px 30px rgba(0, 0, 0, 0.25);
+  }
 }

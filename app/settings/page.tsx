@@ -38,18 +38,37 @@ export default function SettingsPage() {
 
       // Load masjid profile
       try {
-        const { data, error } = await supabase
+        // Prefer `name` if available; fallback to `masjid_name` if schema cache is stale.
+        let data: any = null;
+        const first = await supabase
           .from("masjids")
-          .select("id, masjid_name, tagline, logo_url")
+          .select("id, name, tagline, logo_url")
           .eq("id", ctx.masjidId)
           .maybeSingle();
 
-        if (error) throw error;
+        if (!first.error) {
+          data = first.data as any;
+        } else {
+          const msg = first.error.message || "";
+          if (msg.includes("schema cache") || msg.includes("Could not find") || msg.includes("column")) {
+            const second = await supabase
+              .from("masjids")
+              .select("id, masjid_name, tagline, logo_url")
+              .eq("id", ctx.masjidId)
+              .maybeSingle();
+            if (second.error) throw second.error;
+            data = second.data as any;
+          } else {
+            throw first.error;
+          }
+        }
 
         if (data) {
-          setName((data as any).masjid_name || "");
+          setName((data as any).name || (data as any).masjid_name || "MUBEEN JUMMA MASJEEDH");
           setTagline((data as any).tagline || "");
           setLogoUrl((data as any).logo_url || "");
+        } else {
+          setName("MUBEEN JUMMA MASJEEDH");
         }
       } catch (e: any) {
         // If table exists but schema cache is stale or columns don't exist, keep defaults.
@@ -57,6 +76,7 @@ export default function SettingsPage() {
         const msg = e?.message || "";
         if (msg.includes("schema cache") || msg.includes("column") || msg.includes("Could not find")) {
           // ignore - allow settings screen to render
+          setName("MUBEEN JUMMA MASJEEDH");
         } else {
           throw e;
         }
@@ -98,31 +118,48 @@ export default function SettingsPage() {
 
     try {
       // Save profile
-      const { error } = await supabase
+      const preferredName = (name || "MUBEEN JUMMA MASJEEDH").trim();
+
+      const first = await supabase
         .from("masjids")
         .upsert({
           id: ctx.masjidId,
-          masjid_name: name,
+          name: preferredName,
+          masjid_name: preferredName,
           tagline,
-          logo_url: logoUrl
+          logo_url: logoUrl,
         });
 
-      if (error) {
-        const msg = error.message || "";
-        if (msg.includes("schema cache") || msg.includes("Could not find") || msg.includes("column")) {
-          throw new Error(
-            "Supabase schema cache error. Please run this once in Supabase SQL Editor: NOTIFY pgrst, 'reload schema'; and verify Vercel is using the same Supabase project URL where you ran the migration."
-          );
-        }
-        if (msg.includes("logo_url")) {
+      if (first.error) {
+        const msg = first.error.message || "";
+
+        // If `name` column doesn't exist / cache stale, retry without it.
+        if (msg.includes("schema cache") || msg.includes("Could not find") || msg.includes("column") || msg.includes("name")) {
+          const second = await supabase
+            .from("masjids")
+            .upsert({
+              id: ctx.masjidId,
+              masjid_name: preferredName,
+              tagline,
+              logo_url: logoUrl,
+            });
+          if (second.error) {
+            const msg2 = second.error.message || "";
+            if (msg2.includes("schema cache") || msg2.includes("Could not find") || msg2.includes("column")) {
+              throw new Error(
+                "Supabase schema cache error. Please run this once in Supabase SQL Editor: NOTIFY pgrst, 'reload schema'; and verify Vercel is using the same Supabase project URL where you ran the migration."
+              );
+            }
+            if (msg2.includes("logo_url")) {
+              throw new Error("உங்கள் டேட்டாபேஸில் 'logo_url' என்ற காலம் (Column) இல்லை. தயவுசெய்து நான் கொடுத்த SQL குறியீட்டை Supabase-இல் இயக்கவும்.");
+            }
+            throw second.error;
+          }
+        } else if (msg.includes("logo_url")) {
           throw new Error("உங்கள் டேட்டாபேஸில் 'logo_url' என்ற காலம் (Column) இல்லை. தயவுசெய்து நான் கொடுத்த SQL குறியீட்டை Supabase-இல் இயக்கவும்.");
+        } else {
+          throw first.error;
         }
-        if (msg.includes("name")) {
-          throw new Error(
-            "உங்கள் Supabase-ல் 'masjids.name' column கிடைக்கவில்லை / schema cache update ஆகவில்லை. SQL Editor-ல் NOTIFY pgrst, 'reload schema'; run பண்ணி, Vercel-ல் சரியான Supabase URL set பண்ணியிருக்கீங்களா check பண்ணுங்க."
-          );
-        }
-        throw error;
       }
 
       toast({
@@ -190,17 +227,46 @@ export default function SettingsPage() {
           </div>
           
           <div className="app-card p-6 space-y-6">
-            <div className="app-field">
-              <label className="app-label">{t.name}</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="app-input font-bold"
-                placeholder="Masjid Name"
-              />
+            {/* Logo + Name (dominant, top-centered) */}
+            <div className="text-center space-y-4">
+              <div className="flex justify-center">
+                <div className="relative">
+                  <div className="w-40 h-40 rounded-full app-glass border-2 border-white/80 shadow-2xl overflow-hidden flex items-center justify-center">
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="text-emerald-700">
+                        <User className="w-14 h-14" />
+                      </div>
+                    )}
+                  </div>
+
+                  <label className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-4 py-2 app-glass rounded-[999px] border border-white/70 cursor-pointer hover:bg-white/70 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleLogoUpload}
+                    />
+                    <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-900">
+                      <Camera className="w-4 h-4 text-emerald-700" />
+                      Change Logo
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="space-y-1 pt-2">
+                <p className="text-2xl font-black tracking-tight app-title-outline-emerald">
+                  MUBEEN JUMMA MASJEEDH
+                </p>
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-600">
+                  {lang === "tm" ? "மஸ்ஜித் சுயவிவரம்" : "Masjid Profile"}
+                </p>
+              </div>
             </div>
 
+            {/* Keep TAGLINE field below the new hero */}
             <div className="app-field">
               <label className="app-label">{t.tagline}</label>
               <input
@@ -214,32 +280,13 @@ export default function SettingsPage() {
 
             <div className="app-field">
               <label className="app-label">{t.logo_url}</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={logoUrl}
-                  onChange={(e) => setLogoUrl(e.target.value)}
-                  className="app-input font-bold text-xs"
-                  placeholder="https://image-url.com"
-                />
-
-                <label className="w-14 h-14 bg-emerald-50 rounded-3xl flex items-center justify-center overflow-hidden border border-emerald-100 cursor-pointer hover:bg-emerald-100 transition-colors shrink-0">
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    onChange={handleLogoUpload}
-                  />
-                  {logoUrl ? (
-                    <img src={logoUrl} alt="Preview" className="w-full h-full object-contain" />
-                  ) : (
-                    <Camera className="w-6 h-6 text-emerald-500" />
-                  )}
-                </label>
-              </div>
-              <p className="text-[9px] text-neutral-600 font-bold ml-1 italic uppercase tracking-tighter">
-                Click camera to open camera or upload file
-              </p>
+              <input
+                type="text"
+                value={logoUrl}
+                onChange={(e) => setLogoUrl(e.target.value)}
+                className="app-input font-bold text-xs"
+                placeholder="https://image-url.com"
+              />
             </div>
           </div>
         </section>
