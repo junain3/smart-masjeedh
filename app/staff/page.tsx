@@ -113,6 +113,7 @@ export default function StaffManagementPage() {
   const [tab, setTab] = useState<"board" | "employees">("board");
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
+  const [canManage, setCanManage] = useState(false);
 
   const [admins, setAdmins] = useState<BoardMember[]>([]);
   const [employeesSource, setEmployeesSource] = useState<"employees" | "user_roles" | "demo">("demo");
@@ -150,6 +151,8 @@ export default function StaffManagementPage() {
           router.push("/login");
           return;
         }
+
+        setCanManage(ctx.role === "super_admin" || ctx.role === "co_admin");
 
         // Super admin / co-admin should appear under board members
         try {
@@ -246,6 +249,12 @@ export default function StaffManagementPage() {
     fetchAll();
   }, [router]);
 
+  const formatSupabaseError = (e: any) => {
+    if (!e) return "Unknown error";
+    const parts = [e.message, e.details, e.hint, e.code].filter(Boolean);
+    return parts.join(" • ");
+  };
+
   const openBoardCreate = () => {
     setEditingBoard(null);
     setBoardFullName("");
@@ -303,7 +312,7 @@ export default function StaffManagementPage() {
         .eq("masjid_id", ctx.masjidId);
       if (boardData) setBoard(boardData as any);
     } catch (e: any) {
-      toast({ kind: "error", title: "Error", message: e.message || "Failed" });
+      toast({ kind: "error", title: "Error", message: formatSupabaseError(e) });
     } finally {
       setSubmitting(false);
     }
@@ -337,7 +346,7 @@ export default function StaffManagementPage() {
       setBoard((prev) => prev.filter((x) => x.id !== m.id));
       toast({ kind: "success", title: "Deleted", message: "Removed" });
     } catch (e: any) {
-      toast({ kind: "error", title: "Error", message: e.message || "Failed" });
+      toast({ kind: "error", title: "Error", message: formatSupabaseError(e) });
     }
   };
 
@@ -447,7 +456,7 @@ export default function StaffManagementPage() {
       setEmployees((prev) => prev.filter((x) => x.id !== e.id));
       toast({ kind: "success", title: "Deleted", message: "Removed" });
     } catch (err: any) {
-      toast({ kind: "error", title: "Error", message: err.message || "Failed" });
+      toast({ kind: "error", title: "Error", message: formatSupabaseError(err) });
     }
   };
 
@@ -501,15 +510,22 @@ export default function StaffManagementPage() {
                 <Building2 className="w-5 h-5 text-amber-500" />
                 <h2 className="text-sm font-black uppercase tracking-widest">{t.board_members}</h2>
               </div>
-              <button
-                onClick={openBoardCreate}
-                className="px-4 py-3 rounded-[999px] bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-700/25 active:scale-[0.98] transition-all"
-              >
-                <span className="inline-flex items-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  {t.add || "Add"}
-                </span>
-              </button>
+              {canManage ? (
+                <button
+                  onClick={openBoardCreate}
+                  className="px-4 py-3 rounded-[999px] bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-700/25 active:scale-[0.98] transition-all"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    {t.add || "Add"}
+                  </span>
+                </button>
+              ) : (
+                <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                  <Shield className="w-4 h-4" />
+                  Admin only
+                </div>
+              )}
             </div>
 
             {/* Hierarchical card chart (clean, card-based) */}
@@ -517,11 +533,11 @@ export default function StaffManagementPage() {
               {admins.length ? (
                 <RoleSection title={(t as any).admin_settings || "Admins"} items={admins} grid />
               ) : null}
-              <RoleSection title={t.president} items={grouped.president} onEdit={openBoardEdit} onDelete={deleteBoardMember} />
-              <RoleSection title={t.vice_presidents} items={grouped.vice} onEdit={openBoardEdit} onDelete={deleteBoardMember} />
-              <RoleSection title={t.secretary} items={grouped.secretary} onEdit={openBoardEdit} onDelete={deleteBoardMember} />
-              <RoleSection title={t.treasurer} items={grouped.treasurer} onEdit={openBoardEdit} onDelete={deleteBoardMember} />
-              <RoleSection title={t.members_list} items={grouped.member} grid onEdit={openBoardEdit} onDelete={deleteBoardMember} />
+              <RoleSection title={t.president} items={grouped.president} onEdit={canManage ? openBoardEdit : undefined} onDelete={canManage ? deleteBoardMember : undefined} />
+              <RoleSection title={t.vice_presidents} items={grouped.vice} onEdit={canManage ? openBoardEdit : undefined} onDelete={canManage ? deleteBoardMember : undefined} />
+              <RoleSection title={t.secretary} items={grouped.secretary} onEdit={canManage ? openBoardEdit : undefined} onDelete={canManage ? deleteBoardMember : undefined} />
+              <RoleSection title={t.treasurer} items={grouped.treasurer} onEdit={canManage ? openBoardEdit : undefined} onDelete={canManage ? deleteBoardMember : undefined} />
+              <RoleSection title={t.members_list} items={grouped.member} grid onEdit={canManage ? openBoardEdit : undefined} onDelete={canManage ? deleteBoardMember : undefined} />
             </div>
           </div>
         ) : (
@@ -531,7 +547,7 @@ export default function StaffManagementPage() {
                 <Briefcase className="w-5 h-5 text-emerald-600" />
                 <h2 className="text-sm font-black uppercase tracking-widest">{t.employees}</h2>
               </div>
-              {employeesSource === "employees" ? (
+              {employeesSource === "employees" && canManage ? (
                 <button
                   onClick={openEmployeeCreate}
                   className="px-4 py-3 rounded-[999px] bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-700/25 active:scale-[0.98] transition-all"
@@ -601,7 +617,7 @@ export default function StaffManagementPage() {
                         >
                           <ChevronRight className="w-5 h-5" />
                         </Link>
-                        {employeesSource === "employees" ? (
+                        {employeesSource === "employees" && canManage ? (
                           <>
                             <button
                               onClick={() => openEmployeeEdit(e)}
