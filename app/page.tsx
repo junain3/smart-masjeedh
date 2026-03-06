@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search, Briefcase } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+
 import { getTenantContext } from "@/lib/tenant";
 import { useAppToast } from "@/components/ToastProvider";
 import { QrScannerModal } from "@/components/QrScannerModal";
@@ -48,6 +49,7 @@ export default function DashboardPage() {
   const [memberResults, setMemberResults] = useState<MemberRes[]>([]);
   const [familyResults, setFamilyResults] = useState<FamilyRes[]>([]);
   const [resultType, setResultType] = useState<"none" | "members" | "families" | "mixed">("none");
+  const searchRequestSeq = useRef(0);
 
   const parseQuery = (q: string) => {
     const s = q.trim().toLowerCase();
@@ -74,15 +76,19 @@ export default function DashboardPage() {
     return { kind: "free" as const, text: q.trim() };
   };
 
-  const handleSearch = async () => {
+  const runSearch = async (query: string) => {
     if (!supabase) return;
-    if (!searchQuery.trim()) {
+    const q = query.trim();
+
+    if (q.length < 2) {
       setSearchError("");
       setMemberResults([]);
       setFamilyResults([]);
       setResultType("none");
       return;
     }
+
+    const requestId = ++searchRequestSeq.current;
     setSearchLoading(true);
     setSearchError("");
     setMemberResults([]);
@@ -91,10 +97,11 @@ export default function DashboardPage() {
     try {
       const ctx = await getTenantContext();
       if (!ctx) {
+        if (requestId !== searchRequestSeq.current) return;
         setSearchError(lang === "tm" ? "லாகின் தேவை" : "Login required");
         return;
       }
-      const p = parseQuery(searchQuery);
+      const p = parseQuery(q);
       if (p.kind === "widows") {
         const { data, error } = await supabase
           .from("families")
@@ -103,6 +110,7 @@ export default function DashboardPage() {
           .eq("is_widow_head", true)
           .order("family_code", { ascending: true });
         if (error) throw error;
+        if (requestId !== searchRequestSeq.current) return;
         setFamilyResults(data || []);
         setResultType("families");
         return;
@@ -116,6 +124,7 @@ export default function DashboardPage() {
         if (p.gender) q = q.eq("gender", p.gender);
         const { data, error } = await q;
         if (error) throw error;
+        if (requestId !== searchRequestSeq.current) return;
         setMemberResults(data || []);
         setResultType("members");
         return;
@@ -130,6 +139,7 @@ export default function DashboardPage() {
         if (p.gender) q = q.eq("gender", p.gender);
         const { data, error } = await q;
         if (error) throw error;
+        if (requestId !== searchRequestSeq.current) return;
         setMemberResults(data || []);
         setResultType("members");
         return;
@@ -158,6 +168,8 @@ export default function DashboardPage() {
         if (famRes.error) throw famRes.error;
         if (memRes.error) throw memRes.error;
 
+        if (requestId !== searchRequestSeq.current) return;
+
         const famData = (famRes.data || []) as any[];
         const memData = (memRes.data || []) as any[];
 
@@ -174,11 +186,34 @@ export default function DashboardPage() {
         return;
       }
     } catch (e: any) {
+      if (requestId !== searchRequestSeq.current) return;
       setSearchError(e.message || "Search failed");
     } finally {
+      if (requestId !== searchRequestSeq.current) return;
       setSearchLoading(false);
     }
   };
+
+  const handleSearch = async () => {
+    await runSearch(searchQuery);
+  };
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchError("");
+      setMemberResults([]);
+      setFamilyResults([]);
+      setResultType("none");
+      return;
+    }
+
+    const tmr = setTimeout(() => {
+      runSearch(searchQuery);
+    }, 350);
+
+    return () => clearTimeout(tmr);
+  }, [searchQuery]);
 
   const fetchActiveServices = async () => {
     if (!supabase) return;
