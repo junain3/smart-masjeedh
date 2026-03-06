@@ -94,8 +94,15 @@ export default function EventDetailPage() {
           masjid_id: ctx.masjidId,
           status: "Pending",
         }));
-        const { error: insErr } = await supabase.from("event_attendance").insert(missingRows);
-        if (insErr) throw insErr;
+
+        const chunkSize = 400;
+        for (let i = 0; i < missingRows.length; i += chunkSize) {
+          const chunk = missingRows.slice(i, i + chunkSize);
+          const { error: insErr } = await supabase
+            .from("event_attendance")
+            .upsert(chunk as any, { onConflict: "event_id,family_id" });
+          if (insErr) throw insErr;
+        }
       }
 
       const { data: a2, error: attErr2 } = await supabase
@@ -106,6 +113,8 @@ export default function EventDetailPage() {
         .order("created_at", { ascending: true });
       if (attErr2) throw attErr2;
       setRows((a2 as any) || []);
+    } catch (err: any) {
+      toast({ kind: "error", title: "Error", message: err.message || "Failed" });
     } finally {
       setLoading(false);
     }

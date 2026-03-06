@@ -116,10 +116,23 @@ export default function EventsPage() {
           event_id: ev.id,
           family_id: f.id,
           masjid_id: ctx.masjidId,
-          status: "Pending"
+          status: "Pending",
         }));
-        const { error: atErr } = await supabase.from("event_attendance").insert(rows);
-        if (atErr) throw atErr;
+
+        // Insert in chunks to avoid request size/row limits
+        const chunkSize = 400;
+        for (let i = 0; i < rows.length; i += chunkSize) {
+          const chunk = rows.slice(i, i + chunkSize);
+          const { error: atErr } = await supabase.from("event_attendance").insert(chunk);
+          if (atErr) {
+            toast({
+              kind: "error",
+              title: "Attendance linking failed",
+              message: atErr.message || "Failed to attach all families",
+            });
+            break;
+          }
+        }
       }
       setIsOpen(false);
       setName("");
