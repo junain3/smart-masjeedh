@@ -47,7 +47,7 @@ export default function DashboardPage() {
   const [searchError, setSearchError] = useState("");
   const [memberResults, setMemberResults] = useState<MemberRes[]>([]);
   const [familyResults, setFamilyResults] = useState<FamilyRes[]>([]);
-  const [resultType, setResultType] = useState<"none" | "members" | "families">("none");
+  const [resultType, setResultType] = useState<"none" | "members" | "families" | "mixed">("none");
 
   const parseQuery = (q: string) => {
     const s = q.trim().toLowerCase();
@@ -76,6 +76,13 @@ export default function DashboardPage() {
 
   const handleSearch = async () => {
     if (!supabase) return;
+    if (!searchQuery.trim()) {
+      setSearchError("");
+      setMemberResults([]);
+      setFamilyResults([]);
+      setResultType("none");
+      return;
+    }
     setSearchLoading(true);
     setSearchError("");
     setMemberResults([]);
@@ -129,15 +136,41 @@ export default function DashboardPage() {
       }
       if (p.kind === "free") {
         const text = p.text.toLowerCase();
-        const { data, error } = await supabase
-          .from("families")
-          .select("id,family_code,head_name,is_widow_head")
-          .eq("masjid_id", ctx.masjidId)
-          .or(`head_name.ilike.%${text}%,family_code.ilike.%${text}%`)
-          .order("family_code", { ascending: true });
-        if (error) throw error;
-        setFamilyResults(data || []);
-        setResultType("families");
+        const [famRes, memRes] = await Promise.all([
+          supabase
+            .from("families")
+            .select("id,family_code,head_name,is_widow_head")
+            .eq("masjid_id", ctx.masjidId)
+            .or(
+              `head_name.ilike.%${text}%,family_code.ilike.%${text}%,phone.ilike.%${text}%,address.ilike.%${text}%`
+            )
+            .order("family_code", { ascending: true }),
+          supabase
+            .from("members")
+            .select("id,family_id,full_name,age,gender")
+            .eq("masjid_id", ctx.masjidId)
+            .or(
+              `full_name.ilike.%${text}%,phone.ilike.%${text}%,nic.ilike.%${text}%,member_code.ilike.%${text}%`
+            )
+            .order("full_name", { ascending: true }),
+        ]);
+
+        if (famRes.error) throw famRes.error;
+        if (memRes.error) throw memRes.error;
+
+        const famData = (famRes.data || []) as any[];
+        const memData = (memRes.data || []) as any[];
+
+        setFamilyResults(famData);
+        setMemberResults(memData);
+
+        if (famData.length > 0 && memData.length > 0) {
+          setResultType("mixed");
+        } else if (memData.length > 0) {
+          setResultType("members");
+        } else {
+          setResultType("families");
+        }
         return;
       }
     } catch (e: any) {
@@ -497,58 +530,71 @@ export default function DashboardPage() {
         </div>
 
         {resultType !== "none" && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest">
-              {resultType === "members" ? t.member_results : t.family_results}
-            </h3>
-            {resultType === "members" ? (
-              memberResults.length === 0 ? (
-                <div className="py-10 text-center app-card">
-                  <div className="w-16 h-16 bg-neutral-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-neutral-300 border border-neutral-200">
-                    <User className="w-8 h-8" />
-                  </div>
-                  <p className="text-neutral-600 font-bold uppercase tracking-widest text-xs">
-                    {t.no_matches}
-                  </p>
-                </div>
-              ) : (
-                memberResults.map(m => (
-                  <Link key={m.id} href={`/families/${m.family_id}`} className="block app-card p-4 group hover:border-emerald-200 transition-all">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-3xl bg-emerald-50 flex items-center justify-center text-emerald-700 border border-emerald-100">
-                        <User className="w-6 h-6" />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-sm font-black text-neutral-900 truncate">{m.full_name}</h4>
-                        <p className="text-[10px] font-bold text-neutral-600 uppercase">{m.gender} • {m.age}</p>
-                      </div>
+          <div className="space-y-6">
+            {(resultType === "members" || resultType === "mixed") && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest">{t.member_results}</h3>
+                {memberResults.length === 0 ? (
+                  <div className="py-10 text-center app-card">
+                    <div className="w-16 h-16 bg-neutral-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-neutral-300 border border-neutral-200">
+                      <User className="w-8 h-8" />
                     </div>
-                  </Link>
-                ))
-              )
-            ) : familyResults.length === 0 ? (
-              <div className="py-10 text-center app-card">
-                <div className="w-16 h-16 bg-neutral-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-neutral-300 border border-neutral-200">
-                  <Users className="w-8 h-8" />
-                </div>
-                <p className="text-neutral-600 font-bold uppercase tracking-widest text-xs">
-                  {t.no_matches}
-                </p>
+                    <p className="text-neutral-600 font-bold uppercase tracking-widest text-xs">{t.no_matches}</p>
+                  </div>
+                ) : (
+                  memberResults.map((m) => (
+                    <Link
+                      key={m.id}
+                      href={`/families/${m.family_id}`}
+                      className="block app-card p-4 group hover:border-emerald-200 transition-all"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-3xl bg-emerald-50 flex items-center justify-center text-emerald-700 border border-emerald-100">
+                          <User className="w-6 h-6" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-black text-neutral-900 truncate">{m.full_name}</h4>
+                          <p className="text-[10px] font-bold text-neutral-600 uppercase">
+                            {m.gender} • {m.age}
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  ))
+                )}
               </div>
-            ) : (
-              familyResults.map(f => (
-                <Link key={f.id} href={`/families/${f.id}`} className="block app-card p-4 group hover:border-emerald-200 transition-all">
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0">
-                      <h4 className="text-sm font-black text-neutral-900 truncate">{f.head_name}</h4>
-                      <p className="text-[10px] font-bold text-neutral-600 uppercase">{f.family_code}</p>
+            )}
+
+            {(resultType === "families" || resultType === "mixed") && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest">{t.family_results}</h3>
+                {familyResults.length === 0 ? (
+                  <div className="py-10 text-center app-card">
+                    <div className="w-16 h-16 bg-neutral-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-neutral-300 border border-neutral-200">
+                      <Users className="w-8 h-8" />
                     </div>
-                    {f.is_widow_head && (
-                      <span className="app-pill bg-rose-50 text-rose-700 border border-rose-200">Widow</span>
-                    )}
+                    <p className="text-neutral-600 font-bold uppercase tracking-widest text-xs">{t.no_matches}</p>
                   </div>
-                </Link>
-              ))
+                ) : (
+                  familyResults.map((f) => (
+                    <Link
+                      key={f.id}
+                      href={`/families/${f.id}`}
+                      className="block app-card p-4 group hover:border-emerald-200 transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-black text-neutral-900 truncate">{f.head_name}</h4>
+                          <p className="text-[10px] font-bold text-neutral-600 uppercase">{f.family_code}</p>
+                        </div>
+                        {f.is_widow_head && (
+                          <span className="app-pill bg-rose-50 text-rose-700 border border-rose-200">Widow</span>
+                        )}
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
             )}
           </div>
         )}
