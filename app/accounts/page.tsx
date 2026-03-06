@@ -9,10 +9,10 @@ import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
 import { EmptyState } from "@/components/EmptyState";
+import { QrScannerModal } from "@/components/QrScannerModal";
 
 declare module "jspdf" {
   interface jsPDF {
@@ -94,64 +94,16 @@ export default function AccountsPage() {
     fetchData();
   }, []);
 
-  useEffect(() => {
-    if (isScannerOpen) {
-      let scanner: Html5QrcodeScanner | null = null;
-      (async () => {
-        try {
-          const granted = localStorage.getItem("camera_permission_granted") === "1";
-          if (!granted && navigator?.mediaDevices?.getUserMedia) {
-            await navigator.mediaDevices.getUserMedia({ video: true });
-            localStorage.setItem("camera_permission_granted", "1");
-          }
-        } catch {
-          // ignore - browser will prompt via scanner
-        }
-
-        scanner = new Html5QrcodeScanner(
-        "accounts-reader",
-        { 
-          fps: 15, 
-          qrbox: { width: 250, height: 250 },
-          supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-          rememberLastUsedCamera: true,
-          showTorchButtonIfSupported: true,
-          showZoomSliderIfSupported: true
-        },
-        false
-      );
-
-        scanner.render(onScanSuccess, onScanFailure);
-
-        function onScanSuccess(decoded: any) {
-          const decodedText =
-            typeof decoded === "string"
-              ? decoded
-              : (decoded?.decodedText as string | undefined) ||
-                (decoded?.text as string | undefined) ||
-                String(decoded ?? "");
-
-          if (decodedText.startsWith("smart-masjeedh:family:")) {
-            const familyId = decodedText.split(":")[2];
-            setSelectedFamilyId(familyId);
-            setType("subscription");
-            setIsModalOpen(true);
-            try {
-              scanner?.clear();
-            } catch {}
-            setIsScannerOpen(false);
-          }
-        }
-        function onScanFailure(_err: any) {}
-      })();
-
-      return () => {
-        try {
-          scanner?.clear();
-        } catch {}
-      };
+  const handleQrDecodedText = (decodedText: string) => {
+    if (!decodedText) return;
+    if (decodedText.startsWith("smart-masjeedh:family:")) {
+      const familyId = decodedText.split(":")[2];
+      setSelectedFamilyId(familyId);
+      setType("subscription");
+      setIsModalOpen(true);
+      setIsScannerOpen(false);
     }
-  }, [isScannerOpen]);
+  };
 
   useEffect(() => {
     if (editingTransaction) {
@@ -516,22 +468,13 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      {isScannerOpen && (
-        <div className="fixed inset-0 z-[60] bg-black flex flex-col">
-          <header className="p-6 flex items-center justify-between text-white">
-            <h2 className="text-xl font-black uppercase tracking-widest">{t.scan_qr}</h2>
-            <button onClick={() => setIsScannerOpen(false)} className="p-3 bg-white/10 rounded-3xl">
-              <X className="w-6 h-6" />
-            </button>
-          </header>
-          <div className="flex-1 flex flex-col items-center justify-center p-6">
-            <div id="accounts-reader" className="w-full max-w-sm rounded-[2.5rem] overflow-hidden border-4 border-emerald-500 shadow-2xl shadow-emerald-500/20"></div>
-            <p className="mt-8 text-white/60 text-sm font-bold uppercase tracking-widest text-center">
-              Align QR Code within the frame to scan
-            </p>
-          </div>
-        </div>
-      )}
+      <QrScannerModal
+        open={isScannerOpen}
+        title={t.scan_qr}
+        containerId="accounts-reader"
+        onClose={() => setIsScannerOpen(false)}
+        onDecodedText={handleQrDecodedText}
+      />
 
       {/* Add Transaction Modal */}
       {isModalOpen && (

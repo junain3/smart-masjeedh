@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import { QrScannerModal } from "@/components/QrScannerModal";
 
 declare module "jspdf" {
   interface jsPDF {
@@ -92,66 +92,14 @@ export default function FamiliesPage() {
     }
   }, [editingFamily]);
 
-  useEffect(() => {
-    if (isScannerOpen) {
-      let scanner: Html5QrcodeScanner | null = null;
-      (async () => {
-        try {
-          const granted = localStorage.getItem("camera_permission_granted") === "1";
-          if (!granted && navigator?.mediaDevices?.getUserMedia) {
-            await navigator.mediaDevices.getUserMedia({ video: true });
-            localStorage.setItem("camera_permission_granted", "1");
-          }
-        } catch {
-          // ignore - browser will prompt via scanner
-        }
-
-        scanner = new Html5QrcodeScanner(
-        "reader",
-        { 
-          fps: 15, 
-          qrbox: { width: 250, height: 250 },
-          supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-          rememberLastUsedCamera: true,
-          showTorchButtonIfSupported: true,
-          showZoomSliderIfSupported: true
-        },
-        /* verbose= */ false
-      );
-
-        scanner.render(onScanSuccess, onScanFailure);
-
-        function onScanSuccess(decoded: any) {
-          const decodedText =
-            typeof decoded === "string"
-              ? decoded
-              : (decoded?.decodedText as string | undefined) ||
-                (decoded?.text as string | undefined) ||
-                String(decoded ?? "");
-
-          // smart-masjeedh:family:UUID
-          if (decodedText.startsWith("smart-masjeedh:family:")) {
-            const familyId = decodedText.split(":")[2];
-            try {
-              scanner?.clear();
-            } catch {}
-            setIsScannerOpen(false);
-            router.push(`/families/${familyId}`);
-          }
-        }
-
-        function onScanFailure(_error: any) {
-          // ignore
-        }
-      })();
-
-      return () => {
-        try {
-          scanner?.clear();
-        } catch {}
-      };
+  const handleQrDecodedText = (decodedText: string) => {
+    if (!decodedText) return;
+    if (decodedText.startsWith("smart-masjeedh:family:")) {
+      const familyId = decodedText.split(":")[2];
+      setIsScannerOpen(false);
+      router.push(`/families/${familyId}`);
     }
-  }, [isScannerOpen]);
+  };
 
   useEffect(() => {
     if (isOpen && families.length > 0 && isLive && !editingFamily) {
@@ -529,23 +477,13 @@ export default function FamiliesPage() {
         </div>
       )}
 
-      {/* QR Scanner Modal */}
-      {isScannerOpen && (
-        <div className="fixed inset-0 z-[60] bg-black flex flex-col">
-          <header className="p-6 flex items-center justify-between text-white">
-            <h2 className="text-xl font-black uppercase tracking-widest">{t.scan_qr}</h2>
-            <button onClick={() => setIsScannerOpen(false)} className="p-3 bg-white/10 rounded-full">
-              <X className="w-6 h-6" />
-            </button>
-          </header>
-          <div className="flex-1 flex flex-col items-center justify-center p-6">
-            <div id="reader" className="w-full max-w-sm rounded-[2.5rem] overflow-hidden border-4 border-emerald-500 shadow-2xl shadow-emerald-500/20"></div>
-            <p className="mt-8 text-white/60 text-sm font-bold uppercase tracking-widest text-center">
-              Align QR Code within the frame to scan
-            </p>
-          </div>
-        </div>
-      )}
+      <QrScannerModal
+        open={isScannerOpen}
+        title={t.scan_qr}
+        containerId="reader"
+        onClose={() => setIsScannerOpen(false)}
+        onDecodedText={handleQrDecodedText}
+      />
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex items-center justify-around py-4 px-6 shadow-2xl z-50">

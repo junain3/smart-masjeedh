@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { useAppToast } from "@/components/ToastProvider";
+import { QrScannerModal } from "@/components/QrScannerModal";
 
 type MasjidProfile = {
   name: string;
@@ -170,15 +171,10 @@ export default function DashboardPage() {
     }
   }, [isServicesModalOpen]);
 
-  const handleServiceScan = async (decoded: any) => {
+  const handleServiceScan = async (decodedTextRaw: string) => {
     if (!supabase || !selectedScanService) return;
 
-    const decodedText =
-      typeof decoded === "string"
-        ? decoded
-        : (decoded?.decodedText as string | undefined) ||
-          (decoded?.text as string | undefined) ||
-          String(decoded ?? "");
+    const decodedText = decodedTextRaw || "";
     
     try {
       if (decodedText.startsWith("smart-masjeedh:family:")) {
@@ -211,37 +207,6 @@ export default function DashboardPage() {
       setTimeout(() => setScanStatus({ type: 'idle', message: '' }), 3000);
     }
   };
-
-  useEffect(() => {
-    let html5QrCode: any = null;
-    if (isScannerOpen) {
-      (async () => {
-        try {
-          const granted = localStorage.getItem("camera_permission_granted") === "1";
-          if (!granted && navigator?.mediaDevices?.getUserMedia) {
-            await navigator.mediaDevices.getUserMedia({ video: true });
-            localStorage.setItem("camera_permission_granted", "1");
-          }
-        } catch {
-          // ignore
-        }
-        import("html5-qrcode").then((lib: any) => {
-          html5QrCode = new lib.Html5Qrcode("service-reader");
-          const config = { fps: 15, qrbox: { width: 260, height: 260 } };
-          html5QrCode
-            .start({ facingMode: "environment" }, config,
-              (decoded: any) => handleServiceScan(decoded),
-              (_err: any) => {})
-            .catch((_e: any) => {});
-        });
-      })();
-    }
-    return () => {
-      if (html5QrCode && html5QrCode.stop) {
-        html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
-      }
-    };
-  }, [isScannerOpen, selectedScanService]);
 
   const createServiceDistribution = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -778,3 +743,10 @@ export default function DashboardPage() {
     </div>
   );
 }
+QrScannerMoal
+                      open={sScannerOpen}
+                      title={t.scan_qr}
+                     contanerI
+                     onCo{()=> stIsScanneOpen(as)}
+                     DecoTxt={hanlSvicScan}
+                  

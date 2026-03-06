@@ -9,7 +9,7 @@ import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
+import { QrScannerModal } from "@/components/QrScannerModal";
 
 type Ev = { id: string; name: string; date: string };
 type Att = {
@@ -78,45 +78,8 @@ export default function EventDetailPage() {
     }
   }
 
-  useEffect(() => {
-    let html5QrCode: any = null;
-    if (isScannerOpen) {
-      (async () => {
-        try {
-          const granted = localStorage.getItem("camera_permission_granted") === "1";
-          if (!granted && navigator?.mediaDevices?.getUserMedia) {
-            await navigator.mediaDevices.getUserMedia({ video: true });
-            localStorage.setItem("camera_permission_granted", "1");
-          }
-        } catch {
-          // ignore
-        }
-        import("html5-qrcode").then((lib: any) => {
-          html5QrCode = new lib.Html5Qrcode("event-reader");
-          const config = { fps: 15, qrbox: { width: 260, height: 260 } };
-          html5QrCode
-            .start({ facingMode: "environment" }, config,
-              (decoded: any) => handleScan(decoded),
-              (_err: any) => {})
-            .catch((_e: any) => {});
-        });
-      })();
-    }
-    return () => {
-      if (html5QrCode && html5QrCode.stop) {
-        html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
-      }
-    };
-  }, [isScannerOpen, eventId]);
-
-  async function handleScan(decoded: any) {
+  async function handleScan(decodedText: string) {
     if (!supabase) return;
-    const decodedText =
-      typeof decoded === "string"
-        ? decoded
-        : (decoded?.decodedText as string | undefined) ||
-          (decoded?.text as string | undefined) ||
-          String(decoded ?? "");
     if (!decodedText.startsWith("smart-masjeedh:family:")) return;
     // Do NOT auto-mark received; just highlight scanned family
     const familyId = decodedText.split(":")[2];
@@ -348,22 +311,14 @@ export default function EventDetailPage() {
         </div>
       </main>
 
-      {isScannerOpen && (
-        <div className="fixed inset-0 z-[60] bg-black flex flex-col">
-          <header className="p-6 flex items-center justify-between text-white">
-            <h2 className="text-xl font-black uppercase tracking-widest">{t.scan_qr}</h2>
-            <button onClick={() => setIsScannerOpen(false)} className="p-3 bg-white/10 rounded-full">
-              <ArrowLeft className="w-6 h-6 rotate-180" />
-            </button>
-          </header>
-          <div className="flex-1 flex flex-col items-center justify-center p-6">
-            <div id="event-reader" className="w-full max-w-sm rounded-[2.5rem] overflow-hidden border-4 border-emerald-500 shadow-2xl shadow-emerald-500/20"></div>
-            <p className="mt-8 text-white/60 text-sm font-bold uppercase tracking-widest text-center">
-              {t.attendance}
-            </p>
-          </div>
-        </div>
-      )}
+      <QrScannerModal
+        open={isScannerOpen}
+        title={t.scan_qr}
+        containerId="event-reader"
+        onClose={() => setIsScannerOpen(false)}
+        onDecodedText={handleScan}
+        helperText={t.attendance}
+      />
     </div>
   );
 }
