@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Users, Briefcase, Building2, Phone, MapPin, ChevronRight } from "lucide-react";
+import { ArrowLeft, Users, Briefcase, Building2, Phone, MapPin, ChevronRight, Plus, Edit2, Trash2, Shield, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { AppShell } from "@/components/AppShell";
 import { getTenantContext } from "@/lib/tenant";
 import { EmptyState } from "@/components/EmptyState";
+import { useAppToast } from "@/components/ToastProvider";
 
 type BoardMember = {
   id: string;
@@ -105,12 +106,31 @@ function roleKey(designation: string): "president" | "vice" | "secretary" | "tre
 
 export default function StaffManagementPage() {
   const router = useRouter();
+  const { toast, confirm } = useAppToast();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
 
   const [tab, setTab] = useState<"board" | "employees">("board");
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
+
+  const [admins, setAdmins] = useState<BoardMember[]>([]);
+  const [employeesSource, setEmployeesSource] = useState<"employees" | "user_roles" | "demo">("demo");
+
+  const [isBoardModalOpen, setIsBoardModalOpen] = useState(false);
+  const [editingBoard, setEditingBoard] = useState<BoardMember | null>(null);
+  const [boardFullName, setBoardFullName] = useState("");
+  const [boardDesignation, setBoardDesignation] = useState("");
+  const [boardPhotoUrl, setBoardPhotoUrl] = useState("");
+
+  const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [empName, setEmpName] = useState("");
+  const [empRole, setEmpRole] = useState("");
+  const [empPhone, setEmpPhone] = useState("");
+  const [empAddress, setEmpAddress] = useState("");
+  const [empPhotoUrl, setEmpPhotoUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const [board, setBoard] = useState<BoardMember[]>(demoBoard);
   const [employees, setEmployees] = useState<Employee[]>(demoEmployees);
@@ -131,6 +151,33 @@ export default function StaffManagementPage() {
           return;
         }
 
+        // Super admin / co-admin should appear under board members
+        try {
+          const { data: adminRoles, error: adminErr } = await supabase
+            .from("user_roles")
+            .select("user_id, masjid_id, role, email")
+            .eq("masjid_id", ctx.masjidId)
+            .in("role", ["super_admin", "co_admin"] as any);
+
+          if (!adminErr && adminRoles) {
+            const mapped = (adminRoles as any[]).map((r) => {
+              const email = (r as any).email as string | null;
+              const display = email ? email.split("@")[0] : (r as any).user_id;
+              const role = ((r as any).role || "").toString();
+              return {
+                id: `${(r as any).user_id}-${role}`,
+                masjid_id: (r as any).masjid_id,
+                full_name: display,
+                designation: role === "super_admin" ? "Super Admin" : "Co Admin",
+                photo_url: null,
+              } as BoardMember;
+            });
+            setAdmins(mapped);
+          }
+        } catch {
+          // ignore
+        }
+
         // Board members (optional table)
         const { data: boardData, error: boardErr } = await supabase
           .from("board_members")
@@ -142,29 +189,53 @@ export default function StaffManagementPage() {
           setIsLive(true);
         }
 
-        // Employees (optional table)
-        const { data: staffData, error: staffErr } = await supabase
-          .from("user_roles")
-          .select("user_id, masjid_id, role, email")
+        // Employees: prefer employees table (full details) if available; fallback to user_roles.
+        let didSetEmployees = false;
+        const { data: empData, error: empErr } = await supabase
+          .from("employees")
+          .select("id, masjid_id, name, role, address, phone, photo_url")
           .eq("masjid_id", ctx.masjidId)
-          .order("created_at", { ascending: true });
+          .order("created_at", { ascending: true } as any);
 
-        if (!staffErr && staffData) {
-          const mapped = (staffData as any[]).map((r) => {
-            const email = (r as any).email as string | null;
-            const display = email ? email.split("@")[0] : (r as any).user_id;
-            return {
-              id: (r as any).user_id,
-              masjid_id: (r as any).masjid_id,
-              name: display,
-              role: (r as any).role || "staff",
-              address: "",
-              phone: "",
-              photo_url: null,
-            } as Employee;
-          });
-          setEmployees(mapped);
+        if (!empErr && empData) {
+          setEmployees((empData as any) || []);
+          setEmployeesSource("employees");
           setIsLive(true);
+          didSetEmployees = true;
+        }
+
+        if (!didSetEmployees) {
+          const { data: staffData, error: staffErr } = await supabase
+            .from("user_roles")
+            .select("user_id, masjid_id, role, email")
+            .eq("masjid_id", ctx.masjidId)
+            .order("created_at", { ascending: true });
+
+          if (!staffErr && staffData) {
+            const mapped = (staffData as any[])
+              .filter((r) => {
+                const role = ((r as any).role || "").toString();
+                return role !== "super_admin" && role !== "co_admin";
+              })
+              .map((r) => {
+                const email = (r as any).email as string | null;
+                const display = email ? email.split("@")[0] : (r as any).user_id;
+                return {
+                  id: (r as any).user_id,
+                  masjid_id: (r as any).masjid_id,
+                  name: display,
+                  role: (r as any).role || "staff",
+                  address: "",
+                  phone: "",
+                  photo_url: null,
+                } as Employee;
+              });
+            setEmployees(mapped);
+            setEmployeesSource("user_roles");
+            setIsLive(true);
+          } else {
+            setEmployeesSource("demo");
+          }
         }
       } catch (_e) {
         // keep demo mode
@@ -174,6 +245,211 @@ export default function StaffManagementPage() {
     }
     fetchAll();
   }, [router]);
+
+  const openBoardCreate = () => {
+    setEditingBoard(null);
+    setBoardFullName("");
+    setBoardDesignation("");
+    setBoardPhotoUrl("");
+    setIsBoardModalOpen(true);
+  };
+
+  const openBoardEdit = (m: BoardMember) => {
+    setEditingBoard(m);
+    setBoardFullName(m.full_name || "");
+    setBoardDesignation(m.designation || "");
+    setBoardPhotoUrl((m.photo_url as any) || "");
+    setIsBoardModalOpen(true);
+  };
+
+  const saveBoardMember = async () => {
+    if (!supabase) return;
+    setSubmitting(true);
+    try {
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      if (!isAdmin) {
+        toast({ kind: "error", title: "Access denied", message: "Admin only" });
+        return;
+      }
+
+      const payload = {
+        masjid_id: ctx.masjidId,
+        full_name: boardFullName.trim(),
+        designation: boardDesignation.trim(),
+        photo_url: boardPhotoUrl.trim() || null,
+      } as any;
+
+      if (!payload.full_name || !payload.designation) {
+        toast({ kind: "error", title: "Missing", message: "Enter name and designation" });
+        return;
+      }
+
+      const q = editingBoard
+        ? supabase.from("board_members").update(payload).eq("id", editingBoard.id).eq("masjid_id", ctx.masjidId)
+        : supabase.from("board_members").insert([payload]);
+
+      const { error } = await q;
+      if (error) throw error;
+      setIsBoardModalOpen(false);
+      setEditingBoard(null);
+      toast({ kind: "success", title: "Saved", message: "Board member updated" });
+      router.refresh();
+      // refetch without full reload
+      const { data: boardData } = await supabase
+        .from("board_members")
+        .select("id, masjid_id, full_name, designation, photo_url")
+        .eq("masjid_id", ctx.masjidId);
+      if (boardData) setBoard(boardData as any);
+    } catch (e: any) {
+      toast({ kind: "error", title: "Error", message: e.message || "Failed" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const deleteBoardMember = async (m: BoardMember) => {
+    if (!supabase) return;
+    try {
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      if (!isAdmin) {
+        toast({ kind: "error", title: "Access denied", message: "Admin only" });
+        return;
+      }
+
+      const ok = await confirm({
+        title: t.confirm_delete,
+        message: t.confirm_delete,
+        confirmText: t.remove || "Remove",
+        cancelText: t.cancel || "Cancel",
+      });
+      if (!ok) return;
+
+      const { error } = await supabase
+        .from("board_members")
+        .delete()
+        .eq("id", m.id)
+        .eq("masjid_id", ctx.masjidId);
+      if (error) throw error;
+      setBoard((prev) => prev.filter((x) => x.id !== m.id));
+      toast({ kind: "success", title: "Deleted", message: "Removed" });
+    } catch (e: any) {
+      toast({ kind: "error", title: "Error", message: e.message || "Failed" });
+    }
+  };
+
+  const openEmployeeCreate = () => {
+    setEditingEmployee(null);
+    setEmpName("");
+    setEmpRole("");
+    setEmpPhone("");
+    setEmpAddress("");
+    setEmpPhotoUrl("");
+    setIsEmployeeModalOpen(true);
+  };
+
+  const openEmployeeEdit = (e: Employee) => {
+    setEditingEmployee(e);
+    setEmpName(e.name || "");
+    setEmpRole(e.role || "");
+    setEmpPhone(e.phone || "");
+    setEmpAddress(e.address || "");
+    setEmpPhotoUrl((e.photo_url as any) || "");
+    setIsEmployeeModalOpen(true);
+  };
+
+  const saveEmployee = async () => {
+    if (!supabase) return;
+    setSubmitting(true);
+    try {
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      if (!isAdmin) {
+        toast({ kind: "error", title: "Access denied", message: "Admin only" });
+        return;
+      }
+      if (employeesSource !== "employees") {
+        toast({ kind: "error", title: "Not supported", message: "Employees table not available" });
+        return;
+      }
+
+      const payload = {
+        masjid_id: ctx.masjidId,
+        name: empName.trim(),
+        role: empRole.trim(),
+        phone: empPhone.trim() || null,
+        address: empAddress.trim() || null,
+        photo_url: empPhotoUrl.trim() || null,
+      } as any;
+
+      if (!payload.name || !payload.role) {
+        toast({ kind: "error", title: "Missing", message: "Enter name and role" });
+        return;
+      }
+
+      const q = editingEmployee
+        ? supabase.from("employees").update(payload).eq("id", editingEmployee.id).eq("masjid_id", ctx.masjidId)
+        : supabase.from("employees").insert([payload]);
+
+      const { error } = await q;
+      if (error) throw error;
+
+      setIsEmployeeModalOpen(false);
+      setEditingEmployee(null);
+      toast({ kind: "success", title: "Saved", message: "Employee updated" });
+
+      const { data: empData } = await supabase
+        .from("employees")
+        .select("id, masjid_id, name, role, address, phone, photo_url")
+        .eq("masjid_id", ctx.masjidId)
+        .order("created_at", { ascending: true } as any);
+      if (empData) setEmployees((empData as any) || []);
+    } catch (e: any) {
+      toast({ kind: "error", title: "Error", message: e.message || "Failed" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const deleteEmployee = async (e: Employee) => {
+    if (!supabase) return;
+    try {
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      if (!isAdmin) {
+        toast({ kind: "error", title: "Access denied", message: "Admin only" });
+        return;
+      }
+      if (employeesSource !== "employees") {
+        toast({ kind: "error", title: "Not supported", message: "Employees table not available" });
+        return;
+      }
+
+      const ok = await confirm({
+        title: t.confirm_delete,
+        message: t.confirm_delete,
+        confirmText: t.remove || "Remove",
+        cancelText: t.cancel || "Cancel",
+      });
+      if (!ok) return;
+
+      const { error } = await supabase
+        .from("employees")
+        .delete()
+        .eq("id", e.id)
+        .eq("masjid_id", ctx.masjidId);
+      if (error) throw error;
+      setEmployees((prev) => prev.filter((x) => x.id !== e.id));
+      toast({ kind: "success", title: "Deleted", message: "Removed" });
+    } catch (err: any) {
+      toast({ kind: "error", title: "Error", message: err.message || "Failed" });
+    }
+  };
 
   const grouped = useMemo(() => {
     const g = {
@@ -220,25 +496,56 @@ export default function StaffManagementPage() {
           </div>
         ) : tab === "board" ? (
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-neutral-600">
-              <Building2 className="w-5 h-5 text-amber-500" />
-              <h2 className="text-sm font-black uppercase tracking-widest">{t.board_members}</h2>
+            <div className="flex items-center justify-between gap-3 text-neutral-600">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-amber-500" />
+                <h2 className="text-sm font-black uppercase tracking-widest">{t.board_members}</h2>
+              </div>
+              <button
+                onClick={openBoardCreate}
+                className="px-4 py-3 rounded-[999px] bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-700/25 active:scale-[0.98] transition-all"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  {t.add || "Add"}
+                </span>
+              </button>
             </div>
 
             {/* Hierarchical card chart (clean, card-based) */}
             <div className="space-y-4">
-              <RoleSection title={t.president} items={grouped.president} />
-              <RoleSection title={t.vice_presidents} items={grouped.vice} />
-              <RoleSection title={t.secretary} items={grouped.secretary} />
-              <RoleSection title={t.treasurer} items={grouped.treasurer} />
-              <RoleSection title={t.members_list} items={grouped.member} grid />
+              {admins.length ? (
+                <RoleSection title={(t as any).admin_settings || "Admins"} items={admins} grid />
+              ) : null}
+              <RoleSection title={t.president} items={grouped.president} onEdit={openBoardEdit} onDelete={deleteBoardMember} />
+              <RoleSection title={t.vice_presidents} items={grouped.vice} onEdit={openBoardEdit} onDelete={deleteBoardMember} />
+              <RoleSection title={t.secretary} items={grouped.secretary} onEdit={openBoardEdit} onDelete={deleteBoardMember} />
+              <RoleSection title={t.treasurer} items={grouped.treasurer} onEdit={openBoardEdit} onDelete={deleteBoardMember} />
+              <RoleSection title={t.members_list} items={grouped.member} grid onEdit={openBoardEdit} onDelete={deleteBoardMember} />
             </div>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-neutral-600">
-              <Briefcase className="w-5 h-5 text-emerald-600" />
-              <h2 className="text-sm font-black uppercase tracking-widest">{t.employees}</h2>
+            <div className="flex items-center justify-between gap-3 text-neutral-600">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-emerald-600" />
+                <h2 className="text-sm font-black uppercase tracking-widest">{t.employees}</h2>
+              </div>
+              {employeesSource === "employees" ? (
+                <button
+                  onClick={openEmployeeCreate}
+                  className="px-4 py-3 rounded-[999px] bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-700/25 active:scale-[0.98] transition-all"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    {t.add || "Add"}
+                  </span>
+                </button>
+              ) : (
+                <div className="text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                  {employeesSource === "user_roles" ? "Limited" : "Demo"}
+                </div>
+              )}
             </div>
 
             {employees.length === 0 ? (
@@ -254,9 +561,8 @@ export default function StaffManagementPage() {
             ) : (
               <div className="grid grid-cols-1 gap-3">
                 {employees.map((e) => (
-                  <Link
+                  <div
                     key={e.id}
-                    href={`/staff/employees/${e.id}`}
                     className="app-card p-4 hover:border-emerald-200 transition-all"
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -287,12 +593,112 @@ export default function StaffManagementPage() {
                           </div>
                         </div>
                       </div>
-                      <ChevronRight className="w-5 h-5 text-neutral-300 shrink-0" />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Link
+                          href={`/staff/employees/${e.id}`}
+                          className="p-2 rounded-3xl hover:bg-neutral-50 text-neutral-600 transition-all"
+                          title={t.profile}
+                        >
+                          <ChevronRight className="w-5 h-5" />
+                        </Link>
+                        {employeesSource === "employees" ? (
+                          <>
+                            <button
+                              onClick={() => openEmployeeEdit(e)}
+                              className="p-2 rounded-3xl hover:bg-neutral-50 text-neutral-600 transition-all"
+                              title={t.edit || "Edit"}
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => deleteEmployee(e)}
+                              className="p-2 rounded-3xl hover:bg-rose-50 text-rose-700 transition-all"
+                              title={t.remove || "Remove"}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {isBoardModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
+            <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-black text-neutral-900">
+                  {editingBoard ? (t.edit || "Edit") : (t.add || "Add")}
+                </h2>
+                <button onClick={() => setIsBoardModalOpen(false)} className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors">
+                  <X className="w-6 h-6 text-neutral-400" />
+                </button>
+              </div>
+
+              <div className="space-y-5">
+                <div className="app-field">
+                  <label className="app-label">{t.name}</label>
+                  <input value={boardFullName} onChange={(e) => setBoardFullName(e.target.value)} className="app-input font-bold" />
+                </div>
+                <div className="app-field">
+                  <label className="app-label">{t.role}</label>
+                  <input value={boardDesignation} onChange={(e) => setBoardDesignation(e.target.value)} className="app-input font-bold" placeholder="President / Secretary" />
+                </div>
+                <div className="app-field">
+                  <label className="app-label">Photo URL</label>
+                  <input value={boardPhotoUrl} onChange={(e) => setBoardPhotoUrl(e.target.value)} className="app-input font-bold text-xs" placeholder="https://..." />
+                </div>
+                <button onClick={saveBoardMember} disabled={submitting} className="w-full app-btn-primary py-5 text-lg">
+                  {submitting ? (t.saving || "SAVING...") : t.save}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isEmployeeModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
+            <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-black text-neutral-900">
+                  {editingEmployee ? (t.edit || "Edit") : (t.add || "Add")}
+                </h2>
+                <button onClick={() => setIsEmployeeModalOpen(false)} className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors">
+                  <X className="w-6 h-6 text-neutral-400" />
+                </button>
+              </div>
+
+              <div className="space-y-5">
+                <div className="app-field">
+                  <label className="app-label">{t.name}</label>
+                  <input value={empName} onChange={(e) => setEmpName(e.target.value)} className="app-input font-bold" />
+                </div>
+                <div className="app-field">
+                  <label className="app-label">{t.role}</label>
+                  <input value={empRole} onChange={(e) => setEmpRole(e.target.value)} className="app-input font-bold" placeholder="Imam / Muazzin" />
+                </div>
+                <div className="app-field">
+                  <label className="app-label">Phone</label>
+                  <input value={empPhone} onChange={(e) => setEmpPhone(e.target.value)} className="app-input font-bold" />
+                </div>
+                <div className="app-field">
+                  <label className="app-label">Address</label>
+                  <input value={empAddress} onChange={(e) => setEmpAddress(e.target.value)} className="app-input font-bold" />
+                </div>
+                <div className="app-field">
+                  <label className="app-label">Photo URL</label>
+                  <input value={empPhotoUrl} onChange={(e) => setEmpPhotoUrl(e.target.value)} className="app-input font-bold text-xs" placeholder="https://..." />
+                </div>
+                <button onClick={saveEmployee} disabled={submitting} className="w-full app-btn-primary py-5 text-lg">
+                  {submitting ? (t.saving || "SAVING...") : t.save}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -300,8 +706,14 @@ export default function StaffManagementPage() {
   );
 }
 
-function RoleSection(props: { title: string; items: BoardMember[]; grid?: boolean }) {
-  const { title, items, grid } = props;
+function RoleSection(props: {
+  title: string;
+  items: BoardMember[];
+  grid?: boolean;
+  onEdit?: (m: BoardMember) => void;
+  onDelete?: (m: BoardMember) => void;
+}) {
+  const { title, items, grid, onEdit, onDelete } = props;
   return (
     <div className="space-y-2">
       <p className="text-[10px] font-black text-neutral-600 uppercase tracking-widest ml-1">{title}</p>
@@ -330,6 +742,28 @@ function RoleSection(props: { title: string; items: BoardMember[]; grid?: boolea
                     {m.designation}
                   </p>
                 </div>
+                {onEdit || onDelete ? (
+                  <div className="ml-auto flex items-center gap-1">
+                    {onEdit ? (
+                      <button
+                        onClick={() => onEdit(m)}
+                        className="p-2 rounded-3xl hover:bg-neutral-50 text-neutral-600 transition-all"
+                        title="Edit"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    ) : null}
+                    {onDelete ? (
+                      <button
+                        onClick={() => onDelete(m)}
+                        className="p-2 rounded-3xl hover:bg-rose-50 text-rose-700 transition-all"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           ))}

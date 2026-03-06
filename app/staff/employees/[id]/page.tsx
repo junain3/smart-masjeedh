@@ -7,6 +7,7 @@ import { ArrowLeft, Briefcase, Phone, MapPin, Wallet, Plus, X } from "lucide-rea
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
+import { useAppToast } from "@/components/ToastProvider";
 
 type Employee = {
   id: string;
@@ -40,6 +41,7 @@ export default function EmployeeProfilePage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const employeeId = params.id;
+  const { toast } = useAppToast();
 
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
@@ -110,7 +112,7 @@ export default function EmployeeProfilePage() {
         setPayments((payData as any) || []);
       }
     } catch (e: any) {
-      alert(e.message || "Failed to load employee");
+      toast({ kind: "error", title: "Error", message: e.message || "Failed to load employee" });
       router.push("/staff");
     } finally {
       setLoading(false);
@@ -132,13 +134,13 @@ export default function EmployeeProfilePage() {
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
       const canAccounts = isAdmin || ctx.permissions?.accounts !== false;
       if (!canAccounts) {
-        alert("Access denied");
+        toast({ kind: "error", title: "Access denied", message: "You don't have permission." });
         return;
       }
 
       const amt = parseFloat(amount);
       if (!Number.isFinite(amt) || amt <= 0) {
-        alert("Enter a valid amount");
+        toast({ kind: "error", title: "Invalid amount", message: "Enter a valid amount" });
         return;
       }
 
@@ -186,7 +188,7 @@ export default function EmployeeProfilePage() {
       setDate(new Date().toISOString().split("T")[0]);
       await fetchEmployeeAndPayments();
     } catch (e: any) {
-      alert(e.message || "Failed to add payment");
+      toast({ kind: "error", title: "Error", message: e.message || "Failed to add payment" });
     } finally {
       setSubmitting(false);
     }
