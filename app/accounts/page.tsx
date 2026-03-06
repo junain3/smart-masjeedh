@@ -441,13 +441,19 @@ export default function AccountsPage() {
               icon={<Wallet className="w-8 h-8" />}
             />
           ) : (
-            filteredTransactions.map((tx) => {
+            filteredTransactions.map((tx, idx) => {
               const kind = getFinancialKind(tx);
+              const altBg = idx % 2 === 0 ? "bg-white/65" : "bg-emerald-50/20";
               return (
                 <div
                   key={tx.id}
-                  className="app-card p-5 flex items-center justify-between group hover:border-emerald-200 transition-all"
+                  className={`app-glass-card ${altBg} p-5 flex items-center justify-between group hover:border-emerald-200 transition-all relative overflow-hidden`}
                 >
+                  <div
+                    className={`absolute left-0 top-3 bottom-3 w-1 rounded-full ${
+                      kind === "income" ? "bg-emerald-600" : "bg-rose-600"
+                    }`}
+                  />
                   <div className="flex items-center gap-4">
                     <div
                       className={`w-12 h-12 rounded-3xl border flex items-center justify-center ${

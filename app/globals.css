@@ -13,15 +13,37 @@
 
 @layer components {
   .app-card {
-    @apply bg-white border border-neutral-200 shadow-sm rounded-3xl;
+    @apply bg-white/90 border border-neutral-200/80 shadow-xl rounded-[2.5rem];
+  }
+
+  .app-glass {
+    @apply bg-white/55 border border-white/60 shadow-xl backdrop-blur-md;
+  }
+
+  .app-glass-card {
+    @apply app-glass rounded-[2.5rem];
+  }
+
+  .app-hero {
+    @apply rounded-[2.75rem] p-7 shadow-2xl;
+    @apply bg-gradient-to-br from-emerald-700 via-emerald-600 to-emerald-500;
   }
 
   .app-btn {
-    @apply rounded-3xl font-black uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50;
+    @apply rounded-[2.5rem] font-black uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50;
   }
 
   .app-btn-primary {
-    @apply app-btn bg-emerald-600 text-white shadow-xl shadow-emerald-600/20 hover:bg-emerald-700;
+    @apply app-btn bg-emerald-600 text-white hover:bg-emerald-700;
+    @apply shadow-xl shadow-emerald-700/25;
+    @apply hover:shadow-2xl hover:shadow-emerald-700/30;
+  }
+
+  .app-btn-glow {
+    @apply app-btn-primary;
+    box-shadow:
+      0 18px 40px -20px rgba(16, 185, 129, 0.65),
+      0 10px 25px -15px rgba(5, 150, 105, 0.55);
   }
 
   .app-btn-soft {
@@ -41,16 +63,33 @@
   }
 
   .app-input {
-    @apply w-full px-5 py-4 bg-white border border-neutral-200 rounded-3xl outline-none transition-all text-neutral-900 placeholder:text-neutral-400;
+    @apply w-full px-5 py-4 bg-white/90 border border-neutral-200/80 rounded-[2.5rem] outline-none transition-all text-neutral-900 placeholder:text-neutral-400;
     @apply focus:ring-4 focus:ring-emerald-600/10 focus:border-emerald-600;
   }
 
   .app-select {
-    @apply w-full px-5 py-4 bg-white border border-neutral-200 rounded-3xl outline-none transition-all text-neutral-900;
+    @apply w-full px-5 py-4 bg-white/90 border border-neutral-200/80 rounded-[2.5rem] outline-none transition-all text-neutral-900;
     @apply focus:ring-4 focus:ring-emerald-600/10 focus:border-emerald-600;
   }
 
   .app-pill {
-    @apply inline-flex items-center px-3 py-1.5 rounded-3xl text-[11px] font-black uppercase tracking-widest;
+    @apply inline-flex items-center px-3 py-1.5 rounded-[2.5rem] text-[11px] font-black uppercase tracking-widest;
+  }
+
+  .app-bottom-nav {
+    @apply fixed bottom-4 left-1/2 -translate-x-1/2 z-50;
+    @apply bg-white/70 border border-white/70 shadow-2xl backdrop-blur-xl;
+    @apply rounded-[999px] px-2 py-2;
+  }
+
+  .app-bottom-nav-item {
+    @apply flex flex-col items-center justify-center gap-1;
+    @apply px-4 py-2 rounded-[999px] transition-all;
+    @apply text-neutral-600;
+  }
+
+  .app-bottom-nav-item-active {
+    @apply bg-white text-emerald-700 shadow-md;
+    @apply -translate-y-0.5;
   }
 }

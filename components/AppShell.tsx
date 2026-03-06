@@ -115,6 +115,15 @@ export function AppShell(props: {
     }`;
   };
 
+  const bottomItemClass = (href: string) => {
+    const active = pathname === href || (href !== "/" && pathname?.startsWith(href));
+    return `${
+      active
+        ? "app-bottom-nav-item app-bottom-nav-item-active"
+        : "app-bottom-nav-item hover:bg-white/60"
+    }`;
+  };
+
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900 font-sans">
       {/* Mobile overlay */}
@@ -187,7 +196,7 @@ export function AppShell(props: {
                   Back
                 </Link>
               ) : null}
-              <h1 className="text-lg md:text-xl font-black text-slate-900 truncate">
+              <h1 className="text-lg md:text-xl font-black text-neutral-900 truncate">
                 {title}
               </h1>
             </div>
@@ -195,9 +204,27 @@ export function AppShell(props: {
           </div>
         </header>
 
-        <main className="p-4 md:p-8">
+        <main className="p-4 md:p-8 pb-28 md:pb-8">
           <div className="w-full max-w-md md:max-w-6xl mx-auto">{children}</div>
         </main>
+
+        {/* Floating bottom navigation (mobile) */}
+        <nav className="md:hidden app-bottom-nav">
+          <div className="flex items-center gap-2">
+            {items
+              .filter((it) => it.href !== "/admin")
+              .slice(0, 5)
+              .map((it) => {
+                const active = pathname === it.href || (it.href !== "/" && pathname?.startsWith(it.href));
+                return (
+                  <Link key={it.href} href={it.href} className={bottomItemClass(it.href)}>
+                    <span className={active ? "text-emerald-700" : "text-neutral-600"}>{it.icon}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">{it.label}</span>
+                  </Link>
+                );
+              })}
+          </div>
+        </nav>
       </div>
     </div>
   );
