@@ -456,7 +456,7 @@ export default function FamiliesPage() {
 
       {isPdfOptionsOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[2rem] p-6 shadow-2xl">
+          <div className="bg-white w-full max-w-md rounded-[2rem] p-6 shadow-2xl max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-black">PDF Columns</h3>
               <button onClick={() => setIsPdfOptionsOpen(false)} className="p-2 hover:bg-slate-50 rounded-full">
@@ -510,7 +510,7 @@ export default function FamiliesPage() {
       {/* Add Modal */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-xl font-black text-slate-900">{t.add_new_family}</h2>
               <button

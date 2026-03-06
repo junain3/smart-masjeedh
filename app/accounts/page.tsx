@@ -479,7 +479,7 @@ export default function AccountsPage() {
       {/* Add Transaction Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
-          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-2xl font-black text-neutral-900">{t.add_transaction}</h2>
               <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors">
