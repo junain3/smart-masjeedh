@@ -181,7 +181,6 @@ export default function EventsPage() {
       message: `This will remove '${ev.name}'.`,
       confirmText: "Delete",
       cancelText: "Cancel",
-      destructive: true,
     });
     if (!ok) return;
 
