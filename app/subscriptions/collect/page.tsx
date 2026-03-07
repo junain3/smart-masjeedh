@@ -20,6 +20,14 @@ type FamilyRow = {
 type EmployeeRow = {
   id: string;
   name: string;
+  default_subscription_commission_percent?: number | null;
+};
+
+type CollectorProfileRow = {
+  masjid_id: string;
+  user_id: string;
+  collector_employee_id: string | null;
+  default_commission_percent: number;
 };
 
 export default function SubscriptionCollectPage() {
@@ -43,10 +51,12 @@ export default function SubscriptionCollectPage() {
   const [employeeId, setEmployeeId] = useState<string>("");
 
   const [amount, setAmount] = useState("");
-  const [percent, setPercent] = useState("");
+  const [defaultPercent, setDefaultPercent] = useState("0");
   const [notes, setNotes] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [submitting, setSubmitting] = useState(false);
+
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -66,11 +76,27 @@ export default function SubscriptionCollectPage() {
 
       const { data, error } = await supabase
         .from("employees")
-        .select("id,name")
+        .select("id,name,default_subscription_commission_percent")
         .eq("masjid_id", ctx.masjidId)
         .order("name", { ascending: true });
 
       if (!error) setEmployees(((data as any) || []) as EmployeeRow[]);
+
+      const { data: prof } = await supabase
+        .from("subscription_collector_profiles")
+        .select("masjid_id,user_id,collector_employee_id,default_commission_percent")
+        .eq("masjid_id", ctx.masjidId)
+        .eq("user_id", ctx.userId)
+        .maybeSingle();
+
+      if (prof) {
+        const p = prof as any as CollectorProfileRow;
+        if (p.collector_employee_id) setEmployeeId(p.collector_employee_id);
+        setDefaultPercent(String(p.default_commission_percent ?? 0));
+      } else {
+        setDefaultPercent("0");
+      }
+      setProfileLoaded(true);
     })();
   }, []);
 
@@ -124,11 +150,32 @@ export default function SubscriptionCollectPage() {
 
   const commissionAmount = useMemo(() => {
     const a = parseFloat(amount);
-    const p = parseFloat(percent);
+    const p = parseFloat(defaultPercent);
     if (!Number.isFinite(a) || a <= 0) return 0;
     if (!Number.isFinite(p) || p <= 0) return 0;
     return Math.round((a * p) / 100);
-  }, [amount, percent]);
+  }, [amount, defaultPercent]);
+
+  async function upsertProfile(next: { collector_employee_id?: string | null; default_commission_percent?: number }) {
+    if (!supabase) return;
+    const ctx = await getTenantContext();
+    if (!ctx) return;
+
+    const payload: any = {
+      masjid_id: ctx.masjidId,
+      user_id: ctx.userId,
+      updated_at: new Date().toISOString(),
+    };
+    if (typeof next.collector_employee_id !== "undefined") payload.collector_employee_id = next.collector_employee_id;
+    if (typeof next.default_commission_percent !== "undefined") payload.default_commission_percent = next.default_commission_percent;
+
+    const { error } = await supabase.from("subscription_collector_profiles").upsert([payload], {
+      onConflict: "masjid_id,user_id",
+    });
+    if (error) {
+      toast({ kind: "error", title: "Error", message: error.message || "Failed" });
+    }
+  }
 
   async function handleScan(decodedText: string) {
     if (!supabase) return;
@@ -169,8 +216,8 @@ export default function SubscriptionCollectPage() {
       return;
     }
 
-    const p = percent.trim() ? parseFloat(percent) : NaN;
-    if (percent.trim() && (!Number.isFinite(p) || p < 0)) {
+    const p = parseFloat(defaultPercent);
+    if (!Number.isFinite(p) || p < 0) {
       toast({ kind: "error", title: "Invalid %", message: "" });
       return;
     }
@@ -187,48 +234,61 @@ export default function SubscriptionCollectPage() {
         return;
       }
 
-      const commissionPct = percent.trim() ? parseFloat(percent) : null;
-      const commissionAmt = commissionPct ? Math.round((a * commissionPct) / 100) : null;
+      const commissionPct = p;
+      const commissionAmt = commissionPct > 0 ? Math.round((a * commissionPct) / 100) : null;
 
-      const { data: inserted, error: insErr } = await supabase
-        .from("subscription_collections")
-        .insert([
-          {
-            masjid_id: ctx.masjidId,
-            family_id: selected.id,
-            collected_by_user_id: ctx.userId,
-            collector_employee_id: employeeId || null,
-            amount: a,
-            commission_percent: commissionPct,
-            commission_amount: commissionAmt,
-            notes: notes.trim() || null,
-            date,
-            status: "pending",
-          } as any,
-        ])
+      const { data: existingBatch, error: batchSelErr } = await supabase
+        .from("subscription_collection_batches")
         .select("id")
-        .single();
+        .eq("masjid_id", ctx.masjidId)
+        .eq("collected_by_user_id", ctx.userId)
+        .eq("status", "open")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (batchSelErr) throw batchSelErr;
+
+      let batchId = (existingBatch as any)?.id as string | undefined;
+      if (!batchId) {
+        const { data: createdBatch, error: batchInsErr } = await supabase
+          .from("subscription_collection_batches")
+          .insert([
+            {
+              masjid_id: ctx.masjidId,
+              collected_by_user_id: ctx.userId,
+              collector_employee_id: employeeId || null,
+              status: "open",
+            } as any,
+          ])
+          .select("id")
+          .single();
+        if (batchInsErr) throw batchInsErr;
+        batchId = (createdBatch as any)?.id;
+      }
+
+      const { error: insErr } = await supabase.from("subscription_collections").insert([
+        {
+          masjid_id: ctx.masjidId,
+          batch_id: batchId,
+          family_id: selected.id,
+          collected_by_user_id: ctx.userId,
+          collector_employee_id: employeeId || null,
+          amount: a,
+          commission_percent: commissionPct,
+          commission_amount: commissionAmt,
+          notes: notes.trim() || null,
+          date,
+          status: "pending",
+        } as any,
+      ]);
 
       if (insErr) throw insErr;
 
-      if (employeeId && commissionAmt && commissionAmt > 0) {
-        const { error: comErr } = await supabase.from("employee_commissions").insert([
-          {
-            masjid_id: ctx.masjidId,
-            employee_id: employeeId,
-            collection_id: (inserted as any)?.id,
-            amount: commissionAmt,
-          } as any,
-        ]);
-        if (comErr) throw comErr;
-      }
-
-      toast({ kind: "success", title: "Saved", message: "Pending approval" });
+      toast({ kind: "success", title: "Saved", message: "Added to your pending batch" });
       setSelected(null);
       setAmount("");
-      setPercent("");
       setNotes("");
-      setEmployeeId("");
       setDate(new Date().toISOString().split("T")[0]);
     } catch (e: any) {
       toast({ kind: "error", title: "Error", message: e.message || "Failed" });
@@ -324,10 +384,14 @@ export default function SubscriptionCollectPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Employee (optional)</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Collector employee</label>
               <select
                 value={employeeId}
-                onChange={(e) => setEmployeeId(e.target.value)}
+                onChange={async (e) => {
+                  const v = e.target.value;
+                  setEmployeeId(v);
+                  if (profileLoaded) await upsertProfile({ collector_employee_id: v || null });
+                }}
                 className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
               >
                 <option value="">No employee</option>
@@ -351,11 +415,16 @@ export default function SubscriptionCollectPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Commission %</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Default Commission %</label>
                 <input
                   type="number"
-                  value={percent}
-                  onChange={(e) => setPercent(e.target.value)}
+                  value={defaultPercent}
+                  onChange={(e) => setDefaultPercent(e.target.value)}
+                  onBlur={async () => {
+                    const p = parseFloat(defaultPercent);
+                    if (!Number.isFinite(p) || p < 0) return;
+                    if (profileLoaded) await upsertProfile({ default_commission_percent: p });
+                  }}
                   className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
                   placeholder="0"
                 />
