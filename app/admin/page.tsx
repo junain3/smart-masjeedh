@@ -208,6 +208,38 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const removeCollectorProfile = async (userId: string) => {
+    if (!supabase || !masjidId || !canManage) return;
+    const ok = await confirm({
+      title: "Remove collector profile?",
+      message: "This will remove linked employee and commission settings for this collector.",
+      confirmText: "Remove",
+      cancelText: "Cancel",
+    });
+    if (!ok) return;
+
+    try {
+      setSavingCollectorForUserId(userId);
+      const { error } = await supabase
+        .from("subscription_collector_profiles")
+        .delete()
+        .eq("masjid_id", masjidId)
+        .eq("user_id", userId);
+      if (error) throw error;
+
+      setCollectorProfiles((prev) => {
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+      toast({ kind: "success", title: "Removed", message: "Collector profile removed" });
+    } catch (e: any) {
+      toast({ kind: "error", title: "Error", message: e.message || "Failed to remove collector profile" });
+    } finally {
+      setSavingCollectorForUserId(null);
+    }
+  };
+
   const roleLabel = (r: RoleRow["role"]) => {
     if (r === "super_admin") return t.super_admin;
     if (r === "co_admin") return "Co Admin";
@@ -544,6 +576,30 @@ export default function AdminSettingsPage() {
                               </div>
                               <div className="text-[10px] font-bold text-slate-500">
                                 {profile?.collector_employee_id ? "Configured" : "Not configured"}
+                              </div>
+
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    upsertCollectorProfile(r.user_id, {
+                                      collector_employee_id: null,
+                                      default_commission_percent: 0,
+                                    })
+                                  }
+                                  disabled={isSavingCollector}
+                                  className="px-3 py-2 rounded-2xl bg-white text-slate-700 text-[10px] font-black uppercase tracking-widest border border-slate-100 hover:bg-slate-50 disabled:opacity-50"
+                                >
+                                  Clear
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeCollectorProfile(r.user_id)}
+                                  disabled={isSavingCollector}
+                                  className="px-3 py-2 rounded-2xl bg-rose-50 text-rose-700 text-[10px] font-black uppercase tracking-widest border border-rose-100 hover:bg-rose-100 disabled:opacity-50"
+                                >
+                                  Remove
+                                </button>
                               </div>
                             </div>
                           )}
