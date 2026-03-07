@@ -13,7 +13,7 @@ import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
 
 type EventRow = { id: string; name: string; date: string };
-type Family = { id: string; family_code: string; head_name: string };
+type Family = { id: string; family_code: string; head_name: string; phone?: string | null; address?: string | null };
 
 export default function EventsPage() {
   const router = useRouter();
@@ -29,6 +29,10 @@ export default function EventsPage() {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [submitting, setSubmitting] = useState(false);
   const [families, setFamilies] = useState<Family[]>([]);
+  const [familyQuery, setFamilyQuery] = useState("");
+  const [familyOffset, setFamilyOffset] = useState(0);
+  const [familyHasMore, setFamilyHasMore] = useState(true);
+  const [loadingFamilies, setLoadingFamilies] = useState(false);
   const [allowed, setAllowed] = useState(true);
 
   useEffect(() => {
@@ -68,20 +72,71 @@ export default function EventsPage() {
 
   async function openNewEvent() {
     setIsOpen(true);
-    await preloadFamilies();
+    setFamilyQuery("");
+    setFamilies([]);
+    setFamilyOffset(0);
+    setFamilyHasMore(true);
+    await fetchFamiliesPage(0, "");
   }
 
-  async function preloadFamilies() {
+  const pageSize = 24;
+  async function fetchFamiliesPage(nextOffset: number, query: string) {
     if (!supabase) return;
-    const ctx = await getTenantContext();
-    if (!ctx) return;
-    const { data } = await supabase
-      .from("families")
-      .select("id,family_code,head_name")
-      .eq("masjid_id", ctx.masjidId)
-      .order("family_code", { ascending: true });
-    setFamilies(data || []);
+    if (loadingFamilies) return;
+    setLoadingFamilies(true);
+    try {
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canEvents = isAdmin || ctx.permissions?.events !== false;
+      if (!canEvents) return;
+
+      let qb = supabase
+        .from("families")
+        .select("id,family_code,head_name,phone,address")
+        .eq("masjid_id", ctx.masjidId);
+
+      const trimmed = query.trim();
+      if (trimmed.length > 0) {
+        const pattern = `%${trimmed}%`;
+        qb = qb.or(
+          [
+            `family_code.ilike.${pattern}`,
+            `head_name.ilike.${pattern}`,
+            `phone.ilike.${pattern}`,
+            `address.ilike.${pattern}`,
+          ].join(",")
+        );
+      }
+
+      const { data, error } = await qb
+        .order("family_code", { ascending: true })
+        .range(nextOffset, nextOffset + pageSize - 1);
+      if (error) throw error;
+
+      const rows = (data || []) as any as Family[];
+      setFamilies((prev) => (nextOffset === 0 ? rows : [...prev, ...rows]));
+      setFamilyOffset(nextOffset + rows.length);
+      setFamilyHasMore(rows.length === pageSize);
+    } catch (e: any) {
+      toast({ kind: "error", title: "Error", message: e.message || "Failed to load families" });
+      setFamilyHasMore(false);
+    } finally {
+      setLoadingFamilies(false);
+    }
   }
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handle = setTimeout(() => {
+      setFamilies([]);
+      setFamilyOffset(0);
+      setFamilyHasMore(true);
+      fetchFamiliesPage(0, familyQuery);
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [familyQuery, isOpen]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -136,6 +191,7 @@ export default function EventsPage() {
       }
       setIsOpen(false);
       setName("");
+      setFamilyQuery("");
       fetchEvents();
       router.push(`/events/${ev.id}`);
     } catch (err: any) {
@@ -394,8 +450,17 @@ export default function EventsPage() {
                 />
               </div>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{t.attendance} • {t.all_families || "All Families"}</p>
+              <div className="relative group">
+                <input
+                  type="text"
+                  value={familyQuery}
+                  onChange={(e) => setFamilyQuery(e.target.value)}
+                  placeholder={t.search}
+                  className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
+                />
+              </div>
               <div className="max-h-44 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                {families.length === 0 ? (
+                {families.length === 0 && !loadingFamilies ? (
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{t.no_matches}</p>
                 ) : (
                   families.map(f => (
@@ -403,6 +468,18 @@ export default function EventsPage() {
                       <span className="text-sm font-bold text-slate-700">{f.family_code} • {f.head_name}</span>
                     </div>
                   ))
+                )}
+                {loadingFamilies && (
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest pt-3">{t.loading}</p>
+                )}
+                {familyHasMore && !loadingFamilies && (
+                  <button
+                    type="button"
+                    onClick={() => fetchFamiliesPage(familyOffset, familyQuery)}
+                    className="w-full mt-2 py-2 rounded-2xl bg-white text-[10px] font-black uppercase tracking-widest text-slate-600 border border-slate-100"
+                  >
+                    Load more
+                  </button>
                 )}
               </div>
               <button

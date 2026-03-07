@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useAppToast } from "@/components/ToastProvider";
@@ -36,9 +36,15 @@ export default function SubscriptionCollectPage() {
   const qRef = useRef("");
   const reqId = useRef(0);
 
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const pageSize = 24;
+  const [families, setFamilies] = useState<FamilyRow[]>([]);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingFamilies, setLoadingFamilies] = useState(false);
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const [results, setResults] = useState<FamilyRow[]>([]);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [selected, setSelected] = useState<FamilyRow | null>(null);
 
   const [collectorEmployeeId, setCollectorEmployeeId] = useState<string | null>(null);
@@ -86,18 +92,12 @@ export default function SubscriptionCollectPage() {
     })();
   }, []);
 
-  useEffect(() => {
-    qRef.current = q;
-    const trimmed = q.trim();
-
-    if (trimmed.length < 2) {
-      setResults([]);
-      return;
-    }
-
+  async function fetchFamiliesPage(nextOffset: number, query: string) {
+    if (!supabase) return;
+    if (loadingFamilies) return;
+    setLoadingFamilies(true);
     const id = ++reqId.current;
-    const handle = setTimeout(async () => {
-      if (!supabase) return;
+    try {
       const ctx = await getTenantContext();
       if (!ctx) return;
 
@@ -105,34 +105,74 @@ export default function SubscriptionCollectPage() {
       const canCollect = isAdmin || ctx.permissions?.subscriptions_collect === true;
       if (!canCollect) return;
 
-      const query = qRef.current.trim();
-      const pattern = `%${query}%`;
-
-      const { data, error } = await supabase
+      let qb = supabase
         .from("families")
         .select("id,family_code,head_name,phone,address")
-        .eq("masjid_id", ctx.masjidId)
-        .or(
+        .eq("masjid_id", ctx.masjidId);
+
+      const trimmed = query.trim();
+      if (trimmed.length > 0) {
+        const pattern = `%${trimmed}%`;
+        qb = qb.or(
           [
             `family_code.ilike.${pattern}`,
             `head_name.ilike.${pattern}`,
             `phone.ilike.${pattern}`,
             `address.ilike.${pattern}`,
           ].join(",")
-        )
+        );
+      }
+
+      const { data, error } = await qb
         .order("family_code", { ascending: true })
-        .limit(8);
+        .range(nextOffset, nextOffset + pageSize - 1);
 
       if (id !== reqId.current) return;
-      if (error) {
-        toast({ kind: "error", title: "Error", message: error.message || "Search failed" });
-        return;
-      }
-      setResults(((data as any) || []) as FamilyRow[]);
-    }, 350);
+      if (error) throw error;
 
+      const rows = (((data as any) || []) as FamilyRow[]) || [];
+      setFamilies((prev) => (nextOffset === 0 ? rows : [...prev, ...rows]));
+      setOffset(nextOffset + rows.length);
+      setHasMore(rows.length === pageSize);
+    } catch (e: any) {
+      toast({ kind: "error", title: "Error", message: e.message || "Failed to load families" });
+      setHasMore(false);
+    } finally {
+      setLoadingFamilies(false);
+    }
+  }
+
+  useEffect(() => {
+    qRef.current = q;
+    const handle = setTimeout(() => {
+      setFamilies([]);
+      setOffset(0);
+      setHasMore(true);
+      fetchFamiliesPage(0, qRef.current);
+    }, 250);
     return () => clearTimeout(handle);
   }, [q, toast]);
+
+  useEffect(() => {
+    if (selected) return;
+    if (!sentinelRef.current) return;
+    if (!hasMore) return;
+
+    const el = sentinelRef.current;
+    const rootEl = listContainerRef.current;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry?.isIntersecting) return;
+        if (loadingFamilies) return;
+        if (!hasMore) return;
+        fetchFamiliesPage(offset, qRef.current);
+      },
+      { root: rootEl, rootMargin: "200px", threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [selected, hasMore, loadingFamilies, offset]);
 
   const isConfigured = profileLoaded && collectorEmployeeId && parseFloat(defaultPercent) >= 0;
 
@@ -158,7 +198,6 @@ export default function SubscriptionCollectPage() {
     }
 
     setSelected(data as any);
-    setResults([]);
     setQ("");
   }
 
@@ -293,37 +332,49 @@ export default function SubscriptionCollectPage() {
         </div>
 
         {!selected && (
-          <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
-            <input
-              type="text"
-              placeholder={t.search}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="w-full bg-white border border-slate-100 rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all shadow-sm"
-            />
-            {results.length > 0 && (
-              <div className="absolute z-20 mt-2 w-full bg-white rounded-2xl border border-slate-100 shadow-xl overflow-hidden">
-                {results.map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setSelected(r);
-                      setResults([]);
-                      setQ("");
-                    }}
-                    className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors"
-                  >
-                    <p className="text-sm font-black text-slate-800">{r.head_name}</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">
-                      {r.family_code} • {r.phone || ""}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="space-y-3">
+            <div className="relative group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
+              <input
+                type="text"
+                placeholder={t.search}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                className="w-full bg-white border border-slate-100 rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all shadow-sm"
+              />
+            </div>
+
+            <div
+              ref={listContainerRef}
+              className="app-card p-3 max-h-[55vh] overflow-y-auto overscroll-contain"
+            >
+              {families.length === 0 && !loadingFamilies ? (
+                <div className="py-10 text-center text-[11px] font-bold text-slate-400">{t.no_matches}</div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {families.map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => {
+                        setSelected(r);
+                      }}
+                      className="w-full text-left px-3 py-3 hover:bg-slate-50 transition-colors"
+                    >
+                      <p className="text-sm font-black text-slate-800">{r.head_name}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">
+                        {r.family_code} • {r.phone || ""}
+                      </p>
+                    </button>
+                  ))}
+                  <div ref={sentinelRef} className="h-8" />
+                </div>
+              )}
+
+              {loadingFamilies && (
+                <div className="py-4 text-center text-[11px] font-bold text-slate-400">{t.loading}</div>
+              )}
+            </div>
           </div>
         )}
 
