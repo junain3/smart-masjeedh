@@ -230,6 +230,46 @@ with check (
   or public.has_masjid_permission(masjid_id, 'subscriptions_approve'::text)
 );
 
+-- Select: collectors can read own profile. Admins can read all.
+drop policy if exists subscription_collector_profiles_select on public.subscription_collector_profiles;
+create policy subscription_collector_profiles_select
+on public.subscription_collector_profiles
+for select
+to authenticated
+using (
+  public.is_masjid_admin(masjid_id)
+  or user_id = auth.uid()
+);
+
+-- Insert: admins only.
+drop policy if exists subscription_collector_profiles_insert on public.subscription_collector_profiles;
+create policy subscription_collector_profiles_insert
+on public.subscription_collector_profiles
+for insert
+to authenticated
+with check (
+  public.is_masjid_admin(masjid_id)
+);
+
+-- Update: admins only.
+drop policy if exists subscription_collector_profiles_update on public.subscription_collector_profiles;
+create policy subscription_collector_profiles_update
+on public.subscription_collector_profiles
+for update
+to authenticated
+using (public.is_masjid_admin(masjid_id))
+with check (
+  public.is_masjid_admin(masjid_id)
+);
+
+-- Delete: admins only.
+drop policy if exists subscription_collector_profiles_delete on public.subscription_collector_profiles;
+create policy subscription_collector_profiles_delete
+on public.subscription_collector_profiles
+for delete
+to authenticated
+using (public.is_masjid_admin(masjid_id));
+
 -- employee_commissions: collectors can insert; approvers/admin can read.
 drop policy if exists employee_commissions_select on public.employee_commissions;
 create policy employee_commissions_select

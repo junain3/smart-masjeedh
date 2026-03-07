@@ -17,12 +17,6 @@ type FamilyRow = {
   address?: string | null;
 };
 
-type EmployeeRow = {
-  id: string;
-  name: string;
-  default_subscription_commission_percent?: number | null;
-};
-
 type CollectorProfileRow = {
   masjid_id: string;
   user_id: string;
@@ -47,8 +41,7 @@ export default function SubscriptionCollectPage() {
   const [results, setResults] = useState<FamilyRow[]>([]);
   const [selected, setSelected] = useState<FamilyRow | null>(null);
 
-  const [employees, setEmployees] = useState<EmployeeRow[]>([]);
-  const [employeeId, setEmployeeId] = useState<string>("");
+  const [collectorEmployeeId, setCollectorEmployeeId] = useState<string | null>(null);
 
   const [amount, setAmount] = useState("");
   const [defaultPercent, setDefaultPercent] = useState("0");
@@ -74,14 +67,6 @@ export default function SubscriptionCollectPage() {
 
       if (!canCollect) return;
 
-      const { data, error } = await supabase
-        .from("employees")
-        .select("id,name,default_subscription_commission_percent")
-        .eq("masjid_id", ctx.masjidId)
-        .order("name", { ascending: true });
-
-      if (!error) setEmployees(((data as any) || []) as EmployeeRow[]);
-
       const { data: prof } = await supabase
         .from("subscription_collector_profiles")
         .select("masjid_id,user_id,collector_employee_id,default_commission_percent")
@@ -91,10 +76,11 @@ export default function SubscriptionCollectPage() {
 
       if (prof) {
         const p = prof as any as CollectorProfileRow;
-        if (p.collector_employee_id) setEmployeeId(p.collector_employee_id);
+        setCollectorEmployeeId(p.collector_employee_id);
         setDefaultPercent(String(p.default_commission_percent ?? 0));
       } else {
         setDefaultPercent("0");
+        setCollectorEmployeeId(null);
       }
       setProfileLoaded(true);
     })();
@@ -148,34 +134,7 @@ export default function SubscriptionCollectPage() {
     return () => clearTimeout(handle);
   }, [q, toast]);
 
-  const commissionAmount = useMemo(() => {
-    const a = parseFloat(amount);
-    const p = parseFloat(defaultPercent);
-    if (!Number.isFinite(a) || a <= 0) return 0;
-    if (!Number.isFinite(p) || p <= 0) return 0;
-    return Math.round((a * p) / 100);
-  }, [amount, defaultPercent]);
-
-  async function upsertProfile(next: { collector_employee_id?: string | null; default_commission_percent?: number }) {
-    if (!supabase) return;
-    const ctx = await getTenantContext();
-    if (!ctx) return;
-
-    const payload: any = {
-      masjid_id: ctx.masjidId,
-      user_id: ctx.userId,
-      updated_at: new Date().toISOString(),
-    };
-    if (typeof next.collector_employee_id !== "undefined") payload.collector_employee_id = next.collector_employee_id;
-    if (typeof next.default_commission_percent !== "undefined") payload.default_commission_percent = next.default_commission_percent;
-
-    const { error } = await supabase.from("subscription_collector_profiles").upsert([payload], {
-      onConflict: "masjid_id,user_id",
-    });
-    if (error) {
-      toast({ kind: "error", title: "Error", message: error.message || "Failed" });
-    }
-  }
+  const isConfigured = profileLoaded && collectorEmployeeId && parseFloat(defaultPercent) >= 0;
 
   async function handleScan(decodedText: string) {
     if (!supabase) return;
@@ -205,6 +164,10 @@ export default function SubscriptionCollectPage() {
 
   async function savePendingCollection() {
     if (!supabase) return;
+    if (!isConfigured) {
+      toast({ kind: "error", title: "Not configured", message: "Admin must set collector employee and commission" });
+      return;
+    }
     if (!selected) {
       toast({ kind: "error", title: "Select family", message: "" });
       return;
@@ -257,7 +220,7 @@ export default function SubscriptionCollectPage() {
             {
               masjid_id: ctx.masjidId,
               collected_by_user_id: ctx.userId,
-              collector_employee_id: employeeId || null,
+              collector_employee_id: collectorEmployeeId,
               status: "open",
             } as any,
           ])
@@ -273,7 +236,7 @@ export default function SubscriptionCollectPage() {
           batch_id: batchId,
           family_id: selected.id,
           collected_by_user_id: ctx.userId,
-          collector_employee_id: employeeId || null,
+          collector_employee_id: collectorEmployeeId,
           amount: a,
           commission_percent: commissionPct,
           commission_amount: commissionAmt,
@@ -383,25 +346,11 @@ export default function SubscriptionCollectPage() {
               </button>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Collector employee</label>
-              <select
-                value={employeeId}
-                onChange={async (e) => {
-                  const v = e.target.value;
-                  setEmployeeId(v);
-                  if (profileLoaded) await upsertProfile({ collector_employee_id: v || null });
-                }}
-                className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
-              >
-                <option value="">No employee</option>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!isConfigured && (
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-bold">
+                Collector settings not configured. Please ask Admin to set your Employee and Commission % in Admin Settings.
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -415,25 +364,9 @@ export default function SubscriptionCollectPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Default Commission %</label>
-                <input
-                  type="number"
-                  value={defaultPercent}
-                  onChange={(e) => setDefaultPercent(e.target.value)}
-                  onBlur={async () => {
-                    const p = parseFloat(defaultPercent);
-                    if (!Number.isFinite(p) || p < 0) return;
-                    if (profileLoaded) await upsertProfile({ default_commission_percent: p });
-                  }}
-                  className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
-                  placeholder="0"
-                />
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">&nbsp;</label>
+                <div className="w-full bg-transparent p-5" />
               </div>
-            </div>
-
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-              <span>Commission amount</span>
-              <span className="text-emerald-700 font-black">Rs. {commissionAmount.toLocaleString()}</span>
             </div>
 
             <div className="space-y-2">

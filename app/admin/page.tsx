@@ -9,6 +9,20 @@ import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
 import { Shield, Mail, Trash2 } from "lucide-react";
 
+type EmployeeRow = {
+  id: string;
+  masjid_id: string;
+  name: string;
+};
+
+type CollectorProfileRow = {
+  id: string;
+  masjid_id: string;
+  user_id: string;
+  collector_employee_id: string | null;
+  default_commission_percent: number;
+};
+
 type RoleRow = {
   id: string;
   masjid_id: string;
@@ -46,6 +60,10 @@ export default function AdminSettingsPage() {
   const [invites, setInvites] = useState<InviteRow[]>([]);
   const [selfRole, setSelfRole] = useState<"super_admin" | "co_admin" | "staff" | "editor" | null>(null);
   const [error, setError] = useState<string>("");
+
+  const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [collectorProfiles, setCollectorProfiles] = useState<Record<string, CollectorProfileRow>>({});
+  const [savingCollectorForUserId, setSavingCollectorForUserId] = useState<string | null>(null);
 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"staff" | "editor">("staff");
@@ -115,6 +133,33 @@ export default function AdminSettingsPage() {
           .order("created_at", { ascending: true });
         setRoles((allRoles as any) || []);
 
+        const { data: empData, error: empErr } = await supabase
+          .from("employees")
+          .select("id,masjid_id,name")
+          .eq("masjid_id", ctx.masjidId)
+          .order("name", { ascending: true });
+        if (!empErr) setEmployees(((empData as any) || []) as EmployeeRow[]);
+
+        const collectorUserIds = (((allRoles as any) || []) as RoleRow[])
+          .filter((r) => ((r.permissions as any) || {})?.subscriptions_collect === true)
+          .map((r) => r.user_id);
+        if (collectorUserIds.length > 0) {
+          const { data: profData, error: profErr } = await supabase
+            .from("subscription_collector_profiles")
+            .select("id,masjid_id,user_id,collector_employee_id,default_commission_percent")
+            .eq("masjid_id", ctx.masjidId)
+            .in("user_id", collectorUserIds);
+          if (!profErr) {
+            const map: Record<string, CollectorProfileRow> = {};
+            (((profData as any) || []) as any[]).forEach((p) => {
+              map[p.user_id] = p as any;
+            });
+            setCollectorProfiles(map);
+          }
+        } else {
+          setCollectorProfiles({});
+        }
+
         const { data: allInvites } = await supabase
           .from("role_invitations")
           .select("*")
@@ -129,6 +174,39 @@ export default function AdminSettingsPage() {
     }
     load();
   }, [router]);
+
+  const upsertCollectorProfile = async (userId: string, next: { collector_employee_id?: string | null; default_commission_percent?: number }) => {
+    if (!supabase || !masjidId || !canManage) return;
+    try {
+      setSavingCollectorForUserId(userId);
+      const current = collectorProfiles[userId];
+      const payload: any = {
+        masjid_id: masjidId,
+        user_id: userId,
+        collector_employee_id:
+          typeof next.collector_employee_id !== "undefined" ? next.collector_employee_id : current?.collector_employee_id ?? null,
+        default_commission_percent:
+          typeof next.default_commission_percent !== "undefined"
+            ? next.default_commission_percent
+            : current?.default_commission_percent ?? 0,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from("subscription_collector_profiles")
+        .upsert([payload], { onConflict: "masjid_id,user_id" })
+        .select("id,masjid_id,user_id,collector_employee_id,default_commission_percent")
+        .single();
+      if (error) throw error;
+
+      setCollectorProfiles((prev) => ({ ...prev, [userId]: data as any }));
+      toast({ kind: "success", title: "Saved", message: "Collector settings updated" });
+    } catch (e: any) {
+      toast({ kind: "error", title: "Error", message: e.message || "Failed to save collector settings" });
+    } finally {
+      setSavingCollectorForUserId(null);
+    }
+  };
 
   const roleLabel = (r: RoleRow["role"]) => {
     if (r === "super_admin") return t.super_admin;
@@ -352,6 +430,8 @@ export default function AdminSettingsPage() {
                     const membersOn = perms.members ?? true;
                     const subCollectOn = perms.subscriptions_collect ?? false;
                     const subApproveOn = perms.subscriptions_approve ?? false;
+                    const profile = collectorProfiles[r.user_id];
+                    const isSavingCollector = savingCollectorForUserId === r.user_id;
                     return (
                       <div
                         key={r.id}
@@ -419,6 +499,54 @@ export default function AdminSettingsPage() {
                             />
                             <span>Subscription Approve</span>
                           </label>
+
+                          {subCollectOn && (
+                            <div className="mt-2 p-3 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
+                              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                Collector Settings
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <div className="space-y-1">
+                                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Employee</div>
+                                  <select
+                                    value={profile?.collector_employee_id || ""}
+                                    onChange={(e) =>
+                                      upsertCollectorProfile(r.user_id, {
+                                        collector_employee_id: e.target.value || null,
+                                      })
+                                    }
+                                    className="w-full bg-white border border-slate-100 rounded-2xl px-3 py-2 text-[11px] font-bold outline-none"
+                                    disabled={isSavingCollector}
+                                  >
+                                    <option value="">Select employee</option>
+                                    {employees.map((emp) => (
+                                      <option key={emp.id} value={emp.id}>
+                                        {emp.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Commission %</div>
+                                  <input
+                                    type="number"
+                                    defaultValue={String(profile?.default_commission_percent ?? 0)}
+                                    onBlur={(e) => {
+                                      const v = parseFloat(e.target.value);
+                                      if (!Number.isFinite(v) || v < 0) return;
+                                      upsertCollectorProfile(r.user_id, { default_commission_percent: v });
+                                    }}
+                                    className="w-full bg-white border border-slate-100 rounded-2xl px-3 py-2 text-[11px] font-bold outline-none"
+                                    placeholder="0"
+                                    disabled={isSavingCollector}
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-[10px] font-bold text-slate-500">
+                                {profile?.collector_employee_id ? "Configured" : "Not configured"}
+                              </div>
+                            </div>
+                          )}
                         </div>
                         <div className="w-full flex justify-end">
                           <button
