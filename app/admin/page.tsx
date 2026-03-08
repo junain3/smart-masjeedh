@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { translations, Language } from "@/lib/i18n/translations";
 import { supabase } from "@/lib/supabase";
 import { AppShell } from "@/components/AppShell";
-import { Shield, Mail, Trash2 } from "lucide-react";
+import { Shield, Mail, Trash2, Percent, Wallet } from "lucide-react";
 
 type RoleRow = {
   id: string;
@@ -29,6 +29,14 @@ type InviteRow = {
   created_at: string;
 };
 
+type CollectorProfile = {
+  id: string;
+  masjid_id: string;
+  user_id: string;
+  default_commission_percent: number;
+  updated_at: string;
+};
+
 export default function AdminSettingsPage() {
   const router = useRouter();
   const [lang, setLang] = useState<Language>("en");
@@ -37,6 +45,7 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [invites, setInvites] = useState<InviteRow[]>([]);
+  const [collectorProfiles, setCollectorProfiles] = useState<CollectorProfile[]>([]);
   const [selfRole, setSelfRole] = useState<"super_admin" | "staff" | "editor" | null>(null);
   const [error, setError] = useState<string>("");
 
@@ -115,6 +124,14 @@ export default function AdminSettingsPage() {
           .eq("masjid_id", masjidId)
           .order("created_at", { ascending: false });
         setInvites((allInvites as any) || []);
+
+        // Fetch collector profiles
+        const { data: profiles } = await supabase
+          .from("subscription_collector_profiles")
+          .select("*")
+          .eq("masjid_id", masjidId)
+          .order("updated_at", { ascending: false });
+        setCollectorProfiles((profiles as any) || []);
       } catch (e: any) {
         setError(e.message || "Failed to load admin settings");
       } finally {
@@ -235,6 +252,49 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const updateCommissionRate = async (userId: string, commissionPercent: number) => {
+    if (!supabase || !canManage) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const masjidId = session.user.id;
+
+      const existingProfile = collectorProfiles.find(p => p.user_id === userId);
+      
+      if (existingProfile) {
+        // Update existing profile
+        const { error } = await supabase
+          .from("subscription_collector_profiles")
+          .update({ default_commission_percent: commissionPercent })
+          .eq("id", existingProfile.id);
+        if (error) throw error;
+      } else {
+        // Create new profile
+        const { error } = await supabase
+          .from("subscription_collector_profiles")
+          .insert([
+            {
+              masjid_id: masjidId,
+              user_id: userId,
+              default_commission_percent: commissionPercent,
+            }
+          ]);
+        if (error) throw error;
+      }
+
+      // Refresh collector profiles
+      const { data: profiles } = await supabase
+        .from("subscription_collector_profiles")
+        .select("*")
+        .eq("masjid_id", masjidId)
+        .order("updated_at", { ascending: false });
+      setCollectorProfiles((profiles as any) || []);
+
+    } catch (e: any) {
+      alert(e.message || "Failed to update commission rate");
+    }
+  };
+
   return (
     <AppShell
       title={t.admin_settings}
@@ -315,10 +375,11 @@ export default function AdminSettingsPage() {
               <h2 className="text-sm font-black uppercase tracking-widest text-slate-500">
                 {t.staff_management}
               </h2>
-              <div className="hidden md:grid grid-cols-4 gap-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">
+              <div className="hidden md:grid grid-cols-5 gap-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">
                 <span>{t.email}</span>
                 <span>{t.role}</span>
                 <span>Permissions</span>
+                <span>Commission %</span>
                 <span className="text-right">{t.remove}</span>
               </div>
               <div className="space-y-2">
@@ -332,10 +393,12 @@ export default function AdminSettingsPage() {
                     const accountsOn = perms.accounts ?? true;
                     const eventsOn = perms.events ?? true;
                     const membersOn = perms.members ?? true;
+                    const collectorProfile = collectorProfiles.find(p => p.user_id === r.user_id);
+                    const commissionRate = collectorProfile?.default_commission_percent || 0;
                     return (
                       <div
                         key={r.id}
-                        className="flex flex-col md:grid md:grid-cols-4 gap-3 items-start md:items-center border border-slate-100 rounded-2xl px-3 py-3 text-sm bg-white"
+                        className="flex flex-col md:grid md:grid-cols-5 gap-3 items-start md:items-center border border-slate-100 rounded-2xl px-3 py-3 text-sm bg-white"
                       >
                         <div className="flex flex-col gap-0.5">
                           <span className="font-bold text-slate-800 break-all">
@@ -373,6 +436,20 @@ export default function AdminSettingsPage() {
                             />
                             <span>Members</span>
                           </label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Percent className="w-4 h-4 text-purple-500" />
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={commissionRate}
+                            onChange={(e) => updateCommissionRate(r.user_id, parseFloat(e.target.value) || 0)}
+                            className="w-16 px-2 py-1 text-xs font-bold border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500/20 outline-none"
+                            placeholder="0"
+                          />
+                          <span className="text-xs text-slate-400">%</span>
                         </div>
                         <div className="w-full flex justify-end">
                           <button

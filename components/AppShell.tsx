@@ -13,6 +13,7 @@ import {
   Shield,
   Menu,
   X,
+  Wallet,
 } from "lucide-react";
 import { translations, Language } from "@/lib/i18n/translations";
 import { supabase } from "@/lib/supabase";
@@ -42,6 +43,8 @@ export function AppShell(props: {
     accounts?: boolean;
     events?: boolean;
     members?: boolean;
+    subscriptions_collect?: boolean;
+    subscriptions_approve?: boolean;
   } | null>(null);
 
   useEffect(() => {
@@ -82,6 +85,16 @@ export function AppShell(props: {
     const canAccounts = isSuper || perms.accounts !== false;
     const canEvents = isSuper || perms.events !== false;
     const canMembers = isSuper || perms.members !== false;
+    const canCollect = isSuper || perms.subscriptions_collect !== false;
+    const canApprove = isSuper || perms.subscriptions_approve !== false;
+
+    // For staff users with collection permissions, redirect them to collections page
+    if (role === "staff" && canCollect && !canAccounts && !canEvents && !canMembers) {
+      return [
+        { href: "/collections", label: "Collections", icon: <Wallet className="w-5 h-5" /> },
+        { href: "/settings", label: t.settings, icon: <Settings className="w-5 h-5" /> },
+      ];
+    }
 
     const base: NavItem[] = [
       { href: "/", label: t.dashboard, icon: <Home className="w-5 h-5" /> },
@@ -92,6 +105,12 @@ export function AppShell(props: {
     }
     if (canAccounts) {
       base.push({ href: "/accounts", label: t.accounts, icon: <CreditCard className="w-5 h-5" /> });
+    }
+    if (canCollect) {
+      base.push({ href: "/collections", label: "Collections", icon: <Wallet className="w-5 h-5" /> });
+    }
+    if (canApprove) {
+      base.push({ href: "/collections/pending", label: "Pending Approval", icon: <Shield className="w-5 h-5" /> });
     }
     if (canEvents) {
       base.push({ href: "/events", label: t.events || "Events", icon: <Calendar className="w-5 h-5" /> });
