@@ -6,15 +6,18 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Briefcase, Phone, MapPin, Wallet, Plus, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+import { getTenantContext } from "@/lib/tenant";
+import { useAppToast } from "@/components/ToastProvider";
 
 type Employee = {
   id: string;
   masjid_id: string;
   name: string;
   role: string;
-  address: string;
-  phone: string;
+  address?: string;
+  phone?: string;
   photo_url?: string | null;
+  monthly_salary?: number | null;
 };
 
 type EmployeePayment = {
@@ -39,6 +42,7 @@ export default function EmployeeProfilePage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const employeeId = params.id;
+  const { toast } = useAppToast();
 
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
@@ -68,27 +72,56 @@ export default function EmployeeProfilePage() {
     if (!supabase) return;
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const ctx = await getTenantContext();
+      if (!ctx) {
         router.push("/login");
         return;
       }
 
-      const { data: empData, error: empErr } = await supabase
-        .from("employees")
-        .select("id, masjid_id, name, role, address, phone, photo_url")
-        .eq("id", employeeId)
-        .eq("masjid_id", session.user.id)
-        .single();
+      let loaded: Employee | null = null;
 
-      if (empErr) throw empErr;
-      setEmployee(empData as any);
+      // Prefer employees table (full details) when available
+      const { data: empRow, error: empErr } = await supabase
+        .from("employees")
+        .select("id, masjid_id, name, role, address, phone, photo_url, monthly_salary")
+        .eq("id", employeeId)
+        .eq("masjid_id", ctx.masjidId)
+        .maybeSingle();
+
+      if (!empErr && empRow) {
+        loaded = empRow as any;
+      } else {
+        // fallback to user_roles based employee listing
+        const { data: roleRow, error: roleErr } = await supabase
+          .from("user_roles")
+          .select("user_id, masjid_id, role, email")
+          .eq("user_id", employeeId)
+          .eq("masjid_id", ctx.masjidId)
+          .maybeSingle();
+
+        if (roleErr) throw roleErr;
+        if (!roleRow) throw new Error("Employee not found");
+        const email = (roleRow as any).email as string | null;
+        const display = email ? email.split("@")[0] : (roleRow as any).user_id;
+        loaded = {
+          id: (roleRow as any).user_id,
+          masjid_id: (roleRow as any).masjid_id,
+          name: display,
+          role: (roleRow as any).role || "staff",
+          address: "",
+          phone: "",
+          photo_url: null,
+          monthly_salary: null,
+        };
+      }
+
+      setEmployee(loaded);
 
       const { data: payData, error: payErr } = await supabase
         .from("employee_payments")
         .select("id, masjid_id, employee_id, amount, date, notes, transaction_id, created_at")
         .eq("employee_id", employeeId)
-        .eq("masjid_id", session.user.id)
+        .eq("masjid_id", ctx.masjidId)
         .order("date", { ascending: false });
 
       if (payErr) {
@@ -98,7 +131,7 @@ export default function EmployeeProfilePage() {
         setPayments((payData as any) || []);
       }
     } catch (e: any) {
-      alert(e.message || "Failed to load employee");
+      toast({ kind: "error", title: "Error", message: e.message || "Failed to load employee" });
       router.push("/staff");
     } finally {
       setLoading(false);
@@ -110,24 +143,42 @@ export default function EmployeeProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employeeId]);
 
+  const formatSupabaseError = (e: any) => {
+    if (!e) return "Unknown error";
+    const parts = [e.message, e.details, e.hint, e.code].filter(Boolean);
+    return parts.join(" • ");
+  };
+
+  const isMissingEmployeeIdColumnError = (e: any) => {
+    const msg = (e as any)?.message || "";
+    return msg.includes("employee_id") && msg.includes("transactions") && msg.includes("schema cache");
+  };
+
   async function addPayment() {
     if (!supabase || !employee) return;
     setSubmitting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canAccounts = isAdmin || ctx.permissions?.accounts !== false;
+      if (!canAccounts) {
+        toast({ kind: "error", title: "Access denied", message: "You don't have permission." });
+        return;
+      }
 
       const amt = parseFloat(amount);
       if (!Number.isFinite(amt) || amt <= 0) {
-        alert("Enter a valid amount");
+        toast({ kind: "error", title: "Invalid amount", message: "Enter a valid amount" });
         return;
       }
 
       // 1) Create an expense transaction in main accounts
       const txDescription =
         lang === "tm"
-          ? `${t.salary_payment} - ${employee.name} (${employee.role})`
-          : `${t.salary_payment} - ${employee.name} (${employee.role})`;
+          ? `${t.salary_payment} - ${employee.name || ""} (${employee.role || ""})`
+          : `${t.salary_payment} - ${employee.name || ""} (${employee.role || ""})`;
 
       const { data: txInserted, error: txErr } = await supabase
         .from("transactions")
@@ -138,7 +189,7 @@ export default function EmployeeProfilePage() {
             type: "expense",
             category: t.salary,
             date,
-            masjid_id: session.user.id,
+            masjid_id: ctx.masjidId,
             employee_id: employee.id,
           } as any,
         ])
@@ -150,7 +201,7 @@ export default function EmployeeProfilePage() {
       // 2) Add to employee payment history
       const { error: payErr } = await supabase.from("employee_payments").insert([
         {
-          masjid_id: session.user.id,
+          masjid_id: ctx.masjidId,
           employee_id: employee.id,
           amount: amt,
           date,
@@ -167,7 +218,16 @@ export default function EmployeeProfilePage() {
       setDate(new Date().toISOString().split("T")[0]);
       await fetchEmployeeAndPayments();
     } catch (e: any) {
-      alert(e.message || "Failed to add payment");
+      if (isMissingEmployeeIdColumnError(e)) {
+        toast({
+          kind: "error",
+          title: "Database setup",
+          message:
+            "Missing column: transactions.employee_id. Run this SQL in Supabase: ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS employee_id uuid;",
+        });
+      } else {
+        toast({ kind: "error", title: "Error", message: formatSupabaseError(e) || "Failed to add payment" });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -202,6 +262,7 @@ export default function EmployeeProfilePage() {
         <button
           onClick={() => {
             setTab("payments");
+            if (!amount && employee?.monthly_salary) setAmount(String(employee.monthly_salary));
             setIsPayModalOpen(true);
           }}
           className="p-3 bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
@@ -231,14 +292,18 @@ export default function EmployeeProfilePage() {
           </div>
 
           <div className="mt-5 space-y-2">
-            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
-              <MapPin className="w-4 h-4 text-slate-300" />
-              <span className="truncate">{employee.address}</span>
-            </div>
-            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
-              <Phone className="w-4 h-4 text-slate-300" />
-              <span className="truncate">{employee.phone}</span>
-            </div>
+            {employee.address ? (
+              <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
+                <MapPin className="w-4 h-4 text-slate-300" />
+                <span className="truncate">{employee.address}</span>
+              </div>
+            ) : null}
+            {employee.phone ? (
+              <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
+                <Phone className="w-4 h-4 text-slate-300" />
+                <span className="truncate">{employee.phone}</span>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -326,7 +391,7 @@ export default function EmployeeProfilePage() {
 
       {isPayModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
-          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-black text-slate-900">{t.add_payment}</h2>
               <button onClick={() => setIsPayModalOpen(false)} className="p-2 hover:bg-slate-50 rounded-full transition-colors">

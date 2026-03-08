@@ -9,6 +9,7 @@ import { ShieldCheck, Mail } from "lucide-react";
 type MasjidRow = {
   id: string;
   name: string;
+  masjid_name?: string | null;
   tagline: string | null;
   status?: "pending" | "approved" | "deactivated" | null;
   subscription_status?: "pending" | "paid" | "expired" | null;
@@ -41,11 +42,33 @@ export default function SuperAdminPage() {
         }
         setAllowed(true);
 
-        const { data, error } = await supabase
-          .from("masjids")
-          .select("id,name,tagline,status,subscription_status,created_at,admin_email");
-        if (error) throw error;
-        setRows((data as any) || []);
+        try {
+          const { data, error } = await supabase
+            .from("masjids")
+            .select("id,masjid_name,tagline,status,subscription_status,created_at,admin_email");
+          if (error) throw error;
+          setRows(
+            (((data as any[]) || []) as any).map((r) => ({
+              ...(r as any),
+              name: (r as any).masjid_name || (r as any).name || (r as any).id,
+            }))
+          );
+        } catch (e: any) {
+          const msg = e?.message || "";
+          if (msg.includes("schema cache") || msg.includes("column") || msg.includes("Could not find")) {
+            const { data: fallback, error: fbErr } = await supabase.from("masjids").select("id");
+            if (fbErr) throw fbErr;
+            setRows(
+              ((fallback as any[]) || []).map((r) => ({
+                id: (r as any).id,
+                name: (r as any).id,
+                tagline: null,
+              }))
+            );
+          } else {
+            throw e;
+          }
+        }
       } catch (e: any) {
         setError(e.message || "Failed to load masjids");
       } finally {

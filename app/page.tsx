@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search, Briefcase } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+
+import { getTenantContext } from "@/lib/tenant";
+import { useAppToast } from "@/components/ToastProvider";
+import { QrScannerModal } from "@/components/QrScannerModal";
 
 type MasjidProfile = {
   name: string;
@@ -14,6 +18,7 @@ type MasjidProfile = {
 };
 
 export default function DashboardPage() {
+  const { toast } = useAppToast();
   const [time, setTime] = useState(new Date());
   const [familyCount, setFamilyCount] = useState<number | null>(null);
   const [memberCount, setMemberCount] = useState<number | null>(null);
@@ -43,7 +48,8 @@ export default function DashboardPage() {
   const [searchError, setSearchError] = useState("");
   const [memberResults, setMemberResults] = useState<MemberRes[]>([]);
   const [familyResults, setFamilyResults] = useState<FamilyRes[]>([]);
-  const [resultType, setResultType] = useState<"none" | "members" | "families">("none");
+  const [resultType, setResultType] = useState<"none" | "members" | "families" | "mixed">("none");
+  const searchRequestSeq = useRef(0);
 
   const parseQuery = (q: string) => {
     const s = q.trim().toLowerCase();
@@ -70,28 +76,41 @@ export default function DashboardPage() {
     return { kind: "free" as const, text: q.trim() };
   };
 
-  const handleSearch = async () => {
+  const runSearch = async (query: string) => {
     if (!supabase) return;
+    const q = query.trim();
+
+    if (q.length < 2) {
+      setSearchError("");
+      setMemberResults([]);
+      setFamilyResults([]);
+      setResultType("none");
+      return;
+    }
+
+    const requestId = ++searchRequestSeq.current;
     setSearchLoading(true);
     setSearchError("");
     setMemberResults([]);
     setFamilyResults([]);
     setResultType("none");
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const ctx = await getTenantContext();
+      if (!ctx) {
+        if (requestId !== searchRequestSeq.current) return;
         setSearchError(lang === "tm" ? "லாகின் தேவை" : "Login required");
         return;
       }
-      const p = parseQuery(searchQuery);
+      const p = parseQuery(q);
       if (p.kind === "widows") {
         const { data, error } = await supabase
           .from("families")
           .select("id,family_code,head_name,is_widow_head")
-          .eq("masjid_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
           .eq("is_widow_head", true)
           .order("family_code", { ascending: true });
         if (error) throw error;
+        if (requestId !== searchRequestSeq.current) return;
         setFamilyResults(data || []);
         setResultType("families");
         return;
@@ -100,11 +119,12 @@ export default function DashboardPage() {
         let q = supabase
           .from("members")
           .select("id,family_id,full_name,age,gender")
-          .eq("masjid_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
           .eq("age", p.age);
         if (p.gender) q = q.eq("gender", p.gender);
         const { data, error } = await q;
         if (error) throw error;
+        if (requestId !== searchRequestSeq.current) return;
         setMemberResults(data || []);
         setResultType("members");
         return;
@@ -113,45 +133,97 @@ export default function DashboardPage() {
         let q = supabase
           .from("members")
           .select("id,family_id,full_name,age,gender")
-          .eq("masjid_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
           .gte("age", p.minAge)
           .lte("age", p.maxAge);
         if (p.gender) q = q.eq("gender", p.gender);
         const { data, error } = await q;
         if (error) throw error;
+        if (requestId !== searchRequestSeq.current) return;
         setMemberResults(data || []);
         setResultType("members");
         return;
       }
       if (p.kind === "free") {
         const text = p.text.toLowerCase();
-        const { data, error } = await supabase
-          .from("families")
-          .select("id,family_code,head_name,is_widow_head")
-          .eq("masjid_id", session.user.id)
-          .or(`head_name.ilike.%${text}%,family_code.ilike.%${text}%`)
-          .order("family_code", { ascending: true });
-        if (error) throw error;
-        setFamilyResults(data || []);
-        setResultType("families");
+        const [famRes, memRes] = await Promise.all([
+          supabase
+            .from("families")
+            .select("id,family_code,head_name,is_widow_head")
+            .eq("masjid_id", ctx.masjidId)
+            .or(
+              `head_name.ilike.%${text}%,family_code.ilike.%${text}%,phone.ilike.%${text}%,address.ilike.%${text}%`
+            )
+            .order("family_code", { ascending: true }),
+          supabase
+            .from("members")
+            .select("id,family_id,full_name,age,gender")
+            .eq("masjid_id", ctx.masjidId)
+            .or(
+              `full_name.ilike.%${text}%,phone.ilike.%${text}%,nic.ilike.%${text}%,member_code.ilike.%${text}%`
+            )
+            .order("full_name", { ascending: true }),
+        ]);
+
+        if (famRes.error) throw famRes.error;
+        if (memRes.error) throw memRes.error;
+
+        if (requestId !== searchRequestSeq.current) return;
+
+        const famData = (famRes.data || []) as any[];
+        const memData = (memRes.data || []) as any[];
+
+        setFamilyResults(famData);
+        setMemberResults(memData);
+
+        if (famData.length > 0 && memData.length > 0) {
+          setResultType("mixed");
+        } else if (memData.length > 0) {
+          setResultType("members");
+        } else {
+          setResultType("families");
+        }
         return;
       }
     } catch (e: any) {
+      if (requestId !== searchRequestSeq.current) return;
       setSearchError(e.message || "Search failed");
     } finally {
+      if (requestId !== searchRequestSeq.current) return;
       setSearchLoading(false);
     }
   };
 
+  const handleSearch = async () => {
+    await runSearch(searchQuery);
+  };
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchError("");
+      setMemberResults([]);
+      setFamilyResults([]);
+      setResultType("none");
+      return;
+    }
+
+    const tmr = setTimeout(() => {
+      runSearch(searchQuery);
+    }, 350);
+
+    return () => clearTimeout(tmr);
+  }, [searchQuery]);
+
   const fetchActiveServices = async () => {
     if (!supabase) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const ctx = await getTenantContext();
+    if (!ctx) return;
 
     const { data } = await supabase
       .from("service_distributions")
       .select("name")
-      .eq("masjid_id", session.user.id)
+      .eq("masjid_id", ctx.masjidId)
       .eq("status", "Pending");
     
     if (data) {
@@ -167,27 +239,30 @@ export default function DashboardPage() {
     }
   }, [isServicesModalOpen]);
 
-  const handleServiceScan = async (decodedText: string) => {
+  const handleServiceScan = async (decodedTextRaw: string) => {
     if (!supabase || !selectedScanService) return;
+
+    const decodedText = decodedTextRaw || "";
     
     try {
       if (decodedText.startsWith("smart-masjeedh:family:")) {
         const familyId = decodedText.split(":")[2];
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        const ctx = await getTenantContext();
+        if (!ctx) return;
 
         const { data, error } = await supabase
           .from("service_distributions")
           .update({ status: 'Received' })
           .eq("family_id", familyId)
           .eq("name", selectedScanService)
-          .eq("masjid_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
           .select();
 
         if (error) throw error;
         
         if (data && data.length > 0) {
           setScanStatus({ type: 'success', message: t.service_marked_received });
+          setIsScannerOpen(false);
           // Reset message after 2 seconds
           setTimeout(() => setScanStatus({ type: 'idle', message: '' }), 2000);
         } else {
@@ -201,49 +276,29 @@ export default function DashboardPage() {
     }
   };
 
-  useEffect(() => {
-    let html5QrCode: any = null;
-    if (isScannerOpen) {
-      import("html5-qrcode").then((lib: any) => {
-        html5QrCode = new lib.Html5Qrcode("service-reader");
-        const config = { fps: 12, qrbox: { width: 260, height: 260 } };
-        html5QrCode
-          .start({ facingMode: "environment" }, config,
-            (decodedText: string) => handleServiceScan(decodedText),
-            (_err: any) => {})
-          .catch((_e: any) => {});
-      });
-    }
-    return () => {
-      if (html5QrCode && html5QrCode.stop) {
-        html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
-      }
-    };
-  }, [isScannerOpen, selectedScanService]);
-
   const createServiceDistribution = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supabase) return;
     setSubmittingService(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const ctx = await getTenantContext();
+      if (!ctx) return;
 
       // 1. Fetch all families for this masjid
       const { data: families } = await supabase
         .from("families")
         .select("id")
-        .eq("masjid_id", session.user.id);
+        .eq("masjid_id", ctx.masjidId);
       
       if (!families || families.length === 0) {
-        alert("No families found to distribute to.");
+        toast({ kind: "info", title: "No data", message: "No families found to distribute to." });
         return;
       }
 
       // 2. Create distribution records for each family
       const distributions = families.map(f => ({
         family_id: f.id,
-        masjid_id: session.user.id,
+        masjid_id: ctx.masjidId,
         name: serviceName,
         date: serviceDate,
         status: 'Pending'
@@ -252,11 +307,11 @@ export default function DashboardPage() {
       const { error } = await supabase.from("service_distributions").insert(distributions);
       if (error) throw error;
 
-      alert("Service distribution created for all families!");
+      toast({ kind: "success", title: "Created", message: "Service distribution created for all families!" });
       setIsServicesModalOpen(false);
       setServiceName("");
     } catch (err: any) {
-      alert(err.message);
+      toast({ kind: "error", title: "Error", message: err.message || "Failed" });
     } finally {
       setSubmittingService(false);
     }
@@ -279,17 +334,55 @@ export default function DashboardPage() {
         if (savedLang) setLang(savedLang);
 
         // Check if user is logged in
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        const ctx = await getTenantContext();
+        if (!ctx) {
           router.push('/login');
           return;
+        }
+
+        // Load masjid profile
+        try {
+          const { data: masjidData, error: masjidErr } = await supabase
+            .from("masjids")
+            .select("id, masjid_name, tagline, logo_url")
+            .eq("id", ctx.masjidId)
+            .maybeSingle();
+
+          if (masjidErr) throw masjidErr;
+
+          if (masjidData) {
+            setMasjid({
+              name: (masjidData as any).masjid_name || "MJM",
+              logo_url: (masjidData as any).logo_url || "",
+              tagline: (masjidData as any).tagline || "Mubeen Jummah Masjid",
+            });
+          } else {
+            // Default Fallback
+            setMasjid({
+              name: "MJM",
+              logo_url: "",
+              tagline: "Mubeen Jummah Masjid",
+            });
+          }
+        } catch (e: any) {
+          const msg = e?.message || "";
+          if (msg.includes("schema cache") || msg.includes("column") || msg.includes("Could not find")) {
+            // ignore - allow dashboard to render
+            setMasjid({
+              name: "MJM",
+              logo_url: "",
+              tagline: "Mubeen Jummah Masjid",
+            });
+          } else {
+            throw e;
+          }
         }
 
         // Fetch family count
         const { count, error: countError } = await supabase
           .from("families")
-          .select("*", { count: "exact", head: true })
-          .eq("masjid_id", session.user.id); // Filter by masjid ID
+          .select("id", { count: "exact", head: true })
+          .eq("masjid_id", ctx.masjidId); // Filter by masjid ID
         
         if (countError) throw countError;
         setFamilyCount(count || 0);
@@ -298,37 +391,9 @@ export default function DashboardPage() {
         const { count: mCount, error: mError } = await supabase
           .from("members")
           .select("*", { count: "exact", head: true })
-          .eq("masjid_id", session.user.id);
+          .eq("masjid_id", ctx.masjidId);
         
         if (!mError) setMemberCount(mCount || 0);
-
-        // Fetch dynamic masjid profile (Optional table - fallback to MJM if not exists)
-        try {
-          if (!supabase) return;
-          const { data: masjidData } = await supabase
-            .from("masjids")
-            .select("*")
-            .eq("id", session.user.id)
-            .single();
-          
-          if (masjidData) {
-            setMasjid(masjidData);
-          } else {
-            // Default Fallback
-            setMasjid({
-              name: "MJM",
-              logo_url: "",
-              tagline: "Mubeen Jummah Masjid"
-            });
-          }
-        } catch (e) {
-          // If table masjids doesn't exist yet
-          setMasjid({
-            name: "MJM",
-            logo_url: "",
-            tagline: "Mubeen Jummah Masjid"
-          });
-        }
 
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -353,7 +418,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-white text-black font-sans pb-24 relative overflow-x-hidden">
+    <div className="flex flex-col min-h-screen bg-neutral-50 text-neutral-900 font-sans pb-24 relative overflow-x-hidden">
       {/* Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
@@ -367,41 +432,41 @@ export default function DashboardPage() {
         <div className="p-6 flex flex-col h-full">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-xl font-black text-emerald-600 uppercase tracking-tighter">Menu</h2>
-            <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
-              <X className="w-6 h-6 text-slate-400" />
+            <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors">
+              <X className="w-6 h-6 text-neutral-600" />
             </button>
           </div>
 
           <div className="flex-1 space-y-2">
-            <Link href="/" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 bg-emerald-50 text-emerald-600 rounded-2xl font-bold transition-all">
+            <Link href="/" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 bg-emerald-50 text-emerald-700 rounded-3xl font-bold transition-all">
               <HomeIcon className="w-5 h-5" />
               <span>{t.dashboard}</span>
             </Link>
-            <Link href="/families" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
+            <Link href="/families" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
               <Users className="w-5 h-5" />
               <span>{t.families}</span>
             </Link>
-            <Link href="/accounts" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
+            <Link href="/accounts" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
               <CreditCard className="w-5 h-5" />
               <span>{t.accounts}</span>
             </Link>
-            <Link href="/staff" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
+            <Link href="/staff" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
               <Briefcase className="w-5 h-5 text-emerald-600" />
               <span>{t.staff_management || t.staff}</span>
             </Link>
-          <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all">
+          <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
             <Settings className="w-5 h-5" />
             <span>{t.settings}</span>
           </Link>
           <Link 
             href="/events"
             onClick={() => setIsSidebarOpen(false)}
-            className="flex items-center gap-4 p-4 hover:bg-slate-50 text-slate-600 rounded-2xl font-bold transition-all"
+            className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
           >
             <Calendar className="w-5 h-5 text-amber-500" />
             <span>{t.events || "Events"}</span>
           </Link>
-          <div className="flex items-center gap-4 p-4 opacity-40 text-slate-600 rounded-2xl font-bold cursor-not-allowed">
+          <div className="flex items-center gap-4 p-4 opacity-40 text-neutral-600 rounded-3xl font-bold cursor-not-allowed">
               <HelpCircle className="w-5 h-5" />
               <span>Help & Support</span>
             </div>
@@ -409,7 +474,7 @@ export default function DashboardPage() {
 
           <button 
             onClick={handleLogout}
-            className="mt-auto flex items-center gap-4 p-4 text-red-500 hover:bg-red-50 rounded-2xl font-bold transition-all"
+            className="mt-auto flex items-center gap-4 p-4 text-red-600 hover:bg-red-50 rounded-3xl font-bold transition-all"
           >
             <LogOut className="w-5 h-5" />
             <span>{t.logout}</span>
@@ -418,43 +483,39 @@ export default function DashboardPage() {
       </aside>
 
       {/* Header */}
-      <header className="p-4 flex items-center justify-between sticky top-0 bg-white z-20">
+      <header className="p-4 flex items-center justify-between sticky top-0 bg-white/80 backdrop-blur-md z-20 border-b border-neutral-200">
         <button 
           onClick={() => setIsSidebarOpen(true)}
-          className="p-2 text-gray-600 hover:bg-slate-50 rounded-xl transition-colors"
+          className="p-2 text-neutral-600 hover:bg-neutral-50 rounded-3xl transition-colors"
         >
           <Menu className="w-6 h-6" />
         </button>
-        <h1 className="text-xl font-semibold">{t.home}</h1>
-        <Link href="/scan" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors">
+        <h1 className="text-lg font-black tracking-tight">{t.home}</h1>
+        <Link href="/scan" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-3xl transition-colors">
           <QrCode className="w-6 h-6" />
         </Link>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-6 space-y-6 w-full">
+      <main className="flex-1 p-7 space-y-8 w-full">
         {/* Date Display */}
         <div className="text-center">
-          <p className="text-xl font-medium text-black">
+          <p className="text-lg font-bold text-neutral-900">
             {formatDate(time)}
           </p>
         </div>
 
-        {/* Dynamic Masjid Logo & Branding */}
-        <div className="flex justify-center py-2">
-          <div className="relative w-72 h-72 flex flex-col items-center justify-center p-4">
-            <div className="absolute inset-0 flex items-center justify-center opacity-5">
-               <svg viewBox="0 0 200 200" className="w-full h-full fill-emerald-600">
-                 <path d="M100 20 C60 20 30 60 30 100 L30 180 L170 180 L170 100 C170 60 140 20 100 20 Z" />
-               </svg>
-            </div>
-            
-            <div className="text-center z-10 space-y-0">
+        {/* Dashboard Hero */}
+        <div className="app-hero relative overflow-hidden">
+          <div className="absolute -top-20 -right-16 w-64 h-64 rounded-full bg-white/10 blur-2xl" />
+          <div className="absolute -bottom-20 -left-16 w-64 h-64 rounded-full bg-black/10 blur-2xl" />
+          <div className="relative flex items-center gap-5">
+            <div className="w-16 h-16 rounded-full app-glass border-2 border-white/70 flex items-center justify-center overflow-hidden">
               {masjid?.logo_url ? (
-                <img src={masjid.logo_url} alt="Logo" className="w-32 h-32 object-contain mb-2 mx-auto" />
+                <img src={masjid.logo_url} alt="Logo" className="w-full h-full object-cover" />
               ) : (
-                <div className="mb-2 text-[#00a859]">
-                  <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                <div className="text-white/90">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 2L4 7v11h16V7l-8-5z"></path>
                     <path d="M12 22v-4"></path>
                     <path d="M8 18v4"></path>
@@ -463,10 +524,15 @@ export default function DashboardPage() {
                   </svg>
                 </div>
               )}
-              <h2 className="text-5xl font-black text-[#003d5b] tracking-tighter leading-none uppercase">
-                {masjid?.name || "MJM"}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/75">
+                Smart Masjeedh
+              </p>
+              <h2 className="mt-1 text-2xl font-black tracking-tight text-white truncate">
+                {(masjid?.name || "MUBEEN JUMMA MASJEEDH").toUpperCase()}
               </h2>
-              <p className="text-xs font-bold text-[#c6893f] uppercase tracking-wider mt-1">
+              <p className="mt-1 text-[11px] font-bold text-white/80 truncate">
                 {masjid?.tagline || "Mubeen Jummah Masjid"}
               </p>
             </div>
@@ -475,120 +541,154 @@ export default function DashboardPage() {
 
         <div className="space-y-3">
           <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400 group-focus-within:text-emerald-600 transition-colors" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={lang === "tm" ? "எதை வேண்டுமானாலும் தேடுக..." : "Search anything..."}
-              className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm"
+              className="app-input pl-12 font-bold"
             />
           </div>
           <button
             onClick={handleSearch}
             disabled={searchLoading}
-            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
+            className="w-full app-btn-glow py-5 text-lg"
           >
             {searchLoading ? (lang === "tm" ? "தேடப்படுகிறது..." : "Searching...") : (lang === "tm" ? "தேடுக" : "Search")}
           </button>
           {searchError && (
-            <div className="bg-amber-50 border border-amber-100 text-amber-700 px-4 py-3 rounded-2xl text-[10px] font-bold">
+            <div className="app-card bg-amber-50 border-amber-200 px-4 py-3 text-[10px] font-bold text-amber-800">
               {searchError}
             </div>
           )}
         </div>
 
         {resultType !== "none" && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">
-              {resultType === "members" ? t.member_results : t.family_results}
-            </h3>
-            {resultType === "members" ? (
-              memberResults.length === 0 ? (
-                <div className="py-10 text-center bg-white rounded-[2rem] border border-slate-50">
-                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200">
-                    <User className="w-8 h-8" />
-                  </div>
-                  <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">
-                    {t.no_matches}
-                  </p>
-                </div>
-              ) : (
-                memberResults.map(m => (
-                  <Link key={m.id} href={`/families/${m.family_id}`} className="block bg-white rounded-2xl p-4 border border-slate-50 shadow-sm group hover:border-emerald-100 transition-all">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500">
-                        <User className="w-6 h-6" />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-sm font-black text-slate-800 truncate">{m.full_name}</h4>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">{m.gender} • {m.age}</p>
-                      </div>
+          <div className="space-y-6">
+            {(resultType === "members" || resultType === "mixed") && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest">{t.member_results}</h3>
+                {memberResults.length === 0 ? (
+                  <div className="py-10 text-center app-card">
+                    <div className="w-16 h-16 bg-neutral-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-neutral-300 border border-neutral-200">
+                      <User className="w-8 h-8" />
                     </div>
-                  </Link>
-                ))
-              )
-            ) : familyResults.length === 0 ? (
-              <div className="py-10 text-center bg-white rounded-[2rem] border border-slate-50">
-                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200">
-                  <Users className="w-8 h-8" />
-                </div>
-                <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">
-                  {t.no_matches}
-                </p>
+                    <p className="text-neutral-600 font-bold uppercase tracking-widest text-xs">{t.no_matches}</p>
+                  </div>
+                ) : (
+                  memberResults.map((m) => (
+                    <Link
+                      key={m.id}
+                      href={`/families/${m.family_id}`}
+                      className="block app-card p-4 group hover:border-emerald-200 transition-all"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-3xl bg-emerald-50 flex items-center justify-center text-emerald-700 border border-emerald-100">
+                          <User className="w-6 h-6" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-black text-neutral-900 truncate">{m.full_name}</h4>
+                          <p className="text-[10px] font-bold text-neutral-600 uppercase">
+                            {m.gender} • {m.age}
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  ))
+                )}
               </div>
-            ) : (
-              familyResults.map(f => (
-                <Link key={f.id} href={`/families/${f.id}`} className="block bg-white rounded-2xl p-4 border border-slate-50 shadow-sm group hover:border-emerald-100 transition-all">
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0">
-                      <h4 className="text-sm font-black text-slate-800 truncate">{f.head_name}</h4>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">{f.family_code}</p>
+            )}
+
+            {(resultType === "families" || resultType === "mixed") && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest">{t.family_results}</h3>
+                {familyResults.length === 0 ? (
+                  <div className="py-10 text-center app-card">
+                    <div className="w-16 h-16 bg-neutral-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-neutral-300 border border-neutral-200">
+                      <Users className="w-8 h-8" />
                     </div>
-                    {f.is_widow_head && (
-                      <span className="px-2 py-1 bg-rose-50 text-rose-500 text-[9px] font-black uppercase rounded-full border border-rose-100">Widow</span>
-                    )}
+                    <p className="text-neutral-600 font-bold uppercase tracking-widest text-xs">{t.no_matches}</p>
                   </div>
-                </Link>
-              ))
+                ) : (
+                  familyResults.map((f) => (
+                    <Link
+                      key={f.id}
+                      href={`/families/${f.id}`}
+                      className="block app-card p-4 group hover:border-emerald-200 transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-black text-neutral-900 truncate">{f.head_name}</h4>
+                          <p className="text-[10px] font-bold text-neutral-600 uppercase">{f.family_code}</p>
+                        </div>
+                        {f.is_widow_head && (
+                          <span className="app-pill bg-rose-50 text-rose-700 border border-rose-200">Widow</span>
+                        )}
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
             )}
           </div>
         )}
 
         {/* Stats Section */}
-        <div className="grid grid-cols-2 gap-4 pt-2">
-          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col gap-1">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.total_families}</span>
-            <span className="text-3xl font-black text-emerald-600">
-              {loading ? "..." : familyCount}
-            </span>
+        <div className="grid grid-cols-2 gap-4 pt-1">
+          <div className="app-glass-card p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">{t.total_families}</span>
+                <div className="mt-2 text-3xl font-black text-neutral-900">
+                  {loading ? "..." : familyCount}
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-emerald-600/10 text-emerald-700 flex items-center justify-center">
+                <Users className="w-5 h-5" />
+              </div>
+            </div>
           </div>
-          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col gap-1">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.total_members}</span>
-            <span className="text-3xl font-black text-[#003d5b]">
-              {loading ? "..." : memberCount}
-            </span>
+          <div className="app-glass-card p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">{t.total_members}</span>
+                <div className="mt-2 text-3xl font-black text-neutral-900">
+                  {loading ? "..." : memberCount}
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-emerald-600/10 text-emerald-700 flex items-center justify-center">
+                <User className="w-5 h-5" />
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Custom Bottom Grid Navigation */}
-        <div className="grid grid-cols-3 gap-3 pt-4">
-          <Link href="/families" className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7]">
-            <Users className="w-6 h-6 text-[#00c853]" />
-            <span className="text-[10px] font-bold text-[#00c853]">{t.families}</span>
-          </Link>
-          
-          <Link href="/accounts" className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7]">
-            <Edit className="w-6 h-6 text-[#00c853]" />
-            <span className="text-[10px] font-bold text-[#00c853]">{t.accounts}</span>
-          </Link>
-
-          <Link href="/staff" className="flex flex-col items-center justify-center gap-1 p-4 bg-[#f0fdf4] rounded-2xl border border-[#dcfce7]">
-            <Briefcase className="w-6 h-6 text-[#00c853]" />
-            <span className="text-[10px] font-bold text-[#00c853]">{t.staff}</span>
-          </Link>
-        </div>
+        {/* Spacer for floating bottom nav */}
+        <div className="h-20" />
       </main>
+
+      {/* Floating Bottom Navigation */}
+      <nav className="app-bottom-nav">
+        <div className="flex items-center gap-2">
+          <Link href="/" className={`app-bottom-nav-item ${"app-bottom-nav-item-active"}`}>
+            <HomeIcon className="w-5 h-5 text-emerald-700" />
+            <span className="text-[10px] font-black uppercase tracking-widest">{t.home}</span>
+          </Link>
+          <Link href="/families" className="app-bottom-nav-item hover:bg-white/60">
+            <Users className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-widest">{t.families}</span>
+          </Link>
+          <Link href="/accounts" className="app-bottom-nav-item hover:bg-white/60">
+            <CreditCard className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-widest">{t.accounts}</span>
+          </Link>
+          <Link href="/staff" className="app-bottom-nav-item hover:bg-white/60">
+            <Briefcase className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-widest">{t.staff}</span>
+          </Link>
+        </div>
+      </nav>
 
       {/* Services Distribution Modal */}
       {isServicesModalOpen && (
@@ -596,31 +696,33 @@ export default function DashboardPage() {
           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-300 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-black text-slate-900">{t.services_received}</h2>
-              <button onClick={() => {
-                setIsServicesModalOpen(false);
-                setIsScannerOpen(false);
-              }} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
+              <button
+                onClick={() => {
+                  setIsServicesModalOpen(false);
+                  setIsScannerOpen(false);
+                }}
+                className="p-2 hover:bg-slate-50 rounded-full transition-colors"
+              >
                 <X className="w-6 h-6 text-slate-300" />
               </button>
             </div>
 
-            {/* Modal Tabs */}
-            <div className="flex p-1 bg-slate-100 rounded-2xl mb-8">
-              <button 
+            <div className="flex p-1 bg-emerald-50 rounded-3xl mb-8">
+              <button
                 onClick={() => {
                   setActiveServiceTab("create");
                   setIsScannerOpen(false);
                 }}
-                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                  activeServiceTab === "create" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400"
+                className={`flex-1 py-3 rounded-3xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  activeServiceTab === "create" ? "bg-emerald-700 text-white shadow-sm" : "text-emerald-700"
                 }`}
               >
                 {t.create_new}
               </button>
-              <button 
+              <button
                 onClick={() => setActiveServiceTab("scan")}
-                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                  activeServiceTab === "scan" ? "bg-white text-blue-600 shadow-sm" : "text-slate-400"
+                className={`flex-1 py-3 rounded-3xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  activeServiceTab === "scan" ? "bg-emerald-700 text-white shadow-sm" : "text-emerald-700"
                 }`}
               >
                 {t.qr_scan_distribution}
@@ -629,30 +731,30 @@ export default function DashboardPage() {
 
             {activeServiceTab === "create" ? (
               <form onSubmit={createServiceDistribution} className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.name}</label>
-                  <input 
+                <div className="app-field">
+                  <label className="app-label">{t.name}</label>
+                  <input
                     required
                     type="text"
                     value={serviceName}
-                    onChange={e => setServiceName(e.target.value)}
-                    className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
+                    onChange={(e) => setServiceName(e.target.value)}
+                    className="app-input font-bold"
                     placeholder="E.g. Ramadan Dates"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.date}</label>
-                  <input 
+                <div className="app-field">
+                  <label className="app-label">{t.date}</label>
+                  <input
                     required
                     type="date"
                     value={serviceDate}
-                    onChange={e => setServiceDate(e.target.value)}
-                    className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
+                    onChange={(e) => setServiceDate(e.target.value)}
+                    className="app-input font-bold"
                   />
                 </div>
 
-                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 mb-6">
+                <div className="bg-emerald-50 p-4 rounded-3xl border border-emerald-100 mb-6">
                   <p className="text-[10px] text-emerald-700 font-bold leading-relaxed uppercase tracking-tight">
                     {t.service_create_info}
                   </p>
@@ -661,23 +763,25 @@ export default function DashboardPage() {
                 <button
                   type="submit"
                   disabled={submittingService}
-                  className="w-full py-5 rounded-3xl font-black text-white bg-emerald-500 shadow-xl shadow-emerald-500/20 transition-all active:scale-[0.97] disabled:opacity-50"
+                  className="w-full app-btn-primary py-5 text-lg"
                 >
                   {submittingService ? "CREATING..." : t.distribute_all}
                 </button>
               </form>
             ) : (
               <div className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.select_service}</label>
-                  <select 
+                <div className="app-field">
+                  <label className="app-label">{t.select_service}</label>
+                  <select
                     value={selectedScanService}
-                    onChange={e => setSelectedScanService(e.target.value)}
-                    className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-blue-500/10 outline-none appearance-none"
+                    onChange={(e) => setSelectedScanService(e.target.value)}
+                    className="app-select font-bold appearance-none"
                   >
                     <option value="">-- {t.select_service} --</option>
-                    {activeServices.map(s => (
-                      <option key={s.name} value={s.name}>{s.name}</option>
+                    {activeServices.map((s) => (
+                      <option key={s.name} value={s.name}>
+                        {s.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -686,32 +790,39 @@ export default function DashboardPage() {
                   <button
                     onClick={() => {
                       if (!selectedScanService) {
-                        alert(t.select_service_first);
+                        toast({ kind: "info", title: "Select service", message: t.select_service_first });
                         return;
                       }
                       setIsScannerOpen(true);
                     }}
-                    className="w-full py-8 rounded-3xl border-4 border-dashed border-slate-200 text-slate-400 hover:border-blue-500 hover:text-blue-500 transition-all flex flex-col items-center gap-3"
+                    className="w-full py-8 rounded-3xl border-2 border-dashed border-neutral-200 text-neutral-600 hover:border-emerald-300 hover:text-emerald-700 transition-all flex flex-col items-center gap-3 bg-white"
                   >
                     <QrCode className="w-12 h-12" />
                     <span className="font-black text-xs uppercase tracking-widest">{t.scan_qr}</span>
                   </button>
                 ) : (
                   <div className="space-y-4">
-                    <div id="service-reader" className="w-full overflow-hidden rounded-[2rem] border-4 border-blue-500 shadow-lg shadow-blue-500/10"></div>
-                    
-                    {scanStatus.type !== 'idle' && (
-                      <div className={`p-4 rounded-2xl font-bold text-center text-xs animate-in zoom-in duration-300 ${
-                        scanStatus.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
-                      }`}>
+                    <QrScannerModal
+                      open={isScannerOpen}
+                      title={t.scan_qr}
+                      containerId="service-reader"
+                      onClose={() => setIsScannerOpen(false)}
+                      onDecodedText={handleServiceScan}
+                    />
+
+                    {scanStatus.type !== "idle" && (
+                      <div
+                        className={`p-4 rounded-3xl font-bold text-center text-xs animate-in zoom-in duration-300 ${
+                          scanStatus.type === "success"
+                            ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                            : "bg-rose-50 text-rose-700 border border-rose-200"
+                        }`}
+                      >
                         {scanStatus.message}
                       </div>
                     )}
 
-                    <button
-                      onClick={() => setIsScannerOpen(false)}
-                      className="w-full py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold text-xs uppercase tracking-widest"
-                    >
+                    <button onClick={() => setIsScannerOpen(false)} className="w-full app-btn app-btn-soft py-4">
                       {t.stop_scanner}
                     </button>
                   </div>

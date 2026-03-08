@@ -11,12 +11,13 @@ import {
   Settings,
   Briefcase,
   Shield,
+  Wallet,
   Menu,
   X,
-  Wallet,
 } from "lucide-react";
 import { translations, Language } from "@/lib/i18n/translations";
 import { supabase } from "@/lib/supabase";
+import { getTenantContext } from "@/lib/tenant";
 
 type NavItem = {
   href: string;
@@ -38,7 +39,7 @@ export function AppShell(props: {
   const [open, setOpen] = useState(false);
   const t = translations[lang];
 
-  const [role, setRole] = useState<"super_admin" | "staff" | "editor" | null>(null);
+  const [role, setRole] = useState<"super_admin" | "co_admin" | "staff" | "editor" | null>(null);
   const [permissions, setPermissions] = useState<{
     accounts?: boolean;
     events?: boolean;
@@ -53,22 +54,12 @@ export function AppShell(props: {
   }, []);
 
   useEffect(() => {
-    if (!supabase) return;
     (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-        const masjidId = session.user.id;
-        const { data } = await supabase
-          .from("user_roles")
-          .select("role,permissions")
-          .eq("masjid_id", masjidId)
-          .eq("user_id", session.user.id)
-          .maybeSingle();
-        if (data) {
-          setRole((data as any).role || null);
-          setPermissions(((data as any).permissions || null) as any);
-        }
+        const ctx = await getTenantContext();
+        if (!ctx) return;
+        setRole(ctx.role || null);
+        setPermissions((ctx.permissions || null) as any);
       } catch {
         // ignore
       }
@@ -80,21 +71,13 @@ export function AppShell(props: {
   }, [pathname]);
 
   const items: NavItem[] = useMemo(() => {
-    const isSuper = role === "super_admin" || !role;
+    const isSuper = role === "super_admin" || role === "co_admin" || !role;
     const perms = permissions || {};
     const canAccounts = isSuper || perms.accounts !== false;
     const canEvents = isSuper || perms.events !== false;
     const canMembers = isSuper || perms.members !== false;
-    const canCollect = isSuper || perms.subscriptions_collect !== false;
-    const canApprove = isSuper || perms.subscriptions_approve !== false;
-
-    // For staff users with collection permissions, redirect them to collections page
-    if (role === "staff" && canCollect && !canAccounts && !canEvents && !canMembers) {
-      return [
-        { href: "/collections", label: "Collections", icon: <Wallet className="w-5 h-5" /> },
-        { href: "/settings", label: t.settings, icon: <Settings className="w-5 h-5" /> },
-      ];
-    }
+    const canSubCollect = isSuper || perms.subscriptions_collect === true;
+    const canSubApprove = isSuper || perms.subscriptions_approve === true;
 
     const base: NavItem[] = [
       { href: "/", label: t.dashboard, icon: <Home className="w-5 h-5" /> },
@@ -106,17 +89,18 @@ export function AppShell(props: {
     if (canAccounts) {
       base.push({ href: "/accounts", label: t.accounts, icon: <CreditCard className="w-5 h-5" /> });
     }
-    if (canCollect) {
-      base.push({ href: "/collections", label: "Collections", icon: <Wallet className="w-5 h-5" /> });
-    }
-    if (canApprove) {
-      base.push({ href: "/collections/pending", label: "Pending Approval", icon: <Shield className="w-5 h-5" /> });
-    }
     if (canEvents) {
       base.push({ href: "/events", label: t.events || "Events", icon: <Calendar className="w-5 h-5" /> });
     }
 
-    // Staff & admin only for super_admin
+    if (canSubCollect) {
+      base.push({ href: "/collections", label: "Collections", icon: <Wallet className="w-5 h-5" /> });
+    }
+    if (canSubApprove) {
+      base.push({ href: "/collections/pending", label: "Pending Approval", icon: <Shield className="w-5 h-5" /> });
+    }
+
+    // Staff & admin only for masjid admins
     if (isSuper) {
       base.push({
         href: "/staff",
@@ -136,15 +120,24 @@ export function AppShell(props: {
 
   const linkClass = (href: string) => {
     const active = pathname === href || (href !== "/" && pathname?.startsWith(href));
-    return `flex items-center gap-3 px-4 py-3 rounded-2xl font-bold transition-all ${
+    return `flex items-center gap-3 px-4 py-3 rounded-3xl font-bold transition-all ${
       active
         ? "bg-emerald-50 text-emerald-700"
-        : "text-slate-600 hover:bg-slate-50"
+        : "text-neutral-600 hover:bg-neutral-50"
+    }`;
+  };
+
+  const bottomItemClass = (href: string) => {
+    const active = pathname === href || (href !== "/" && pathname?.startsWith(href));
+    return `${
+      active
+        ? "app-bottom-nav-item app-bottom-nav-item-active"
+        : "app-bottom-nav-item hover:bg-white/60"
     }`;
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans">
+    <div className="min-h-screen bg-neutral-50 text-neutral-900 font-sans">
       {/* Mobile overlay */}
       {open && (
         <div
@@ -155,7 +148,7 @@ export function AppShell(props: {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-72 bg-white border-r border-slate-100 shadow-2xl transform transition-transform duration-300 ease-in-out
+        className={`fixed top-0 left-0 z-50 h-full w-72 bg-white border-r border-neutral-200 shadow-2xl transform transition-transform duration-300 ease-in-out
         ${open ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:shadow-none`}
       >
         <div className="p-6 flex flex-col h-full">
@@ -169,7 +162,7 @@ export function AppShell(props: {
               </p>
             </div>
             <button
-              className="md:hidden p-2 hover:bg-slate-50 rounded-2xl"
+              className="md:hidden p-2 hover:bg-neutral-50 rounded-3xl"
               onClick={() => setOpen(false)}
               aria-label="Close menu"
             >
@@ -188,7 +181,7 @@ export function AppShell(props: {
 
           <button
             onClick={() => router.push("/")}
-            className="mt-6 w-full px-4 py-3 rounded-2xl bg-slate-50 text-slate-700 font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all"
+            className="mt-6 w-full px-4 py-3 rounded-3xl bg-neutral-50 text-neutral-900 font-black text-xs uppercase tracking-widest hover:bg-neutral-100 transition-all"
           >
             Home
           </button>
@@ -197,11 +190,11 @@ export function AppShell(props: {
 
       {/* Main area */}
       <div className="md:pl-72">
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-100">
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-neutral-200">
           <div className="px-4 py-4 md:px-8 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <button
-                className="md:hidden p-2 rounded-2xl hover:bg-slate-100 transition-colors"
+                className="md:hidden p-2 rounded-3xl hover:bg-neutral-100 transition-colors"
                 onClick={() => setOpen(true)}
                 aria-label="Open menu"
               >
@@ -210,12 +203,12 @@ export function AppShell(props: {
               {backHref ? (
                 <Link
                   href={backHref}
-                  className="hidden sm:inline-flex px-3 py-2 rounded-2xl bg-slate-50 text-slate-700 font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all"
+                  className="hidden sm:inline-flex px-3 py-2 rounded-3xl bg-neutral-50 text-neutral-900 font-black text-xs uppercase tracking-widest hover:bg-neutral-100 transition-all"
                 >
                   Back
                 </Link>
               ) : null}
-              <h1 className="text-lg md:text-xl font-black text-slate-900 truncate">
+              <h1 className="text-lg md:text-xl font-black text-neutral-900 truncate">
                 {title}
               </h1>
             </div>
@@ -223,9 +216,27 @@ export function AppShell(props: {
           </div>
         </header>
 
-        <main className="p-4 md:p-8">
+        <main className="p-4 md:p-8 pb-28 md:pb-8">
           <div className="w-full max-w-md md:max-w-6xl mx-auto">{children}</div>
         </main>
+
+        {/* Floating bottom navigation (mobile) */}
+        <nav className="md:hidden app-bottom-nav">
+          <div className="flex items-center gap-2">
+            {items
+              .filter((it) => it.href !== "/admin")
+              .slice(0, 5)
+              .map((it) => {
+                const active = pathname === it.href || (it.href !== "/" && pathname?.startsWith(it.href));
+                return (
+                  <Link key={it.href} href={it.href} className={bottomItemClass(it.href)}>
+                    <span className={active ? "text-emerald-700" : "text-neutral-600"}>{it.icon}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">{it.label}</span>
+                  </Link>
+                );
+              })}
+          </div>
+        </nav>
       </div>
     </div>
   );

@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 import { translations, Language } from "@/lib/i18n/translations";
+import { getTenantContext } from "@/lib/tenant";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import { QrScannerModal } from "@/components/QrScannerModal";
 
 declare module "jspdf" {
   interface jsPDF {
@@ -68,6 +69,7 @@ export default function FamiliesPage() {
   const [pdfCols, setPdfCols] = useState<{code:boolean; head:boolean; address:boolean; phone:boolean; sub:boolean}>({code:true, head:true, address:true, phone:true, sub:true});
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid">("all");
+  const [allowed, setAllowed] = useState(true);
 
   const t = translations[lang];
 
@@ -90,42 +92,14 @@ export default function FamiliesPage() {
     }
   }, [editingFamily]);
 
-  useEffect(() => {
-    if (isScannerOpen) {
-      const scanner = new Html5QrcodeScanner(
-        "reader",
-        { 
-          fps: 10, 
-          qrbox: { width: 250, height: 250 },
-          supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-          rememberLastUsedCamera: true,
-          showTorchButtonIfSupported: true,
-          showZoomSliderIfSupported: true
-        },
-        /* verbose= */ false
-      );
-
-      scanner.render(onScanSuccess, onScanFailure);
-
-      function onScanSuccess(decodedText: string) {
-        // smart-masjeedh:family:UUID
-        if (decodedText.startsWith("smart-masjeedh:family:")) {
-          const familyId = decodedText.split(":")[2];
-          scanner.clear();
-          setIsScannerOpen(false);
-          router.push(`/families/${familyId}`);
-        }
-      }
-
-      function onScanFailure(error: any) {
-        // handle scan failure, usually better to ignore and keep scanning
-      }
-
-      return () => {
-        scanner.clear();
-      };
+  const handleQrDecodedText = (decodedText: string) => {
+    if (!decodedText) return;
+    if (decodedText.startsWith("smart-masjeedh:family:")) {
+      const familyId = decodedText.split(":")[2];
+      setIsScannerOpen(false);
+      router.push(`/families/${familyId}`);
     }
-  }, [isScannerOpen]);
+  };
 
   useEffect(() => {
     if (isOpen && families.length > 0 && isLive && !editingFamily) {
@@ -152,13 +126,22 @@ export default function FamiliesPage() {
     if (!supabase) return;
     setIsFetching(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      setAllowed(canMembers);
+      if (!canMembers) {
+        setFamilies([]);
+        setIsLive(false);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("families")
         .select("*")
-        .eq("masjid_id", session.user.id)
+        .eq("masjid_id", ctx.masjidId)
         .order("family_code", { ascending: true });
 
       if (error) throw error;
@@ -188,8 +171,12 @@ export default function FamiliesPage() {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("லாகின் செய்யப்படவில்லை.");
+      const ctx = await getTenantContext();
+      if (!ctx) throw new Error("லாகின் செய்யப்படவில்லை.");
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      if (!canMembers) throw new Error("Access denied");
 
       if (editingFamily) {
         // Update existing
@@ -205,7 +192,7 @@ export default function FamiliesPage() {
             is_widow_head: isWidowHead
           })
           .eq("id", editingFamily.id)
-          .eq("masjid_id", session.user.id);
+          .eq("masjid_id", ctx.masjidId);
 
         if (error) throw error;
         setSuccessMessage("குடும்ப விபரம் திருத்தப்பட்டது.");
@@ -220,7 +207,7 @@ export default function FamiliesPage() {
             subscription_amount: parseFloat(subscriptionAmount) || 0,
             opening_balance: parseFloat(openingBalance) || 0,
             is_widow_head: isWidowHead,
-            masjid_id: session.user.id // Include masjid ID
+            masjid_id: ctx.masjidId // Include masjid ID
           }
         ]);
 
@@ -252,10 +239,21 @@ export default function FamiliesPage() {
   async function deleteFamily(id: string) {
     if (!supabase || !confirm(t.confirm_delete)) return;
     try {
+      const ctx = await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      if (!canMembers) {
+        alert("Access denied");
+        return;
+      }
+
       const { error } = await supabase
         .from("families")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .eq("masjid_id", ctx.masjidId);
       if (error) throw error;
       fetchFamilies();
     } catch (err: any) {
@@ -458,7 +456,7 @@ export default function FamiliesPage() {
 
       {isPdfOptionsOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[2rem] p-6 shadow-2xl">
+          <div className="bg-white w-full max-w-md rounded-[2rem] p-6 shadow-2xl max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-black">PDF Columns</h3>
               <button onClick={() => setIsPdfOptionsOpen(false)} className="p-2 hover:bg-slate-50 rounded-full">
@@ -479,23 +477,13 @@ export default function FamiliesPage() {
         </div>
       )}
 
-      {/* QR Scanner Modal */}
-      {isScannerOpen && (
-        <div className="fixed inset-0 z-[60] bg-black flex flex-col">
-          <header className="p-6 flex items-center justify-between text-white">
-            <h2 className="text-xl font-black uppercase tracking-widest">{t.scan_qr}</h2>
-            <button onClick={() => setIsScannerOpen(false)} className="p-3 bg-white/10 rounded-full">
-              <X className="w-6 h-6" />
-            </button>
-          </header>
-          <div className="flex-1 flex flex-col items-center justify-center p-6">
-            <div id="reader" className="w-full max-w-sm rounded-[2.5rem] overflow-hidden border-4 border-emerald-500 shadow-2xl shadow-emerald-500/20"></div>
-            <p className="mt-8 text-white/60 text-sm font-bold uppercase tracking-widest text-center">
-              Align QR Code within the frame to scan
-            </p>
-          </div>
-        </div>
-      )}
+      <QrScannerModal
+        open={isScannerOpen}
+        title={t.scan_qr}
+        containerId="reader"
+        onClose={() => setIsScannerOpen(false)}
+        onDecodedText={handleQrDecodedText}
+      />
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex items-center justify-around py-4 px-6 shadow-2xl z-50">
@@ -522,7 +510,7 @@ export default function FamiliesPage() {
       {/* Add Modal */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-xl font-black text-slate-900">{t.add_new_family}</h2>
               <button
