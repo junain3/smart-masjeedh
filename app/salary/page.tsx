@@ -61,26 +61,37 @@ export default function SalaryManagementPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      // Load staff members
-      const { data: staffData } = await supabase
-        .from("user_roles")
-        .select("user_id, email, role")
-        .eq("masjid_id", session.user.id)
-        .in("role", ["staff", "editor"]);
+      // Load all data in parallel for better performance
+      const [
+        staffResponse,
+        balancesResponse,
+        ledgerResponse
+      ] = await Promise.all([
+        // Load staff members
+        supabase
+          .from("user_roles")
+          .select("user_id, email, role")
+          .eq("masjid_id", session.user.id)
+          .in("role", ["staff", "editor"]),
+        
+        // Load commission balances
+        supabase
+          .rpc("get_staff_commission_balance", { p_staff_user_id: null }),
+        
+        // Load salary ledger entries
+        supabase
+          .from("staff_salary_ledger")
+          .select(`
+            *,
+            staff:user_roles(user_id, email, role)
+          `)
+          .eq("masjid_id", session.user.id)
+          .order("created_at", { ascending: false })
+      ]);
 
-      // Load commission balances
-      const { data: balancesData } = await supabase
-        .rpc("get_staff_commission_balance", { p_staff_user_id: null });
-
-      // Load salary ledger entries
-      const { data: ledgerData } = await supabase
-        .from("staff_salary_ledger")
-        .select(`
-          *,
-          staff:user_roles(user_id, email, role)
-        `)
-        .eq("masjid_id", session.user.id)
-        .order("created_at", { ascending: false });
+      const staffData = staffResponse.data;
+      const balancesData = balancesResponse.data;
+      const ledgerData = ledgerResponse.data;
 
       setStaffMembers(staffData?.map(staff => ({
         id: staff.user_id,

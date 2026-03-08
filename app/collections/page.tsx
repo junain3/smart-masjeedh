@@ -85,41 +85,56 @@ export default function CollectionsPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      // Load families
-      const { data: familiesData } = await supabase
-        .from("families")
-        .select("id, family_code, head_name, address, phone")
-        .eq("masjid_id", session.user.id)
-        .order("family_code");
+      // Load all data in parallel for better performance
+      const [
+        familiesResponse,
+        collectionsResponse,
+        balanceResponse,
+        subscriptionResponse,
+        profileResponse
+      ] = await Promise.all([
+        // Load families
+        supabase
+          .from("families")
+          .select("id, family_code, head_name, address, phone")
+          .eq("masjid_id", session.user.id)
+          .order("family_code"),
+        
+        // Load my collections
+        supabase
+          .from("subscription_collections")
+          .select(`
+            *,
+            family:families(id, family_code, head_name, address)
+          `)
+          .eq("masjid_id", session.user.id)
+          .eq("collected_by_user_id", session.user.id)
+          .order("created_at", { ascending: false }),
+        
+        // Load my waiting balance
+        supabase
+          .rpc("get_collector_waiting_balance", { p_collector_user_id: session.user.id }),
+        
+        // Load family subscription statuses
+        supabase
+          .from("family_subscription_payments")
+          .select("family_id, amount, status, payment_date")
+          .eq("masjid_id", session.user.id),
+        
+        // Load my commission rate
+        supabase
+          .from("subscription_collector_profiles")
+          .select("default_commission_percent")
+          .eq("masjid_id", session.user.id)
+          .eq("user_id", session.user.id)
+          .single()
+      ]);
 
-      // Load my collections
-      const { data: collectionsData } = await supabase
-        .from("subscription_collections")
-        .select(`
-          *,
-          family:families(id, family_code, head_name, address)
-        `)
-        .eq("masjid_id", session.user.id)
-        .eq("collected_by_user_id", session.user.id)
-        .order("created_at", { ascending: false });
-
-      // Load my waiting balance
-      const { data: balanceData } = await supabase
-        .rpc("get_collector_waiting_balance", { p_collector_user_id: session.user.id });
-
-      // Load family subscription statuses
-      const { data: subscriptionData } = await supabase
-        .from("family_subscription_payments")
-        .select("family_id, amount, status, payment_date")
-        .eq("masjid_id", session.user.id);
-
-      // Load my commission rate
-      const { data: profileData } = await supabase
-        .from("subscription_collector_profiles")
-        .select("default_commission_percent")
-        .eq("masjid_id", session.user.id)
-        .eq("user_id", session.user.id)
-        .single();
+      const familiesData = familiesResponse.data;
+      const collectionsData = collectionsResponse.data;
+      const balanceData = balanceResponse.data;
+      const subscriptionData = subscriptionResponse.data;
+      const profileData = profileResponse.data;
 
       // Process family subscription statuses
       const subscriptionMap = new Map<string, FamilySubscriptionStatus>();

@@ -102,39 +102,56 @@ export default function PendingCollectionsPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      // Load all collections with family and collector info
-      const { data: collectionsData } = await supabase
-        .from("subscription_collections")
-        .select(`
-          *,
-          family:families(id, family_code, head_name, address)
-        `)
-        .eq("masjid_id", session.user.id)
-        .order("created_at", { ascending: false });
+      // Load all data in parallel for better performance
+      const [
+        collectionsResponse,
+        balancesResponse
+      ] = await Promise.all([
+        // Load all collections with family info
+        supabase
+          .from("subscription_collections")
+          .select(`
+            *,
+            family:families(id, family_code, head_name, address)
+          `)
+          .eq("masjid_id", session.user.id)
+          .order("created_at", { ascending: false }),
+        
+        // Load collector waiting balances
+        supabase
+          .from("collector_waiting_balances")
+          .select(`
+            collector_user_id,
+            total_waiting_amount,
+            total_collections_count
+          `)
+          .eq("masjid_id", session.user.id)
+          .gt("total_waiting_amount", 0)
+      ]);
 
-      // Load collector info separately
-      const collectorIds = [...new Set(collectionsData?.map(c => c.collected_by_user_id) || [])];
-      const { data: collectorsData } = await supabase
-        .from("user_roles")
-        .select("user_id, email")
-        .in("user_id", collectorIds);
+      const collectionsData = collectionsResponse.data;
+      const balancesData = balancesResponse.data;
+
+      // Load collector info separately (more efficient)
+      const collectorIds = [...new Set([
+        ...(collectionsData?.map(c => c.collected_by_user_id) || []),
+        ...(balancesData?.map(b => b.collector_user_id) || [])
+      ])];
+      
+      let collectorsData = [];
+      if (collectorIds.length > 0) {
+        const { data: collectors } = await supabase
+          .from("user_roles")
+          .select("user_id, email")
+          .in("user_id", collectorIds);
+        collectorsData = collectors || [];
+      }
 
       // Merge collector info
       const collectionsWithCollectors = collectionsData?.map(collection => ({
         ...collection,
         collector: collectorsData?.find(c => c.user_id === collection.collected_by_user_id)
       }));
-
-      // Load collector waiting balances
-      const { data: balancesData } = await supabase
-        .from("collector_waiting_balances")
-        .select(`
-          collector_user_id,
-          total_waiting_amount,
-          total_collections_count
-        `)
-        .eq("masjid_id", session.user.id)
-        .gt("total_waiting_amount", 0);
 
       // Merge collector info for balances
       const balancesWithCollectors = balancesData?.map(balance => ({
