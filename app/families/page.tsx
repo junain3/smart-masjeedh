@@ -263,17 +263,19 @@ export default function FamiliesPage() {
 
   const generatePDF = () => {
     try {
-      console.log('Starting PDF generation...');
+      console.log('Families: Starting PDF generation...');
       
-      // Check if jsPDF is available
+      // Check client-side
       if (typeof window === 'undefined') {
-        alert('PDF generation not available in server-side rendering');
+        console.error('PDF generation not available in server-side rendering');
         return;
       }
       
+      // Create PDF
       const doc = new jsPDF();
       doc.text("Masjid Families List", 14, 15);
       
+      // Prepare headers
       const headers: string[] = [];
       if (pdfCols.code) headers.push("Code");
       if (pdfCols.head) headers.push("Head Name");
@@ -281,6 +283,7 @@ export default function FamiliesPage() {
       if (pdfCols.phone) headers.push("Phone");
       if (pdfCols.sub) headers.push("Sub. Amt");
 
+      // Prepare table data
       const tableData = filteredFamilies.map(f => {
         const row: (string|number)[] = [];
         if (pdfCols.code) row.push(f.family_code);
@@ -291,17 +294,20 @@ export default function FamiliesPage() {
         return row;
       });
 
+      // Add table
       doc.autoTable({
         startY: 20,
         head: [headers],
         body: tableData,
       });
 
-      console.log('PDF created, attempting download...');
+      // Save PDF
+      console.log('Families: PDF created, attempting download...');
       doc.save("families_list.pdf");
-      console.log('PDF download initiated');
+      console.log('Families: PDF download initiated');
+      
     } catch (error) {
-      console.error('PDF generation error:', error);
+      console.error('Families: PDF generation error:', error);
       alert('PDF generation failed: ' + (error as Error).message);
     }
   };

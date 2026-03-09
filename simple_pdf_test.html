@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple PDF Test - No AutoTable</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <h1>Simple PDF Test - No AutoTable</h1>
+    <button onclick="testSimplePDF()">Test Simple PDF</button>
+    <button onclick="testTablePDF()">Test Table PDF</button>
+    <div id="result"></div>
+    
+    <script>
+        function testSimplePDF() {
+            const result = document.getElementById('result');
+            result.innerHTML = 'Testing simple PDF...';
+            
+            try {
+                console.log('Starting simple PDF test...');
+                
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Add simple text
+                doc.text("Simple PDF Test", 14, 15);
+                doc.text("This is a test without autoTable", 14, 25);
+                doc.text("Line 3: Testing basic functionality", 14, 35);
+                
+                // Save
+                doc.save("simple_test.pdf");
+                
+                result.innerHTML = 'SUCCESS: Simple PDF downloaded!';
+                console.log('Simple PDF test completed successfully');
+                
+            } catch (error) {
+                console.error('Simple PDF test error:', error);
+                result.innerHTML = 'ERROR: ' + error.message;
+            }
+        }
+        
+        function testTablePDF() {
+            const result = document.getElementById('result');
+            result.innerHTML = 'Testing table PDF...';
+            
+            try {
+                console.log('Starting table PDF test...');
+                
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Add title
+                doc.text("Table Test", 14, 15);
+                
+                // Create manual table (without autoTable)
+                let yPosition = 30;
+                
+                // Headers
+                doc.text("Name", 14, yPosition);
+                doc.text("Amount", 60, yPosition);
+                doc.text("Status", 100, yPosition);
+                yPosition += 10;
+                
+                // Data rows
+                const data = [
+                    ['Item 1', '$100', 'Active'],
+                    ['Item 2', '$200', 'Pending'],
+                    ['Item 3', '$300', 'Complete']
+                ];
+                
+                data.forEach(row => {
+                    doc.text(row[0], 14, yPosition);
+                    doc.text(row[1], 60, yPosition);
+                    doc.text(row[2], 100, yPosition);
+                    yPosition += 10;
+                });
+                
+                // Save
+                doc.save("table_test.pdf");
+                
+                result.innerHTML = 'SUCCESS: Table PDF downloaded!';
+                console.log('Table PDF test completed successfully');
+                
+            } catch (error) {
+                console.error('Table PDF test error:', error);
+                result.innerHTML = 'ERROR: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
