@@ -7,18 +7,10 @@ import { ArrowLeft, Plus, Search, TrendingUp, TrendingDown, Wallet, Calendar, Ta
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
 import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
 import { EmptyState } from "@/components/EmptyState";
 import { QrScannerModal } from "@/components/QrScannerModal";
-
-declare module "jspdf" {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-  }
-}
 
 type Transaction = {
   id: string;
@@ -257,38 +249,142 @@ export default function AccountsPage() {
 
   const generatePDF = () => {
     try {
-      console.log('Accounts: Starting PDF generation...');
+      console.log('Accounts: Starting print generation...');
       
-      // Check if jsPDF is available
+      // Check client-side
       if (typeof window === 'undefined') {
-        alert('PDF generation not available in server-side rendering');
+        console.error('Print generation not available in server-side rendering');
         return;
       }
       
-      const doc = new jsPDF();
-      doc.text("Masjid Transactions Report", 14, 15);
+      // Create printable HTML
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      if (!printWindow) {
+        alert('Please allow popups for this website to print PDF');
+        return;
+      }
       
+      // Prepare table data
       const tableData = filteredTransactions.map(tx => [
-        // normalize type for reporting
         tx.date,
         tx.description,
         tx.category,
         getFinancialKind(tx).toUpperCase(),
         `Rs. ${tx.amount.toLocaleString()}`
       ]);
-
-      doc.autoTable({
-        startY: 20,
-        head: [["Date", "Description", "Category", "Type", "Amount"]],
-        body: tableData,
+      
+      // Generate HTML content
+      let htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Masjid Transactions Report</title>
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: 20px; 
+              font-size: 12px;
+              line-height: 1.4;
+            }
+            h1 { 
+              text-align: center; 
+              margin-bottom: 20px;
+              font-size: 18px;
+              font-weight: bold;
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-top: 20px;
+            }
+            th, td { 
+              border: 1px solid #333; 
+              padding: 8px; 
+              text-align: left;
+              vertical-align: top;
+            }
+            th { 
+              background-color: #f0f0f0; 
+              font-weight: bold;
+              font-size: 11px;
+            }
+            td { 
+              font-size: 10px;
+              word-wrap: break-word;
+              max-width: 150px;
+            }
+            .footer {
+              margin-top: 30px;
+              text-align: center;
+              font-size: 10px;
+              color: #666;
+            }
+            @media print {
+              body { margin: 10px; }
+              th, td { 
+                border: 1px solid #000; 
+                padding: 6px;
+                font-size: 9px;
+              }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Masjid Transactions Report</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Category</th>
+                <th>Type</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      
+      // Add data rows
+      tableData.forEach(row => {
+        htmlContent += '<tr>';
+        row.forEach(cell => {
+          const cellValue = String(cell || '');
+          const truncatedValue = cellValue.length > 50 ? cellValue.substring(0, 50) + '...' : cellValue;
+          htmlContent += `<td>${truncatedValue}</td>`;
+        });
+        htmlContent += '</tr>';
       });
-
-      console.log('Accounts: PDF created, attempting download...');
-      doc.save("transactions_report.pdf");
-      console.log('Accounts: PDF download initiated');
+      
+      htmlContent += `
+            </tbody>
+          </table>
+          <div class="footer">
+            Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
+          </div>
+          <div class="no-print" style="margin-top: 20px; text-align: center;">
+            <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px;">
+              🖨️ Print / Save as PDF
+            </button>
+            <br><br>
+            <small>Use Ctrl+P or Cmd+P to print, then choose "Save as PDF"</small>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      // Write content to new window
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      
+      // Focus and trigger print dialog
+      printWindow.focus();
+      
+      console.log('Accounts: Print window opened successfully');
+      
     } catch (error) {
-      console.error('Accounts: PDF generation error:', error);
-      alert('PDF generation failed: ' + (error as Error).message);
+      console.error('Accounts: Print generation error:', error);
+      alert('Print generation failed: ' + (error as Error).message);
     }
   };
 

@@ -7,8 +7,6 @@ import { Calendar, Plus, ArrowLeft, FileText, QrCode, Edit2, Trash2, X } from "l
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
 import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
 
@@ -220,30 +218,129 @@ export default function EventsPage() {
 
   const generatePDF = () => {
     try {
-      console.log('Events: Starting PDF generation...');
+      console.log('Events: Starting print generation...');
       
-      // Check if jsPDF is available
+      // Check client-side
       if (typeof window === 'undefined') {
-        alert('PDF generation not available in server-side rendering');
+        console.error('Print generation not available in server-side rendering');
         return;
       }
       
-      const doc = new jsPDF();
-      doc.text("Events List", 14, 15);
-      const table = events.map(e => [e.date, e.name, e.id]);
+      // Create printable HTML
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      if (!printWindow) {
+        alert('Please allow popups for this website to print PDF');
+        return;
+      }
       
-      doc.autoTable({ 
-        startY: 20, 
-        head: [["Date", "Name", "ID"]], 
-        body: table 
+      // Generate HTML content
+      let htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Events List</title>
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: 20px; 
+              font-size: 12px;
+              line-height: 1.4;
+            }
+            h1 { 
+              text-align: center; 
+              margin-bottom: 20px;
+              font-size: 18px;
+              font-weight: bold;
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-top: 20px;
+            }
+            th, td { 
+              border: 1px solid #333; 
+              padding: 8px; 
+              text-align: left;
+              vertical-align: top;
+            }
+            th { 
+              background-color: #f0f0f0; 
+              font-weight: bold;
+              font-size: 11px;
+            }
+            td { 
+              font-size: 10px;
+              word-wrap: break-word;
+              max-width: 150px;
+            }
+            .footer {
+              margin-top: 30px;
+              text-align: center;
+              font-size: 10px;
+              color: #666;
+            }
+            @media print {
+              body { margin: 10px; }
+              th, td { 
+                border: 1px solid #000; 
+                padding: 6px;
+                font-size: 9px;
+              }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Events List</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Name</th>
+                <th>ID</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      
+      // Add data rows
+      events.forEach(e => {
+        htmlContent += '<tr>';
+        htmlContent += `<td>${e.date || ''}</td>`;
+        htmlContent += `<td>${e.name || ''}</td>`;
+        htmlContent += `<td>${e.id || ''}</td>`;
+        htmlContent += '</tr>';
       });
       
-      console.log('Events: PDF created, attempting download...');
-      doc.save("events.pdf");
-      console.log('Events: PDF download initiated');
+      htmlContent += `
+            </tbody>
+          </table>
+          <div class="footer">
+            Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
+          </div>
+          <div class="no-print" style="margin-top: 20px; text-align: center;">
+            <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px;">
+              🖨️ Print / Save as PDF
+            </button>
+            <br><br>
+            <small>Use Ctrl+P or Cmd+P to print, then choose "Save as PDF"</small>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      // Write content to new window
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      
+      // Focus and trigger print dialog
+      printWindow.focus();
+      
+      console.log('Events: Print window opened successfully');
+      
     } catch (error) {
-      console.error('Events: PDF generation error:', error);
-      alert('PDF generation failed: ' + (error as Error).message);
+      console.error('Events: Print generation error:', error);
+      alert('Print generation failed: ' + (error as Error).message);
     }
   };
 

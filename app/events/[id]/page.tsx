@@ -7,8 +7,6 @@ import { ArrowLeft, Users, CheckCircle, Clock, QrCode, FileText, Search } from "
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useAppToast } from "@/components/ToastProvider";
 
@@ -202,34 +200,87 @@ export default function EventDetailPage() {
 
   const generatePDF = () => {
     try {
-      console.log('Event Detail: Starting PDF generation...');
+      console.log('Event Detail: Starting print generation...');
       
-      // Check if jsPDF is available
+      // Check client-side
       if (typeof window === 'undefined') {
-        alert('PDF generation not available in server-side rendering');
+        console.error('Print generation not available in server-side rendering');
         return;
       }
       
-      const doc = new jsPDF();
-      doc.text(`${t.attendance_report}: ${ev?.name || ""} (${ev?.date || ""})`, 14, 15);
-      const table = rows.map(r => [
-        r.families.family_code,
-        r.families.head_name,
-        r.status
-      ]);
+      // Create printable HTML
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      if (!printWindow) {
+        alert('Please allow popups for this website to print PDF');
+        return;
+      }
       
-      doc.autoTable({ 
-        startY: 20, 
-        head: [["Code", "Head", t.status]], 
-        body: table 
+      // Generate HTML content
+      let htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Event Attendance Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; font-size: 12px; }
+            h1 { text-align: center; margin-bottom: 20px; font-size: 18px; font-weight: bold; }
+            h2 { text-align: center; margin-bottom: 20px; font-size: 14px; color: #666; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #333; padding: 8px; text-align: left; }
+            th { background-color: #f0f0f0; font-weight: bold; font-size: 11px; }
+            td { font-size: 10px; word-wrap: break-word; }
+            .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #666; }
+            @media print { body { margin: 10px; } th, td { border: 1px solid #000; padding: 6px; font-size: 9px; } }
+          </style>
+        </head>
+        <body>
+          <h1>Event Attendance Report</h1>
+          <h2>${ev?.name || ''} (${ev?.date || ''})</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Family Code</th>
+                <th>Head Name</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      
+      // Add data rows
+      rows.forEach(r => {
+        htmlContent += '<tr>';
+        htmlContent += `<td>${r.families.family_code || ''}</td>`;
+        htmlContent += `<td>${r.families.head_name || ''}</td>`;
+        htmlContent += `<td>${r.status || ''}</td>`;
+        htmlContent += '</tr>';
       });
       
-      console.log('Event Detail: PDF created, attempting download...');
-      doc.save("event_attendance.pdf");
-      console.log('Event Detail: PDF download initiated');
+      htmlContent += `
+            </tbody>
+          </table>
+          <div class="footer">
+            Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
+          </div>
+          <div style="margin-top: 20px; text-align: center;">
+            <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px;">
+              🖨️ Print / Save as PDF
+            </button>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      // Write content to new window
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      printWindow.focus();
+      
+      console.log('Event Detail: Print window opened successfully');
+      
     } catch (error) {
-      console.error('Event Detail: PDF generation error:', error);
-      alert('PDF generation failed: ' + (error as Error).message);
+      console.error('Event Detail: Print generation error:', error);
+      alert('Print generation failed: ' + (error as Error).message);
     }
   };
 
