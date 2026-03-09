@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Direct Supabase Auth Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Direct Supabase Auth Test</h1>
+    <input type="email" id="email" placeholder="Email" value="mohammedjunain@gmail.com"><br><br>
+    <input type="password" id="password" placeholder="Password"><br><br>
+    <button onclick="testLogin()">Test Login Direct</button>
+    <div id="result"></div>
+    
+    <script>
+        const supabaseUrl = 'https://libwvftwbrewcxigwoal.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYnd2ZnR3YnJld2N4aWd3b2FsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NTA1OTAsImV4cCI6MjA4NzQyNjU5MH0.4PSDU9TP5k54tCC_EV12BoF54EKIqzXimkMnQMfKmXc';
+        
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        
+        async function testLogin() {
+            const result = document.getElementById('result');
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            result.innerHTML = 'Testing...';
+            
+            try {
+                console.log('Direct test starting...');
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
+                
+                console.log('Direct test result:', { data, error });
+                
+                if (error) {
+                    result.innerHTML = 'ERROR: ' + error.message;
+                } else {
+                    result.innerHTML = 'SUCCESS: ' + JSON.stringify(data.user?.email);
+                }
+            } catch (err) {
+                console.error('Direct test error:', err);
+                result.innerHTML = 'EXCEPTION: ' + err.message;
+            }
+        }
+    </script>
+</body>
+</html>

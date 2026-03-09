@@ -15,53 +15,46 @@ export default function MasjidLoginPage() {
     e.preventDefault(); 
     setLoading(true); 
     
+    console.log('DEBUG: Login attempt started');
+    
     if (!supabase) {
+      console.error('DEBUG: Supabase connection not found');
       alert("Supabase connection not found.");
       setLoading(false);
       return;
     }
 
-    if (!supabase) return;
+    console.log('DEBUG: Supabase client exists');
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ 
+      console.log('DEBUG: Attempting signInWithPassword');
+      
+      // Add 10 second timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Login timeout after 10 seconds')), 10000);
+      });
+      
+      const signInPromise = supabase.auth.signInWithPassword({ 
         email, 
         password, 
       });
-
-      // After signIn, check session
-      const sessionRes = await supabase.auth.getSession();
+      
+      const { data, error } = await Promise.race([signInPromise, timeoutPromise]) as any;
+      
+      console.log('DEBUG: signIn result', { data: !!data, error: !!error, errorMessage: error?.message });
 
       if (error) { 
+        console.error('DEBUG: Login failed', error);
         alert("லாகின் தோல்வி: " + error.message); 
       } else { 
-        // Only redirect if session exists
-        if (sessionRes.data.session) {
-          // லாகின் வெற்றி - role check செய்து redirect
-          const { data: userRole } = await supabase
-            .from("user_roles")
-            .select("role, permissions")
-            .eq("user_id", data.user?.id)
-            .single();
-          
-          if (userRole) {
-            const role = userRole.role;
-            const permissions = userRole.permissions as any || {};
-            
-            // Staff users with only collection permissions
-            if (role === "staff" && !permissions.accounts && !permissions.events && !permissions.members && permissions.subscriptions_collect) {
-              router.push('/collections');
-            } else {
-              router.push('/'); // Admin users go to dashboard
-            }
-          } else {
-            router.push('/'); // Default to dashboard
-          }
-        } else {
-          alert("Login successful but no session created. Please try again.");
-        }
+        console.log('DEBUG: Login successful, checking session');
+        
+        // Simple redirect to dashboard
+        console.log('DEBUG: Redirecting to dashboard');
+        router.push('/'); 
       } 
     } catch (err) {
+      console.error('DEBUG: Login exception', err);
       alert("Login error: " + (err as Error).message);
     }
     
