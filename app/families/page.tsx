@@ -7,16 +7,7 @@ import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit,
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { QrScannerModal } from "@/components/QrScannerModal";
-
-// TypeScript declaration
-declare module "jspdf" {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-  }
-}
 
 type Family = {
   id: string;
@@ -264,17 +255,20 @@ export default function FamiliesPage() {
 
   const generatePDF = () => {
     try {
-      console.log('Families: Starting PDF generation...');
+      console.log('Families: Starting print generation...');
       
       // Check client-side
       if (typeof window === 'undefined') {
-        console.error('PDF generation not available in server-side rendering');
+        console.error('Print generation not available in server-side rendering');
         return;
       }
       
-      // Create PDF
-      const doc = new jsPDF();
-      doc.text("Masjid Families List", 14, 15);
+      // Create printable HTML
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      if (!printWindow) {
+        alert('Please allow popups for this website to print PDF');
+        return;
+      }
       
       // Prepare headers
       const headers: string[] = [];
@@ -294,71 +288,121 @@ export default function FamiliesPage() {
         if (pdfCols.sub) row.push(f.subscription_amount || 0);
         return row;
       });
-
-      // METHOD 1: Try autoTable
-      try {
-        console.log('Families: Attempting autoTable...');
-        
-        // Check if autoTable is available
-        if (typeof (doc as any).autoTable === 'function') {
-          (doc as any).autoTable({
-            startY: 20,
-            head: [headers],
-            body: tableData,
-          });
-          console.log('Families: autoTable successful');
-        } else {
-          throw new Error('autoTable not available');
-        }
-      } catch (autoTableError) {
-        console.log('Families: autoTable failed, using manual method:', autoTableError);
-        
-        // METHOD 2: Manual table drawing
-        let yPosition = 30;
-        const lineHeight = 8;
-        const columnWidth = 40;
-        
-        // Draw headers
-        headers.forEach((header, index) => {
-          const xPosition = 14 + (index * columnWidth);
-          doc.setFontSize(12);
-          doc.setFont('helvetica', 'bold');
-          doc.text(header, xPosition, yPosition);
+      
+      // Generate HTML content
+      let htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Masjid Families List</title>
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: 20px; 
+              font-size: 12px;
+              line-height: 1.4;
+            }
+            h1 { 
+              text-align: center; 
+              margin-bottom: 20px;
+              font-size: 18px;
+              font-weight: bold;
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-top: 20px;
+            }
+            th, td { 
+              border: 1px solid #333; 
+              padding: 8px; 
+              text-align: left;
+              vertical-align: top;
+            }
+            th { 
+              background-color: #f0f0f0; 
+              font-weight: bold;
+              font-size: 11px;
+            }
+            td { 
+              font-size: 10px;
+              word-wrap: break-word;
+              max-width: 150px;
+            }
+            .footer {
+              margin-top: 30px;
+              text-align: center;
+              font-size: 10px;
+              color: #666;
+            }
+            @media print {
+              body { margin: 10px; }
+              th, td { 
+                border: 1px solid #000; 
+                padding: 6px;
+                font-size: 9px;
+              }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Masjid Families List</h1>
+          <table>
+            <thead>
+              <tr>
+      `;
+      
+      // Add headers
+      headers.forEach(header => {
+        htmlContent += `<th>${header}</th>`;
+      });
+      htmlContent += `
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      
+      // Add data rows
+      tableData.forEach(row => {
+        htmlContent += '<tr>';
+        row.forEach(cell => {
+          const cellValue = String(cell || '');
+          const truncatedValue = cellValue.length > 50 ? cellValue.substring(0, 50) + '...' : cellValue;
+          htmlContent += `<td>${truncatedValue}</td>`;
         });
-        yPosition += lineHeight + 2;
-        
-        // Draw data rows
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        
-        tableData.forEach((row, rowIndex) => {
-          // Add new page if needed
-          if (yPosition > 270) {
-            doc.addPage();
-            yPosition = 20;
-          }
-          
-          row.forEach((cell, index) => {
-            const xPosition = 14 + (index * columnWidth);
-            // Truncate long text
-            const text = String(cell || '');
-            const truncatedText = text.length > 12 ? text.substring(0, 12) + '...' : text;
-            doc.text(truncatedText, xPosition, yPosition);
-          });
-          yPosition += lineHeight;
-        });
-        
-        console.log('Families: Manual table successful');
-      }
-
-      // Save PDF
-      console.log('Families: PDF created, attempting download...');
-      doc.save("families_list.pdf");
-      console.log('Families: PDF download initiated');
+        htmlContent += '</tr>';
+      });
+      
+      htmlContent += `
+            </tbody>
+          </table>
+          <div class="footer">
+            Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
+          </div>
+          <div class="no-print" style="margin-top: 20px; text-align: center;">
+            <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px;">
+              🖨️ Print / Save as PDF
+            </button>
+            <br><br>
+            <small>Use Ctrl+P or Cmd+P to print, then choose "Save as PDF"</small>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      // Write content to new window
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      
+      // Focus and trigger print dialog
+      printWindow.focus();
+      
+      console.log('Families: Print window opened successfully');
       
     } catch (error) {
-      console.error('Families: PDF generation error:', error);
-      alert('PDF generation failed: ' + (error as Error).message);
+      console.error('Families: Print generation error:', error);
+      alert('Print generation failed: ' + (error as Error).message);
     }
   };
 
@@ -542,7 +586,7 @@ export default function FamiliesPage() {
               <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.sub} onChange={e=>setPdfCols(s=>({...s,sub:e.target.checked}))}/> Sub. Amt</label>
             </div>
             <button onClick={() => { setIsPdfOptionsOpen(false); generatePDF(); }} className="w-full py-3 rounded-2xl bg-blue-600 text-white font-black">
-              Generate PDF
+              🖨️ Print Report
             </button>
           </div>
         </div>
