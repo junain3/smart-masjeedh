@@ -31,8 +31,26 @@ export default function MasjidLoginPage() {
     if (error) { 
       alert("லாகின் தோல்வி: " + error.message); 
     } else { 
-      // லாகின் வெற்றி - ஹோம் பக்கத்திற்குச் செல்லவும்
-      router.push('/'); 
+      // லாகின் வெற்றி - role check செய்து redirect
+      const { data: userRole } = await supabase
+        .from("user_roles")
+        .select("role, permissions")
+        .eq("user_id", data.user?.id)
+        .single();
+      
+      if (userRole) {
+        const role = userRole.role;
+        const permissions = userRole.permissions as any || {};
+        
+        // Staff users with only collection permissions
+        if (role === "staff" && !permissions.accounts && !permissions.events && !permissions.members && permissions.subscriptions_collect) {
+          router.push('/collections');
+        } else {
+          router.push('/'); // Admin users go to dashboard
+        }
+      } else {
+        router.push('/'); // Default to dashboard
+      }
     } 
     setLoading(false); 
   }; 
