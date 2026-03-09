@@ -356,7 +356,7 @@ export function RoleManager() {
             <div className="space-y-4">
               <div className="bg-blue-50 p-3 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  💡 <strong>Note:</strong> This will send an OTP invitation to the user's email. 
+                  💡 <strong>Note:</strong> This will send an OTP invitation to the user&apos;s email. 
                   They will receive a registration link to complete their account setup.
                 </p>
               </div>
