@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { getTenantContext } from "@/lib/tenant";
 import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
+import { RoleManager } from "@/components/RoleManager";
 import { Shield, Mail, Trash2, Percent, Wallet } from "lucide-react";
 
 type RoleRow = {
@@ -512,6 +513,13 @@ export default function AdminSettingsPage() {
               </div>
             </div>
 
+            {/* New Role Management Section */}
+            <div className="app-card p-6">
+              <h2 className="text-lg font-bold mb-4">Role Management & Permissions</h2>
+              <RoleManager />
+            </div>
+
+            {/* Existing Role Management */}
             {invites.length > 0 && (
               <div className="app-card p-5 space-y-2">
                 <h2 className="text-sm font-black uppercase tracking-widest text-neutral-600">
