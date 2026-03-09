@@ -29,6 +29,7 @@ export function RoleManager() {
   const [editingRole, setEditingRole] = useState<UserRole | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [masjidId, setMasjidId] = useState<string>("");
+  const [ctx, setCtx] = useState<any>(null);
 
   // Form states
   const [newEmail, setNewEmail] = useState("");
@@ -89,12 +90,16 @@ export function RoleManager() {
   };
 
   useEffect(() => {
-    // Get masjid ID from session
+    // Get tenant context properly
     const initializeData = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setMasjidId(session.user.id); // For now, use user ID as masjid ID
-        await loadData(session.user.id);
+      try {
+        const tenantContext = await getTenantContext();
+        setCtx(tenantContext);
+        setMasjidId(tenantContext.masjidId);
+        await loadData(tenantContext.masjidId);
+      } catch (error) {
+        console.error("Error initializing RoleManager:", error);
+        setLoading(false);
       }
     };
     initializeData();
@@ -128,6 +133,11 @@ export function RoleManager() {
 
   const handleAddRole = async () => {
     try {
+      if (!ctx) {
+        alert("System not ready. Please try again.");
+        return;
+      }
+
       // First get user ID from email - use a different approach
       const { data: userData, error: userError } = await supabase
         .from("user_roles")
@@ -145,7 +155,7 @@ export function RoleManager() {
       const { error: roleError } = await supabase
         .from("user_roles")
         .insert({
-          masjid_id: masjidId,
+          masjid_id: ctx.masjidId,
           user_id: userData.user_id,
           email: newEmail,
           role: newRole,
@@ -160,7 +170,7 @@ export function RoleManager() {
         await supabase
           .from("staff_commission_settings")
           .insert({
-            masjid_id: masjidId,
+            masjid_id: ctx.masjidId,
             user_id: userData.user_id,
             commission_percent: parseFloat(newCommission),
             max_monthly_commission: 50000,
@@ -174,7 +184,7 @@ export function RoleManager() {
       setNewCommission("10");
       setShowAddModal(false);
 
-      await loadData(masjidId);
+      await loadData(ctx.masjidId);
     } catch (error) {
       console.error("Error adding role:", error);
       alert("Failed to add role: " + (error as Error).message);
@@ -183,14 +193,16 @@ export function RoleManager() {
 
   const handleUpdatePermissions = async (userId: string, permissions: Record<string, boolean>) => {
     try {
+      if (!ctx) return;
+      
       const { error } = await supabase
         .from("user_roles")
         .update({ permissions })
         .eq("user_id", userId)
-        .eq("masjid_id", masjidId);
+        .eq("masjid_id", ctx.masjidId);
 
       if (error) throw error;
-      await loadData(masjidId);
+      await loadData(ctx.masjidId);
     } catch (error) {
       console.error("Error updating permissions:", error);
       alert("Failed to update permissions");
@@ -199,21 +211,23 @@ export function RoleManager() {
 
   const handleUpdateCommission = async (userId: string, commissionPercent: number) => {
     try {
+      if (!ctx) return;
+      
       // Update user_roles
       await supabase
         .from("user_roles")
         .update({ commission_percent: commissionPercent })
         .eq("user_id", userId)
-        .eq("masjid_id", masjidId);
+        .eq("masjid_id", ctx.masjidId);
 
       // Update commission settings
       await supabase
         .from("staff_commission_settings")
         .update({ commission_percent: commissionPercent })
         .eq("user_id", userId)
-        .eq("masjid_id", masjidId);
+        .eq("masjid_id", ctx.masjidId);
 
-      await loadData(masjidId);
+      await loadData(ctx.masjidId);
     } catch (error) {
       console.error("Error updating commission:", error);
       alert("Failed to update commission");
@@ -224,20 +238,22 @@ export function RoleManager() {
     if (!confirm("Are you sure you want to remove this user's role?")) return;
 
     try {
+      if (!ctx) return;
+      
       await Promise.all([
         supabase
           .from("user_roles")
           .delete()
           .eq("user_id", userId)
-          .eq("masjid_id", masjidId),
+          .eq("masjid_id", ctx.masjidId),
         supabase
           .from("staff_commission_settings")
           .delete()
           .eq("user_id", userId)
-          .eq("masjid_id", masjidId)
+          .eq("masjid_id", ctx.masjidId)
       ]);
 
-      await loadData(masjidId);
+      await loadData(ctx.masjidId);
     } catch (error) {
       console.error("Error deleting role:", error);
       alert("Failed to delete role");
