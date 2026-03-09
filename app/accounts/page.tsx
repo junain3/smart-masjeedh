@@ -40,6 +40,12 @@ export default function AccountsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   
+  // NEW: Report filter states
+  const [reportType, setReportType] = useState<"all" | "income" | "expense">("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [showReportOptions, setShowReportOptions] = useState(false);
+  
   // Form states
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
@@ -264,6 +270,36 @@ export default function AccountsPage() {
         return;
       }
       
+      // Filter transactions based on report type and date range
+      let filteredTransactions = transactions.filter(tx => 
+        tx.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        tx.category.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      
+      // Apply report type filter
+      if (reportType === "income") {
+        filteredTransactions = filteredTransactions.filter(tx => getFinancialKind(tx) === "income");
+      } else if (reportType === "expense") {
+        filteredTransactions = filteredTransactions.filter(tx => getFinancialKind(tx) === "expense");
+      }
+      
+      // Apply date range filter
+      if (dateFrom) {
+        filteredTransactions = filteredTransactions.filter(tx => tx.date >= dateFrom);
+      }
+      if (dateTo) {
+        filteredTransactions = filteredTransactions.filter(tx => tx.date <= dateTo);
+      }
+      
+      // Calculate totals
+      const totalIncome = filteredTransactions
+        .filter(tx => getFinancialKind(tx) === "income")
+        .reduce((sum, t) => sum + t.amount, 0);
+      const totalExpense = filteredTransactions
+        .filter(tx => getFinancialKind(tx) === "expense")
+        .reduce((sum, t) => sum + t.amount, 0);
+      const netBalance = totalIncome - totalExpense;
+      
       // Prepare table data
       const tableData = filteredTransactions.map(tx => [
         tx.date,
@@ -292,6 +328,27 @@ export default function AccountsPage() {
               font-size: 18px;
               font-weight: bold;
             }
+            .report-info {
+              text-align: center;
+              margin-bottom: 20px;
+              font-size: 14px;
+              color: #666;
+            }
+            .summary {
+              background: #f5f5f5;
+              padding: 15px;
+              margin: 20px 0;
+              border-radius: 5px;
+            }
+            .summary-row {
+              display: flex;
+              justify-content: space-between;
+              margin: 5px 0;
+              font-weight: bold;
+            }
+            .income { color: #28a745; }
+            .expense { color: #dc3545; }
+            .balance { color: #007bff; }
             table { 
               width: 100%; 
               border-collapse: collapse; 
@@ -332,6 +389,27 @@ export default function AccountsPage() {
         </head>
         <body>
           <h1>Masjid Transactions Report</h1>
+          <div class="report-info">
+            <strong>Report Type:</strong> ${reportType === "all" ? "All Transactions" : reportType === "income" ? "Income Only" : "Expense Only"}<br>
+            ${dateFrom ? `<strong>From:</strong> ${dateFrom}` : ''}
+            ${dateTo ? `<strong>To:</strong> ${dateTo}` : ''}
+          </div>
+          
+          <div class="summary">
+            <div class="summary-row">
+              <span>Total Income:</span>
+              <span class="income">Rs. ${totalIncome.toLocaleString()}</span>
+            </div>
+            <div class="summary-row">
+              <span>Total Expense:</span>
+              <span class="expense">Rs. ${totalExpense.toLocaleString()}</span>
+            </div>
+            <div class="summary-row" style="border-top: 1px solid #ccc; padding-top: 10px; margin-top: 10px;">
+              <span>Net Balance:</span>
+              <span class="balance">Rs. ${netBalance.toLocaleString()}</span>
+            </div>
+          </div>
+          
           <table>
             <thead>
               <tr>
@@ -435,9 +513,9 @@ export default function AccountsPage() {
             <QrCode className="w-6 h-6" />
           </button>
           <button
-            onClick={generatePDF}
+            onClick={() => setShowReportOptions(!showReportOptions)}
             className="p-3 bg-neutral-50 text-neutral-600 rounded-3xl hover:bg-neutral-100 transition-all active:scale-95"
-            title={t.download_pdf}
+            title="Report Options"
           >
             <FileText className="w-6 h-6" />
           </button>
@@ -455,6 +533,98 @@ export default function AccountsPage() {
       }
     >
       <div className="space-y-6">
+        {/* Report Options Popup */}
+        {showReportOptions && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold">Report Options</h3>
+                <button
+                  onClick={() => setShowReportOptions(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                {/* Report Type */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Report Type</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => setReportType("all")}
+                      className={`p-3 rounded-xl text-sm font-medium transition-all ${
+                        reportType === "all" 
+                          ? "bg-blue-600 text-white" 
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setReportType("income")}
+                      className={`p-3 rounded-xl text-sm font-medium transition-all ${
+                        reportType === "income" 
+                          ? "bg-green-600 text-white" 
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      Income
+                    </button>
+                    <button
+                      onClick={() => setReportType("expense")}
+                      className={`p-3 rounded-xl text-sm font-medium transition-all ${
+                        reportType === "expense" 
+                          ? "bg-red-600 text-white" 
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      Expense
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Date Range */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Date Range (Optional)</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-gray-500">From</label>
+                      <input
+                        type="date"
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                        className="w-full p-2 border rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">To</label>
+                      <input
+                        type="date"
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                        className="w-full p-2 border rounded-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Generate Button */}
+                <button
+                  onClick={() => {
+                    setShowReportOptions(false);
+                    generatePDF();
+                  }}
+                  className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-all"
+                >
+                  🖨️ Generate Report
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Balance Card */}
         <div className="rounded-3xl p-8 text-white shadow-xl relative overflow-hidden bg-gradient-to-br from-neutral-900 via-neutral-900 to-emerald-900">
           <div className="absolute top-0 right-0 p-8 opacity-10">
