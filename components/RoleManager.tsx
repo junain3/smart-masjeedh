@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { getTenantContext } from "@/lib/tenant";
+import { X } from "lucide-react";
 
 type UserRole = {
   id: string;
@@ -138,45 +139,44 @@ export function RoleManager() {
         return;
       }
 
-      // First get user ID from email - use a different approach
-      const { data: userData, error: userError } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("email", newEmail)
-        .single();
-
-      if (userError || !userData) {
-        alert("User not found. Please make sure the user is registered.");
-        return;
-      }
-
-      // Create user role
+      // Get permissions for the role
       const permissions = getDefaultPermissions(newRole);
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert({
-          masjid_id: ctx.masjidId,
-          user_id: userData.user_id,
+      
+      // Send invitation via OTP
+      const response = await fetch('/admin/api/invite-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           email: newEmail,
           role: newRole,
-          permissions,
+          permissions: permissions,
           commission_percent: newRole === "staff" ? parseFloat(newCommission) : null
-        });
+        })
+      });
 
-      if (roleError) throw roleError;
+      const result = await response.json();
 
-      // Create commission settings for staff
-      if (newRole === "staff") {
-        await supabase
-          .from("staff_commission_settings")
-          .insert({
-            masjid_id: ctx.masjidId,
-            user_id: userData.user_id,
-            commission_percent: parseFloat(newCommission),
-            max_monthly_commission: 50000,
-            active: true
-          });
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send invitation');
       }
+
+      // Show success message with OTP
+      const successMessage = `
+        Invitation sent successfully!
+        
+        Email: ${newEmail}
+        Role: ${newRole}
+        OTP: ${result.otp} (for testing)
+        
+        Registration link: ${window.location.origin}/invite-register?token=${result.invitationToken}
+        
+        Please share the registration link with the user.
+        They will receive OTP in their email to complete registration.
+      `;
+      
+      alert(successMessage);
 
       // Reset form
       setNewEmail("");
@@ -184,10 +184,12 @@ export function RoleManager() {
       setNewCommission("10");
       setShowAddModal(false);
 
+      // Reload data
       await loadData(ctx.masjidId);
+      
     } catch (error) {
       console.error("Error adding role:", error);
-      alert("Failed to add role: " + (error as Error).message);
+      alert("Failed to send invitation: " + (error as Error).message);
     }
   };
 
@@ -339,38 +341,55 @@ export function RoleManager() {
 
       {/* Add Role Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold mb-4">Add User Role</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold">Create New User</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
             
             <div className="space-y-4">
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  💡 <strong>Note:</strong> This will send an OTP invitation to the user's email. 
+                  They will receive a registration link to complete their account setup.
+                </p>
+              </div>
+              
+              {/* Report Type */}
               <div>
-                <label className="block text-sm font-medium mb-1">Email</label>
+                <label className="block text-sm font-medium mb-2">Email Address</label>
                 <input
                   type="email"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full px-3 py-2 border rounded"
+                  className="w-full p-3 border rounded-lg"
                   placeholder="user@example.com"
+                  required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Role</label>
+                <label className="block text-sm font-medium mb-2">Role</label>
                 <select
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value as any)}
-                  className="w-full px-3 py-2 border rounded"
+                  className="w-full p-3 border rounded-lg"
                 >
                   <option value="staff">Staff</option>
                   <option value="co_admin">Co-Admin</option>
                   <option value="super_admin">Super Admin</option>
                 </select>
               </div>
-
+              
               {newRole === "staff" && (
                 <div>
-                  <label className="block text-sm font-medium mb-1">Commission %</label>
+                  <label className="block text-sm font-medium mb-2">Commission %</label>
                   <input
                     type="number"
                     min="0"
@@ -378,24 +397,17 @@ export function RoleManager() {
                     step="0.5"
                     value={newCommission}
                     onChange={(e) => setNewCommission(e.target.value)}
-                    className="w-full px-3 py-2 border rounded"
+                    className="w-full p-3 border rounded-lg"
                   />
                 </div>
               )}
-            </div>
-
-            <div className="flex justify-end space-x-2 mt-6">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 border rounded hover:bg-gray-50"
-              >
-                Cancel
-              </button>
+              
+              {/* Generate Button */}
               <button
                 onClick={handleAddRole}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-all"
               >
-                Add Role
+                � Send OTP Invitation
               </button>
             </div>
           </div>
