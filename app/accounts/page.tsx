@@ -77,11 +77,18 @@ export default function AccountsPage() {
   };
 
   const isFinancialTransaction = (tx: Transaction): boolean => {
-    // Exclude events and subscriptions from financial reports
+    // Exclude events, but include subscription transactions for main account
     const desc = (tx.description || "").trim().toLowerCase();
     const cat = (tx.category || "").trim().toLowerCase();
     const isEvent = /^event\s*[:\-]/i.test(desc) || /^event\s*[:\-]/i.test(cat);
-    return !isEvent && tx.type !== "subscription";
+    
+    // Include subscription transactions if they are for main account (no family_id)
+    if (tx.type === "subscription") {
+      return !isEvent && !tx.family_id; // Only main account subscriptions
+    }
+    
+    // Include regular income/expense transactions (exclude events)
+    return !isEvent;
   };
 
   const financialTransactions = transactions.filter((tx) => {
