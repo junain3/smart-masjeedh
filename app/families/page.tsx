@@ -262,33 +262,48 @@ export default function FamiliesPage() {
   }
 
   const generatePDF = () => {
-    const doc = new jsPDF();
-    doc.text("Masjid Families List", 14, 15);
-    
-    const headers: string[] = [];
-    if (pdfCols.code) headers.push("Code");
-    if (pdfCols.head) headers.push("Head Name");
-    if (pdfCols.address) headers.push("Address");
-    if (pdfCols.phone) headers.push("Phone");
-    if (pdfCols.sub) headers.push("Sub. Amt");
+    try {
+      console.log('Starting PDF generation...');
+      
+      // Check if jsPDF is available
+      if (typeof window === 'undefined') {
+        alert('PDF generation not available in server-side rendering');
+        return;
+      }
+      
+      const doc = new jsPDF();
+      doc.text("Masjid Families List", 14, 15);
+      
+      const headers: string[] = [];
+      if (pdfCols.code) headers.push("Code");
+      if (pdfCols.head) headers.push("Head Name");
+      if (pdfCols.address) headers.push("Address");
+      if (pdfCols.phone) headers.push("Phone");
+      if (pdfCols.sub) headers.push("Sub. Amt");
 
-    const tableData = filteredFamilies.map(f => {
-      const row: (string|number)[] = [];
-      if (pdfCols.code) row.push(f.family_code);
-      if (pdfCols.head) row.push(f.head_name);
-      if (pdfCols.address) row.push(f.address);
-      if (pdfCols.phone) row.push(f.phone);
-      if (pdfCols.sub) row.push(f.subscription_amount || 0);
-      return row;
-    });
+      const tableData = filteredFamilies.map(f => {
+        const row: (string|number)[] = [];
+        if (pdfCols.code) row.push(f.family_code);
+        if (pdfCols.head) row.push(f.head_name);
+        if (pdfCols.address) row.push(f.address);
+        if (pdfCols.phone) row.push(f.phone);
+        if (pdfCols.sub) row.push(f.subscription_amount || 0);
+        return row;
+      });
 
-    doc.autoTable({
-      startY: 20,
-      head: [headers],
-      body: tableData,
-    });
+      doc.autoTable({
+        startY: 20,
+        head: [headers],
+        body: tableData,
+      });
 
-    doc.save("families_list.pdf");
+      console.log('PDF created, attempting download...');
+      doc.save("families_list.pdf");
+      console.log('PDF download initiated');
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      alert('PDF generation failed: ' + (error as Error).message);
+    }
   };
 
   const filteredFamilies = families.filter(f => 

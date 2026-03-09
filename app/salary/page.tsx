@@ -147,23 +147,38 @@ export default function SalaryManagementPage() {
   };
 
   const generatePDF = () => {
-    const doc = new jsPDF();
-    doc.text("Staff Commission Balances Report", 14, 15);
-    
-    const tableData = commissionBalances.map(b => [
-      b.staff_email,
-      `Rs. ${b.total_commission_earned.toLocaleString()}`,
-      `Rs. ${b.total_commission_paid.toLocaleString()}`,
-      `Rs. ${b.available_balance.toLocaleString()}`
-    ]);
+    try {
+      console.log('Salary: Starting PDF generation...');
+      
+      // Check if jsPDF is available
+      if (typeof window === 'undefined') {
+        alert('PDF generation not available in server-side rendering');
+        return;
+      }
+      
+      const doc = new jsPDF();
+      doc.text("Staff Commission Balances Report", 14, 15);
+      
+      const tableData = commissionBalances.map(b => [
+        b.staff_email,
+        `Rs. ${b.total_commission_earned.toLocaleString()}`,
+        `Rs. ${b.total_commission_paid.toLocaleString()}`,
+        `Rs. ${b.available_balance.toLocaleString()}`
+      ]);
 
-    doc.autoTable({
-      startY: 20,
-      head: [["Staff Email", "Total Earned", "Total Paid", "Available Balance"]],
-      body: tableData,
-    });
+      doc.autoTable({
+        startY: 20,
+        head: [["Staff Email", "Total Earned", "Total Paid", "Available Balance"]],
+        body: tableData,
+      });
 
-    doc.save("staff_commission_balances.pdf");
+      console.log('Salary: PDF created, attempting download...');
+      doc.save("staff_commission_balances.pdf");
+      console.log('Salary: PDF download initiated');
+    } catch (error) {
+      console.error('Salary: PDF generation error:', error);
+      alert('PDF generation failed: ' + (error as Error).message);
+    }
   };
 
   const stats = useMemo(() => {

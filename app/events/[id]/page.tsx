@@ -201,20 +201,36 @@ export default function EventDetailPage() {
   const remainingCount = total - receivedCount;
 
   const generatePDF = () => {
-    const doc = new jsPDF();
-    doc.text(`${t.attendance_report}: ${ev?.name || ""} (${ev?.date || ""})`, 14, 15);
-    const table = rows.map(r => [
-      r.families.family_code,
-      r.families.head_name,
-      r.status
-    ]);
-    // @ts-ignore
-    doc.autoTable({ 
-      startY: 20, 
-      head: [["Code", "Head", t.status]], 
-      body: table 
-    });
-    doc.save("event_attendance.pdf");
+    try {
+      console.log('Event Detail: Starting PDF generation...');
+      
+      // Check if jsPDF is available
+      if (typeof window === 'undefined') {
+        alert('PDF generation not available in server-side rendering');
+        return;
+      }
+      
+      const doc = new jsPDF();
+      doc.text(`${t.attendance_report}: ${ev?.name || ""} (${ev?.date || ""})`, 14, 15);
+      const table = rows.map(r => [
+        r.families.family_code,
+        r.families.head_name,
+        r.status
+      ]);
+      
+      doc.autoTable({ 
+        startY: 20, 
+        head: [["Code", "Head", t.status]], 
+        body: table 
+      });
+      
+      console.log('Event Detail: PDF created, attempting download...');
+      doc.save("event_attendance.pdf");
+      console.log('Event Detail: PDF download initiated');
+    } catch (error) {
+      console.error('Event Detail: PDF generation error:', error);
+      alert('PDF generation failed: ' + (error as Error).message);
+    }
   };
 
   if (loading) return <div className="p-8 text-center">{t.loading}</div>;

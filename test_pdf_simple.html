@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple PDF Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.5/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+    <h1>Simple PDF Test</h1>
+    <button onclick="testPDF()">Test PDF Download</button>
+    <div id="result"></div>
+    
+    <script>
+        function testPDF() {
+            const result = document.getElementById('result');
+            result.innerHTML = 'Testing PDF...';
+            
+            try {
+                console.log('Starting PDF test...');
+                
+                // Check if jsPDF is loaded
+                if (typeof window.jspdf === 'undefined') {
+                    result.innerHTML = 'ERROR: jsPDF not loaded';
+                    return;
+                }
+                
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                doc.text("Test PDF Document", 14, 15);
+                
+                // Test autoTable
+                const tableData = [
+                    ['Item 1', 'Description 1', '$100'],
+                    ['Item 2', 'Description 2', '$200'],
+                    ['Item 3', 'Description 3', '$300']
+                ];
+                
+                doc.autoTable({
+                    startY: 20,
+                    head: [['Name', 'Description', 'Amount']],
+                    body: tableData,
+                });
+                
+                // Save the PDF
+                doc.save("test_pdf.pdf");
+                
+                result.innerHTML = 'SUCCESS: PDF should download now!';
+                console.log('PDF test completed successfully');
+                
+            } catch (error) {
+                console.error('PDF test error:', error);
+                result.innerHTML = 'ERROR: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

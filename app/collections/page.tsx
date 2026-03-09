@@ -182,26 +182,41 @@ export default function CollectionsPage() {
   };
 
   const generatePDF = () => {
-    const doc = new jsPDF();
-    doc.text("Staff Collections Report", 14, 15);
-    
-    const tableData = collections.map(c => [
-      c.family?.family_code || '',
-      c.family?.head_name || '',
-      c.date,
-      `Rs. ${c.amount.toLocaleString()}`,
-      c.commission_percent + '%',
-      `Rs. ${c.commission_amount.toLocaleString()}`,
-      c.status
-    ]);
+    try {
+      console.log('Collections: Starting PDF generation...');
+      
+      // Check if jsPDF is available
+      if (typeof window === 'undefined') {
+        alert('PDF generation not available in server-side rendering');
+        return;
+      }
+      
+      const doc = new jsPDF();
+      doc.text("Staff Collections Report", 14, 15);
+      
+      const tableData = collections.map(c => [
+        c.family?.family_code || '',
+        c.family?.head_name || '',
+        c.date,
+        `Rs. ${c.amount.toLocaleString()}`,
+        c.commission_percent + '%',
+        `Rs. ${c.commission_amount.toLocaleString()}`,
+        c.status
+      ]);
 
-    doc.autoTable({
-      startY: 20,
-      head: [["Family Code", "Head Name", "Date", "Amount", "Commission %", "Commission", "Status"]],
-      body: tableData,
-    });
+      doc.autoTable({
+        startY: 20,
+        head: [["Family Code", "Head Name", "Date", "Amount", "Commission %", "Commission", "Status"]],
+        body: tableData,
+      });
 
-    doc.save("staff_collections.pdf");
+      console.log('Collections: PDF created, attempting download...');
+      doc.save("staff_collections.pdf");
+      console.log('Collections: PDF download initiated');
+    } catch (error) {
+      console.error('Collections: PDF generation error:', error);
+      alert('PDF generation failed: ' + (error as Error).message);
+    }
   };
 
   const startScanner = () => {

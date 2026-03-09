@@ -209,27 +209,42 @@ export default function PendingCollectionsPage() {
   };
 
   const generatePDF = () => {
-    const doc = new jsPDF();
-    doc.text("Pending Collections Report", 14, 15);
-    
-    const tableData = collections.map(c => [
-      c.family?.family_code || '',
-      c.family?.head_name || '',
-      (c as any).collector?.email || 'Unknown',
-      c.date,
-      `Rs. ${c.amount.toLocaleString()}`,
-      c.commission_percent + '%',
-      `Rs. ${c.commission_amount.toLocaleString()}`,
-      c.status
-    ]);
+    try {
+      console.log('Pending: Starting PDF generation...');
+      
+      // Check if jsPDF is available
+      if (typeof window === 'undefined') {
+        alert('PDF generation not available in server-side rendering');
+        return;
+      }
+      
+      const doc = new jsPDF();
+      doc.text("Pending Collections Report", 14, 15);
+      
+      const tableData = collections.map(c => [
+        c.family?.family_code || '',
+        c.family?.head_name || '',
+        (c as any).collector?.email || 'Unknown',
+        c.date,
+        `Rs. ${c.amount.toLocaleString()}`,
+        c.commission_percent + '%',
+        `Rs. ${c.commission_amount.toLocaleString()}`,
+        c.status
+      ]);
 
-    doc.autoTable({
-      startY: 20,
-      head: [["Family Code", "Head Name", "Collector", "Date", "Amount", "Commission %", "Commission", "Status"]],
-      body: tableData,
-    });
+      doc.autoTable({
+        startY: 20,
+        head: [["Family Code", "Head Name", "Collector", "Date", "Amount", "Commission %", "Commission", "Status"]],
+        body: tableData,
+      });
 
-    doc.save("pending_collections.pdf");
+      console.log('Pending: PDF created, attempting download...');
+      doc.save("pending_collections.pdf");
+      console.log('Pending: PDF download initiated');
+    } catch (error) {
+      console.error('Pending: PDF generation error:', error);
+      alert('PDF generation failed: ' + (error as Error).message);
+    }
   };
 
   const handleApprove = async (collectionId: string) => {

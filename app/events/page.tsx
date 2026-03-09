@@ -219,16 +219,32 @@ export default function EventsPage() {
   }
 
   const generatePDF = () => {
-    const doc = new jsPDF();
-    doc.text("Events List", 14, 15);
-    const table = events.map(e => [e.date, e.name, e.id]);
-    
-    doc.autoTable({ 
-      startY: 20, 
-      head: [["Date", "Name", "ID"]], 
-      body: table 
-    });
-    doc.save("events.pdf");
+    try {
+      console.log('Events: Starting PDF generation...');
+      
+      // Check if jsPDF is available
+      if (typeof window === 'undefined') {
+        alert('PDF generation not available in server-side rendering');
+        return;
+      }
+      
+      const doc = new jsPDF();
+      doc.text("Events List", 14, 15);
+      const table = events.map(e => [e.date, e.name, e.id]);
+      
+      doc.autoTable({ 
+        startY: 20, 
+        head: [["Date", "Name", "ID"]], 
+        body: table 
+      });
+      
+      console.log('Events: PDF created, attempting download...');
+      doc.save("events.pdf");
+      console.log('Events: PDF download initiated');
+    } catch (error) {
+      console.error('Events: PDF generation error:', error);
+      alert('PDF generation failed: ' + (error as Error).message);
+    }
   };
 
   if (loading) return <div className="p-8 text-center">{t.loading}</div>;

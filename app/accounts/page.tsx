@@ -256,25 +256,40 @@ export default function AccountsPage() {
   }
 
   const generatePDF = () => {
-    const doc = new jsPDF();
-    doc.text("Masjid Transactions Report", 14, 15);
-    
-    const tableData = filteredTransactions.map(tx => [
-      // normalize type for reporting
-      tx.date,
-      tx.description,
-      tx.category,
-      getFinancialKind(tx).toUpperCase(),
-      `Rs. ${tx.amount.toLocaleString()}`
-    ]);
+    try {
+      console.log('Accounts: Starting PDF generation...');
+      
+      // Check if jsPDF is available
+      if (typeof window === 'undefined') {
+        alert('PDF generation not available in server-side rendering');
+        return;
+      }
+      
+      const doc = new jsPDF();
+      doc.text("Masjid Transactions Report", 14, 15);
+      
+      const tableData = filteredTransactions.map(tx => [
+        // normalize type for reporting
+        tx.date,
+        tx.description,
+        tx.category,
+        getFinancialKind(tx).toUpperCase(),
+        `Rs. ${tx.amount.toLocaleString()}`
+      ]);
 
-    doc.autoTable({
-      startY: 20,
-      head: [["Date", "Description", "Category", "Type", "Amount"]],
-      body: tableData,
-    });
+      doc.autoTable({
+        startY: 20,
+        head: [["Date", "Description", "Category", "Type", "Amount"]],
+        body: tableData,
+      });
 
-    doc.save("transactions_report.pdf");
+      console.log('Accounts: PDF created, attempting download...');
+      doc.save("transactions_report.pdf");
+      console.log('Accounts: PDF download initiated');
+    } catch (error) {
+      console.error('Accounts: PDF generation error:', error);
+      alert('PDF generation failed: ' + (error as Error).message);
+    }
   };
 
   const totalIncome = financialTransactions

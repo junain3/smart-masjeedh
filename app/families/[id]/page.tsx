@@ -293,25 +293,40 @@ export default function FamilyDetailsPage() {
   };
 
   const generatePDF = () => {
-    const doc = new jsPDF();
-    doc.text(`Family: ${family?.head_name} (${family?.family_code})`, 14, 15);
-    
-    const tableData = members.map(m => [
-      m.full_name,
-      m.relationship,
-      m.age,
-      m.gender,
-      m.nic,
-      m.phone
-    ]);
+    try {
+      console.log('Family Detail: Starting PDF generation...');
+      
+      // Check if jsPDF is available
+      if (typeof window === 'undefined') {
+        alert('PDF generation not available in server-side rendering');
+        return;
+      }
+      
+      const doc = new jsPDF();
+      doc.text(`Family: ${family?.head_name} (${family?.family_code})`, 14, 15);
+      
+      const tableData = members.map(m => [
+        m.full_name,
+        m.relationship,
+        m.age,
+        m.gender,
+        m.nic,
+        m.phone
+      ]);
 
-    doc.autoTable({
-      startY: 20,
-      head: [["Name", "Relation", "Age", "Gender", "NIC", "Phone"]],
-      body: tableData,
-    });
+      doc.autoTable({
+        startY: 20,
+        head: [["Name", "Relation", "Age", "Gender", "NIC", "Phone"]],
+        body: tableData,
+      });
 
-    doc.save(`family_${family?.family_code}_members.pdf`);
+      console.log('Family Detail: PDF created, attempting download...');
+      doc.save(`family_${family?.family_code}_members.pdf`);
+      console.log('Family Detail: PDF download initiated');
+    } catch (error) {
+      console.error('Family Detail: PDF generation error:', error);
+      alert('PDF generation failed: ' + (error as Error).message);
+    }
   };
 
   const filteredMembers = members.filter(member => 
