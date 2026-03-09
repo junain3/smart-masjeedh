@@ -76,13 +76,18 @@ export default function AccountsPage() {
     return tx.type === "expense" ? "expense" : "income";
   };
 
+  const isFinancialTransaction = (tx: Transaction): boolean => {
+    // Exclude events and subscriptions from financial reports
+    const desc = (tx.description || "").trim().toLowerCase();
+    const cat = (tx.category || "").trim().toLowerCase();
+    const isEvent = /^event\s*[:\-]/i.test(desc) || /^event\s*[:\-]/i.test(cat);
+    return !isEvent && tx.type !== "subscription";
+  };
+
   const financialTransactions = transactions.filter((tx) => {
-    const isIncomeOrExpense =
-      tx.type === "income" || tx.type === "expense" || tx.type === "subscription";
-
-    if (!isIncomeOrExpense) return false;
+    // Only include actual financial transactions (income/expense), exclude events and subscriptions
+    if (!isFinancialTransaction(tx)) return false;
     if (!isNonZeroAmount(tx.amount)) return false; // hide Rs. 0 / informational rows
-
     return true;
   });
 
@@ -276,9 +281,9 @@ export default function AccountsPage() {
         tx.category.toLowerCase().includes(searchQuery.toLowerCase())
       );
       
-      // IMPORTANT: Only include financial transactions (income/expense), exclude events
+      // IMPORTANT: Only include financial transactions (income/expense), exclude events and subscriptions
       filteredTransactions = filteredTransactions.filter(tx => 
-        getFinancialKind(tx) === "income" || getFinancialKind(tx) === "expense"
+        isFinancialTransaction(tx)
       );
       
       // Apply report type filter
@@ -482,7 +487,7 @@ export default function AccountsPage() {
   const balance = totalIncome - totalExpense;
 
   const filteredTransactions = financialTransactions.filter(tx => 
-    getFinancialKind(tx) === "income" || getFinancialKind(tx) === "expense"
+    isFinancialTransaction(tx)
   ).filter(tx => 
     (tx.description || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
     (tx.category || "").toLowerCase().includes(searchQuery.toLowerCase())
