@@ -276,6 +276,11 @@ export default function AccountsPage() {
         tx.category.toLowerCase().includes(searchQuery.toLowerCase())
       );
       
+      // IMPORTANT: Only include financial transactions (income/expense), exclude events
+      filteredTransactions = filteredTransactions.filter(tx => 
+        getFinancialKind(tx) === "income" || getFinancialKind(tx) === "expense"
+      );
+      
       // Apply report type filter
       if (reportType === "income") {
         filteredTransactions = filteredTransactions.filter(tx => getFinancialKind(tx) === "income");
@@ -477,6 +482,8 @@ export default function AccountsPage() {
   const balance = totalIncome - totalExpense;
 
   const filteredTransactions = financialTransactions.filter(tx => 
+    getFinancialKind(tx) === "income" || getFinancialKind(tx) === "expense"
+  ).filter(tx => 
     (tx.description || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
     (tx.category || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
