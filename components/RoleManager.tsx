@@ -142,8 +142,8 @@ export function RoleManager() {
       // Get permissions for the role
       const permissions = getDefaultPermissions(newRole);
       
-      // Send invitation via OTP
-      const response = await fetch('/admin/api/invite-user', {
+      // Add user with OTP verification
+      const response = await fetch('/admin/api/add-user', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -159,21 +159,25 @@ export function RoleManager() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to send invitation');
+        throw new Error(result.error || 'Failed to add user');
       }
 
       // Show success message with OTP
       const successMessage = `
-        Invitation sent successfully!
+        User added successfully to your masjid!
         
         Email: ${newEmail}
         Role: ${newRole}
         OTP: ${result.otp} (for testing)
         
-        Registration link: ${window.location.origin}/invite-register?token=${result.invitationToken}
+        Instructions:
+        1. User will receive OTP in their email
+        2. They need to login with their email
+        3. Enter OTP to verify their identity
+        4. They will get access to assigned sections
         
-        Please share the registration link with the user.
-        They will receive OTP in their email to complete registration.
+        Note: This user is specific to your masjid only.
+        Other masjids cannot see or access this user.
       `;
       
       alert(successMessage);
@@ -189,7 +193,7 @@ export function RoleManager() {
       
     } catch (error) {
       console.error("Error adding role:", error);
-      alert("Failed to send invitation: " + (error as Error).message);
+      alert("Failed to add user: " + (error as Error).message);
     }
   };
 
@@ -356,8 +360,8 @@ export function RoleManager() {
             <div className="space-y-4">
               <div className="bg-blue-50 p-3 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  💡 <strong>Note:</strong> This will send an OTP invitation to the user&apos;s email. 
-                  They will receive a registration link to complete their account setup.
+                  💡 <strong>Note:</strong> This will add the user to your masjid with OTP verification. 
+                  They will receive an OTP to verify their email identity before accessing the system.
                 </p>
               </div>
               
@@ -402,12 +406,11 @@ export function RoleManager() {
                 </div>
               )}
               
-              {/* Generate Button */}
               <button
                 onClick={handleAddRole}
                 className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-all"
               >
-                � Send OTP Invitation
+                👤 Add User to Masjid
               </button>
             </div>
           </div>
