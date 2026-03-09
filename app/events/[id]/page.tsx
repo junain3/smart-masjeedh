@@ -209,7 +209,11 @@ export default function EventDetailPage() {
       r.status
     ]);
     // @ts-ignore
-    doc.autoTable({ startY: 20, head: [[ "Code", "Head", t.status ]], body: table });
+    doc.autoTable({ 
+      startY: 20, 
+      head: [["Code", "Head", t.status]], 
+      body: table 
+    });
     doc.save("event_attendance.pdf");
   };
 

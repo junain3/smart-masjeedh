@@ -2,10 +2,18 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Check, X, AlertCircle, Users, Wallet, Calendar, Filter, Search, DollarSign, TrendingUp } from "lucide-react";
+import { Check, X, AlertCircle, Users, Wallet, Calendar, Filter, Search, DollarSign, TrendingUp, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { AppShell } from "@/components/AppShell";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+
+declare module "jspdf" {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
 
 type Family = {
   id: string;
@@ -200,6 +208,30 @@ export default function PendingCollectionsPage() {
     }
   };
 
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    doc.text("Pending Collections Report", 14, 15);
+    
+    const tableData = collections.map(c => [
+      c.family?.family_code || '',
+      c.family?.head_name || '',
+      (c as any).collector?.email || 'Unknown',
+      c.date,
+      `Rs. ${c.amount.toLocaleString()}`,
+      c.commission_percent + '%',
+      `Rs. ${c.commission_amount.toLocaleString()}`,
+      c.status
+    ]);
+
+    doc.autoTable({
+      startY: 20,
+      head: [["Family Code", "Head Name", "Collector", "Date", "Amount", "Commission %", "Commission", "Status"]],
+      body: tableData,
+    });
+
+    doc.save("pending_collections.pdf");
+  };
+
   const handleApprove = async (collectionId: string) => {
     setProcessing(collectionId);
     setError("");
@@ -328,7 +360,18 @@ export default function PendingCollectionsPage() {
   }
 
   return (
-    <AppShell title="Pending Collections">
+    <AppShell 
+      title="Pending Collections"
+      actions={
+        <button
+          onClick={generatePDF}
+          className="p-3 bg-slate-50 text-blue-600 rounded-3xl hover:bg-blue-50 transition-all active:scale-95"
+          title="Download PDF"
+        >
+          <FileText className="w-6 h-6" />
+        </button>
+      }
+    >
       {/* Stats Cards */}
       {approvalStats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

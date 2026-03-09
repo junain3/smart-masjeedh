@@ -222,8 +222,12 @@ export default function EventsPage() {
     const doc = new jsPDF();
     doc.text("Events List", 14, 15);
     const table = events.map(e => [e.date, e.name, e.id]);
-    // @ts-ignore
-    doc.autoTable({ startY: 20, head: [["Date", "Name", "ID"]], body: table });
+    
+    doc.autoTable({ 
+      startY: 20, 
+      head: [["Date", "Name", "ID"]], 
+      body: table 
+    });
     doc.save("events.pdf");
   };
 

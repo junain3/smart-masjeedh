@@ -2,10 +2,18 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { DollarSign, Wallet, Calendar, Users, TrendingUp, AlertCircle, Check, Plus, X } from "lucide-react";
+import { DollarSign, Wallet, Calendar, Users, TrendingUp, AlertCircle, Check, Plus, X, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { AppShell } from "@/components/AppShell";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+
+declare module "jspdf" {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
 
 type StaffMember = {
   id: string;
@@ -138,6 +146,26 @@ export default function SalaryManagementPage() {
     }
   };
 
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    doc.text("Staff Commission Balances Report", 14, 15);
+    
+    const tableData = commissionBalances.map(b => [
+      b.staff_email,
+      `Rs. ${b.total_commission_earned.toLocaleString()}`,
+      `Rs. ${b.total_commission_paid.toLocaleString()}`,
+      `Rs. ${b.available_balance.toLocaleString()}`
+    ]);
+
+    doc.autoTable({
+      startY: 20,
+      head: [["Staff Email", "Total Earned", "Total Paid", "Available Balance"]],
+      body: tableData,
+    });
+
+    doc.save("staff_commission_balances.pdf");
+  };
+
   const stats = useMemo(() => {
     const totalCommissionEarned = commissionBalances.reduce((sum, balance) => sum + balance.total_commission_earned, 0);
     const totalCommissionPaid = commissionBalances.reduce((sum, balance) => sum + balance.total_commission_paid, 0);
@@ -166,7 +194,18 @@ export default function SalaryManagementPage() {
   }
 
   return (
-    <AppShell title="Salary Management">
+    <AppShell 
+      title="Salary Management"
+      actions={
+        <button
+          onClick={generatePDF}
+          className="p-3 bg-slate-50 text-blue-600 rounded-3xl hover:bg-blue-50 transition-all active:scale-95"
+          title="Download PDF"
+        >
+          <FileText className="w-6 h-6" />
+        </button>
+      }
+    >
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         <div className="app-card p-4 text-center">

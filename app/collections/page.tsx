@@ -2,11 +2,19 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { QrCode, Plus, Users, Wallet, Calendar, X, Check, AlertCircle, Search } from "lucide-react";
+import { QrCode, Plus, Users, Wallet, Calendar, X, Check, AlertCircle, Search, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { AppShell } from "@/components/AppShell";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+
+declare module "jspdf" {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
 
 type Family = {
   id: string;
@@ -173,6 +181,29 @@ export default function CollectionsPage() {
     }
   };
 
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    doc.text("Staff Collections Report", 14, 15);
+    
+    const tableData = collections.map(c => [
+      c.family?.family_code || '',
+      c.family?.head_name || '',
+      c.date,
+      `Rs. ${c.amount.toLocaleString()}`,
+      c.commission_percent + '%',
+      `Rs. ${c.commission_amount.toLocaleString()}`,
+      c.status
+    ]);
+
+    doc.autoTable({
+      startY: 20,
+      head: [["Family Code", "Head Name", "Date", "Amount", "Commission %", "Commission", "Status"]],
+      body: tableData,
+    });
+
+    doc.save("staff_collections.pdf");
+  };
+
   const startScanner = () => {
     setIsScannerOpen(true);
     setTimeout(() => {
@@ -271,7 +302,18 @@ export default function CollectionsPage() {
   }
 
   return (
-    <AppShell title="Subscription Collections">
+    <AppShell 
+      title="Subscription Collections"
+      actions={
+        <button
+          onClick={generatePDF}
+          className="p-3 bg-slate-50 text-blue-600 rounded-3xl hover:bg-blue-50 transition-all active:scale-95"
+          title="Download PDF"
+        >
+          <FileText className="w-6 h-6" />
+        </button>
+      }
+    >
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <div className="app-card p-4 text-center">
