@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Basic Test</title>
+</head>
+<body>
+    <h1>Basic Connection Test</h1>
+    <button onclick="testSupabase()">Test Supabase</button>
+    <div id="result"></div>
+    
+    <script>
+        async function testSupabase() {
+            const result = document.getElementById('result');
+            result.innerHTML = 'Testing...';
+            
+            try {
+                const response = await fetch('https://libwvftwbrewcxigwoal.supabase.co/rest/v1/', {
+                    headers: {
+                        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYnd2ZnR3YnJld2N4aWd3b2FsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NTA1OTAsImV4cCI6MjA4NzQyNjU5MH0.4PSDU9TP5k54tCC_EV12BoF54EKIqzXimkMnQMfKmXc'
+                    }
+                });
+                
+                const data = await response.json();
+                result.innerHTML = 'SUCCESS: ' + JSON.stringify(data);
+            } catch (error) {
+                result.innerHTML = 'ERROR: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -15,7 +15,10 @@ export default function MasjidLoginPage() {
     e.preventDefault(); 
     setLoading(true); 
     
+    console.log('DEBUG before signIn', { file: 'app/login/page.tsx' });
+    
     if (!supabase) {
+      console.error('DEBUG: Supabase connection not found');
       alert("Supabase connection not found.");
       setLoading(false);
       return;
@@ -23,35 +26,70 @@ export default function MasjidLoginPage() {
 
     if (!supabase) return;
 
-    const { data, error } = await supabase.auth.signInWithPassword({ 
-      email, 
-      password, 
-    }); 
+    try {
+      // Add 15s timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Login timeout after 15s')), 15000);
+      });
 
-    if (error) { 
-      alert("லாகின் தோல்வி: " + error.message); 
-    } else { 
-      // லாகின் வெற்றி - role check செய்து redirect
-      const { data: userRole } = await supabase
-        .from("user_roles")
-        .select("role, permissions")
-        .eq("user_id", data.user?.id)
-        .single();
+      const signInPromise = supabase.auth.signInWithPassword({ 
+        email, 
+        password, 
+      });
+
+      const { data, error } = await Promise.race([signInPromise, timeoutPromise]) as any;
       
-      if (userRole) {
-        const role = userRole.role;
-        const permissions = userRole.permissions as any || {};
+      console.log('DEBUG after signIn result', { data, error });
+      console.error('DEBUG signIn error', error);
+
+      // After signIn, also call and log session and user
+      const sessionRes = await supabase.auth.getSession();
+      console.log('DEBUG getSession', sessionRes);
+      
+      const userRes = await supabase.auth.getUser();
+      console.log('DEBUG getUser', userRes);
+
+      if (error) { 
+        console.error('DEBUG: Login failed', error);
+        alert("லாகின் தோல்வி: " + error.message); 
+      } else { 
+        console.log('DEBUG: Login successful, checking role...');
         
-        // Staff users with only collection permissions
-        if (role === "staff" && !permissions.accounts && !permissions.events && !permissions.members && permissions.subscriptions_collect) {
-          router.push('/collections');
+        // Only redirect if session exists
+        if (sessionRes.data.session) {
+          // லாகின் வெற்றி - role check செய்து redirect
+          const { data: userRole } = await supabase
+            .from("user_roles")
+            .select("role, permissions")
+            .eq("user_id", data.user?.id)
+            .single();
+          
+          if (userRole) {
+            const role = userRole.role;
+            const permissions = userRole.permissions as any || {};
+            
+            // Staff users with only collection permissions
+            if (role === "staff" && !permissions.accounts && !permissions.events && !permissions.members && permissions.subscriptions_collect) {
+              console.log('DEBUG: Redirecting staff user to /collections');
+              router.push('/collections');
+            } else {
+              console.log('DEBUG: Redirecting admin user to dashboard');
+              router.push('/'); // Admin users go to dashboard
+            }
+          } else {
+            console.log('DEBUG: No user role found, redirecting to dashboard');
+            router.push('/'); // Default to dashboard
+          }
         } else {
-          router.push('/'); // Admin users go to dashboard
+          console.error('DEBUG: No session found after login');
+          alert("Login successful but no session created. Please try again.");
         }
-      } else {
-        router.push('/'); // Default to dashboard
-      }
-    } 
+      } 
+    } catch (err) {
+      console.error('DEBUG: Login exception', err);
+      alert("Login error: " + (err as Error).message);
+    }
+    
     setLoading(false); 
   }; 
 
