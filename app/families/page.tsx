@@ -8,9 +8,10 @@ import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 import { QrScannerModal } from "@/components/QrScannerModal";
 
+// TypeScript declaration
 declare module "jspdf" {
   interface jsPDF {
     autoTable: (options: any) => jsPDF;
@@ -294,12 +295,61 @@ export default function FamiliesPage() {
         return row;
       });
 
-      // Add table
-      doc.autoTable({
-        startY: 20,
-        head: [headers],
-        body: tableData,
-      });
+      // METHOD 1: Try autoTable
+      try {
+        console.log('Families: Attempting autoTable...');
+        
+        // Check if autoTable is available
+        if (typeof (doc as any).autoTable === 'function') {
+          (doc as any).autoTable({
+            startY: 20,
+            head: [headers],
+            body: tableData,
+          });
+          console.log('Families: autoTable successful');
+        } else {
+          throw new Error('autoTable not available');
+        }
+      } catch (autoTableError) {
+        console.log('Families: autoTable failed, using manual method:', autoTableError);
+        
+        // METHOD 2: Manual table drawing
+        let yPosition = 30;
+        const lineHeight = 8;
+        const columnWidth = 40;
+        
+        // Draw headers
+        headers.forEach((header, index) => {
+          const xPosition = 14 + (index * columnWidth);
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text(header, xPosition, yPosition);
+        });
+        yPosition += lineHeight + 2;
+        
+        // Draw data rows
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        
+        tableData.forEach((row, rowIndex) => {
+          // Add new page if needed
+          if (yPosition > 270) {
+            doc.addPage();
+            yPosition = 20;
+          }
+          
+          row.forEach((cell, index) => {
+            const xPosition = 14 + (index * columnWidth);
+            // Truncate long text
+            const text = String(cell || '');
+            const truncatedText = text.length > 12 ? text.substring(0, 12) + '...' : text;
+            doc.text(truncatedText, xPosition, yPosition);
+          });
+          yPosition += lineHeight;
+        });
+        
+        console.log('Families: Manual table successful');
+      }
 
       // Save PDF
       console.log('Families: PDF created, attempting download...');

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ultimate PDF Test - Complete Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        button { margin: 10px; padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        .info { background: #d1ecf1; border-color: #bee5eb; }
+    </style>
+</head>
+<body>
+    <h1>Ultimate PDF Test - Complete Debug</h1>
+    
+    <div id="results"></div>
+    
+    <h2>Tests:</h2>
+    <button onclick="test1_basic_jsPDF()">Test 1: Basic jsPDF</button>
+    <button onclick="test2_jsPDF_autotable()">Test 2: jsPDF + autoTable</button>
+    <button onclick="test3_manual_table()">Test 3: Manual Table</button>
+    <button onclick="test4_complete_fix()">Test 4: Complete Fix</button>
+    
+    <script>
+        const results = document.getElementById('results');
+        
+        function addResult(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        function test1_basic_jsPDF() {
+            addResult('Test 1: Starting basic jsPDF test...', 'info');
+            
+            try {
+                // Test basic jsPDF functionality
+                const doc = new jsPDF.jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: 'a4'
+                });
+                
+                doc.text("Basic PDF Test", 14, 15);
+                doc.text("Line 2: Testing basic functionality", 14, 25);
+                doc.text("Line 3: This should work", 14, 35);
+                
+                doc.save("basic_test.pdf");
+                addResult('Test 1: SUCCESS - Basic PDF downloaded!', 'success');
+                
+            } catch (error) {
+                addResult(`Test 1: FAILED - ${error.message}`, 'error');
+                console.error('Test 1 error:', error);
+            }
+        }
+        
+        function test2_jsPDF_autotable() {
+            addResult('Test 2: Starting jsPDF + autoTable test...', 'info');
+            
+            try {
+                // Test with autoTable
+                const doc = new jsPDF.jsPDF();
+                
+                // Check if autoTable is available
+                if (typeof doc.autoTable === 'function') {
+                    addResult('Test 2: autoTable function found!', 'success');
+                    
+                    doc.text("AutoTable Test", 14, 15);
+                    
+                    const tableData = [
+                        ['Item 1', '$100', 'Active'],
+                        ['Item 2', '$200', 'Pending'],
+                        ['Item 3', '$300', 'Complete']
+                    ];
+                    
+                    doc.autoTable({
+                        startY: 20,
+                        head: [['Name', 'Amount', 'Status']],
+                        body: tableData
+                    });
+                    
+                    doc.save("autotable_test.pdf");
+                    addResult('Test 2: SUCCESS - AutoTable PDF downloaded!', 'success');
+                    
+                } else {
+                    addResult('Test 2: FAILED - autoTable function not found', 'error');
+                }
+                
+            } catch (error) {
+                addResult(`Test 2: FAILED - ${error.message}`, 'error');
+                console.error('Test 2 error:', error);
+            }
+        }
+        
+        function test3_manual_table() {
+            addResult('Test 3: Starting manual table test...', 'info');
+            
+            try {
+                const doc = new jsPDF.jsPDF();
+                
+                doc.text("Manual Table Test", 14, 15);
+                
+                // Manual table drawing
+                let yPosition = 30;
+                const lineHeight = 8;
+                const columnWidth = 40;
+                
+                // Headers
+                const headers = ['Name', 'Amount', 'Status'];
+                headers.forEach((header, index) => {
+                    const xPosition = 14 + (index * columnWidth);
+                    doc.setFontSize(12);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(header, xPosition, yPosition);
+                });
+                yPosition += lineHeight + 2;
+                
+                // Data rows
+                const data = [
+                    ['Item 1', '$100', 'Active'],
+                    ['Item 2', '$200', 'Pending'],
+                    ['Item 3', '$300', 'Complete']
+                ];
+                
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                
+                data.forEach(row => {
+                    row.forEach((cell, index) => {
+                        const xPosition = 14 + (index * columnWidth);
+                        doc.text(cell, xPosition, yPosition);
+                    });
+                    yPosition += lineHeight;
+                });
+                
+                doc.save("manual_table_test.pdf");
+                addResult('Test 3: SUCCESS - Manual table PDF downloaded!', 'success');
+                
+            } catch (error) {
+                addResult(`Test 3: FAILED - ${error.message}`, 'error');
+                console.error('Test 3 error:', error);
+            }
+        }
+        
+        function test4_complete_fix() {
+            addResult('Test 4: Starting complete fix test...', 'info');
+            
+            try {
+                const doc = new jsPDF.jsPDF();
+                
+                // Try autoTable first
+                let success = false;
+                
+                try {
+                    if (typeof doc.autoTable === 'function') {
+                        doc.autoTable({
+                            startY: 20,
+                            head: [['Test', 'Data']],
+                            body: [['Value 1', 'Value 2']]
+                        });
+                        success = true;
+                        addResult('Test 4: autoTable method worked!', 'success');
+                    }
+                } catch (e) {
+                    addResult('Test 4: autoTable failed, trying manual...', 'info');
+                }
+                
+                // Fallback to manual
+                if (!success) {
+                    doc.text("Complete Fix Test", 14, 15);
+                    doc.text("Manual fallback successful", 14, 25);
+                    addResult('Test 4: Manual fallback worked!', 'success');
+                }
+                
+                doc.save("complete_fix_test.pdf");
+                addResult('Test 4: SUCCESS - Complete fix PDF downloaded!', 'success');
+                
+            } catch (error) {
+                addResult(`Test 4: FAILED - ${error.message}`, 'error');
+                console.error('Test 4 error:', error);
+            }
+        }
+        
+        // Check jsPDF availability on load
+        window.onload = function() {
+            addResult('Page loaded, checking jsPDF availability...', 'info');
+            
+            if (typeof jsPDF !== 'undefined') {
+                addResult('jsPDF is available!', 'success');
+            } else {
+                addResult('jsPDF is NOT available!', 'error');
+            }
+        };
+    </script>
+    
+    <!-- Load jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.5/jspdf.plugin.autotable.min.js"></script>
+</body>
+</html>
