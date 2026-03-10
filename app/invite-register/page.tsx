@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Mail, Lock, User, ArrowLeft } from 'lucide-react';
+import { Mail, Lock, User, ArrowLeft, X } from 'lucide-react';
 
 function InviteRegisterContent() {
   const router = useRouter();
@@ -29,17 +29,62 @@ function InviteRegisterContent() {
 
   const verifyInvitation = async () => {
     try {
-      const response = await fetch(`/admin/api/invite-user?token=${token}`);
-      const result = await response.json();
+      console.log('DEBUG: Verifying invitation token:', token);
+      
+      const { data, error } = await supabase
+        .from('invitations')
+        .select('*')
+        .eq('token', token)
+        .eq('status', 'pending')
+        .single();
 
-      if (result.success) {
-        setInvitation(result.invitation);
-        setEmail(result.invitation.email);
-      } else {
-        setError(result.error);
+      console.log('DEBUG: Invitation query result:', { data, error: error?.message });
+
+      if (error) {
+        setError('அழைப்பு காலாவடியாக உள்ளது அல்லது காலாவடியாகிவிட்டது');
+        return;
+      }
+
+      if (data) {
+        setInvitation(data);
+        setEmail(data.email);
       }
     } catch (error) {
-      setError('Failed to verify invitation');
+      setError('அழைப்பு சரிபார்ப்பு பிழை');
+    }
+  };
+
+  const requestOTP = async () => {
+    if (!invitation) return;
+    
+    setLoading(true);
+    setError('');
+
+    console.log('DEBUG: Sending OTP to email:', email);
+
+    try {
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: email,
+        options: {
+          shouldCreateUser: false
+        }
+      });
+
+      console.log('DEBUG: OTP send result:', { error: otpError?.message });
+
+      if (otpError) {
+        setError('OTP அனுப்பம் தோல்வி: ' + otpError.message);
+        setLoading(false);
+        return;
+      }
+
+      console.log('DEBUG: OTP sent successfully');
+      setStep('register');
+      setLoading(false);
+    } catch (error: any) {
+      console.error('DEBUG: OTP send error:', error);
+      setError('OTP அனுப்பம் பிழை: ' + error.message);
+      setLoading(false);
     }
   };
 
@@ -48,256 +93,183 @@ function InviteRegisterContent() {
     setLoading(true);
     setError('');
 
+    console.log('DEBUG: Verifying OTP for email:', email, 'OTP:', otp);
+
     try {
-      const response = await fetch('/admin/api/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp })
+      const { data, error: otpError } = await supabase.auth.verifyOtp({
+        email: email,
+        token: otp,
+        type: 'signup'
       });
 
-      const result = await response.json();
+      console.log('DEBUG: OTP verification result:', { data, error: otpError?.message });
 
-      if (result.success) {
-        setStep('register');
-      } else {
-        setError(result.error);
+      if (otpError) {
+        setError('OTP தவறானது: ' + otpError.message);
+        setLoading(false);
+        return;
       }
-    } catch (error) {
-      setError('Failed to verify OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+      if (data.user && invitation) {
+        console.log('DEBUG: Creating user role for masjid:', invitation.masjid_id);
+        
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert([
+            {
+              masjid_id: invitation.masjid_id,
+              user_id: data.user.id,
+              auth_user_id: data.user.id,
+              email: email,
+              role: invitation.role,
+              permissions: invitation.role === 'co_admin' ? {
+                accounts: true,
+                events: true,
+                members: true,
+                subscriptions_collect: true,
+                subscriptions_approve: true,
+                staff_management: true,
+                reports: true,
+                settings: false
+              } : {
+                accounts: false,
+                events: true,
+                members: true,
+                subscriptions_collect: true,
+                subscriptions_approve: false,
+                staff_management: false,
+                reports: true,
+                settings: false
+              }
+            }
+          ]);
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      setLoading(false);
-      return;
-    }
+        console.log('DEBUG: User role creation result:', { error: roleError?.message });
 
-    try {
-      // 1. Create user account
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            invited_user: true
-          }
+        if (roleError) {
+          setError('பங்கு உருவாக்கம் தோல்வி: ' + roleError.message);
+          setLoading(false);
+          return;
         }
-      });
 
-      if (authError) throw authError;
+        await supabase
+          .from('invitations')
+          .update({ status: 'accepted' })
+          .eq('id', invitation.id);
 
-      // 2. Assign role to user
-      if (invitation && authData.user) {
-        await fetch('/admin/api/assign-role', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: authData.user.id,
-            email,
-            role: invitation.role,
-            permissions: invitation.permissions,
-            commission_percent: invitation.commission_percent,
-            token: token
-          })
-        });
+        console.log('DEBUG: Invitation accepted successfully');
+        
+        alert('பதிவு வெற்றி! இப்போது உள்நுழையலாம்.');
+        router.push('/login');
       }
-
-      // 3. Auto login
-      await supabase.auth.signInWithPassword({ email, password });
-      
-      // 4. Redirect to appropriate page
-      router.push('/dashboard');
-
-    } catch (error) {
-      setError('Registration failed. Please try again.');
-    } finally {
+    } catch (error: any) {
+      console.error('DEBUG: OTP verification error:', error);
+      setError('OTP சரிபார்ப்பு பிழை: ' + error.message);
       setLoading(false);
     }
   };
 
-  if (!token) {
+  if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Invalid Invitation</h1>
-          <p className="text-gray-600 mb-6">This invitation link is invalid or has expired.</p>
-          <Link 
-            href="/login" 
-            className="inline-flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Login
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6 text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <X className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">அழைப்பு பிழை</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Link href="/login" className="text-emerald-600 hover:text-emerald-700 font-medium">
+            உள்நுழைய செல்ல
           </Link>
         </div>
       </div>
     );
   }
 
+  if (!invitation) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6 text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-8 h-8 border-4 border-gray-300 border-t-emerald-600 rounded-full animate-spin"></div>
+          </div>
+          <p className="text-gray-600">அழைப்பை சரிபார்க்கிறது...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 p-4">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-3xl shadow-2xl p-8">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl flex items-center justify-center mx-auto mb-4">
-              <Mail className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900">Join Smart Masjeedh</h1>
-            <p className="text-gray-600 mt-2">
-              {step === 'verify' ? 'Verify your email with OTP' : 'Complete your registration'}
-            </p>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Mail className="w-8 h-8 text-emerald-600" />
           </div>
+          <h1 className="text-2xl font-bold text-gray-900">மஸ்ஜித் அழைப்பு</h1>
+          <p className="text-gray-600">{invitation.email}</p>
+        </div>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-600 text-sm">{error}</p>
+        {step === 'verify' ? (
+          <div className="space-y-4">
+            <div className="bg-emerald-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-emerald-800 mb-2">அழைப்பு விவரங்கள்</h3>
+              <p className="text-sm text-emerald-700">
+                <strong>பங்கு:</strong> {invitation.role === 'co_admin' ? 'இணை நிர்வாகி' : 'ஊழியர்'}
+              </p>
             </div>
-          )}
-
-          {step === 'verify' ? (
-            // OTP Verification Form
-            <form onSubmit={handleVerifyOTP} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    placeholder="your@email.com"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  OTP Code
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="text"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.toUpperCase())}
-                    className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    placeholder="Enter 6-digit OTP"
-                    maxLength={6}
-                    required
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Check your email for the OTP code
-                </p>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white py-3 rounded-lg font-semibold hover:from-emerald-700 hover:to-teal-700 transition-all disabled:opacity-50"
-              >
-                {loading ? 'Verifying...' : 'Verify OTP'}
-              </button>
-            </form>
-          ) : (
-            // Registration Form
-            <form onSubmit={handleRegister} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    placeholder="Enter your full name"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    placeholder="Create a password"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    placeholder="Confirm your password"
-                    required
-                  />
-                </div>
-              </div>
-
-              {invitation && (
-                <div className="bg-emerald-50 p-3 rounded-lg">
-                  <p className="text-sm text-emerald-800">
-                    <strong>Role:</strong> {invitation.role.replace('_', ' ').toUpperCase()}
-                  </p>
-                  {invitation.commission_percent && (
-                    <p className="text-sm text-emerald-800">
-                      <strong>Commission:</strong> {invitation.commission_percent}%
-                    </p>
-                  )}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white py-3 rounded-lg font-semibold hover:from-emerald-700 hover:to-teal-700 transition-all disabled:opacity-50"
-              >
-                {loading ? 'Creating Account...' : 'Create Account'}
-              </button>
-            </form>
-          )}
-
-          <div className="mt-6 text-center">
-            <Link 
-              href="/login" 
-              className="text-sm text-gray-600 hover:text-emerald-600 flex items-center justify-center"
+            
+            <button
+              onClick={requestOTP}
+              disabled={loading}
+              className="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
             >
-              <ArrowLeft className="w-4 h-4 mr-1" />
-              Back to Login
-            </Link>
+              {loading ? 'OTP அனுப்புகிறது...' : 'OTP பெறு'}
+            </button>
           </div>
+        ) : (
+          <form onSubmit={handleVerifyOTP} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                OTP குறியீடு
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  placeholder="OTP உள்ளிடுவும்"
+                  required
+                />
+              </div>
+            </div>
+            
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <p className="text-sm text-blue-800">
+                உங்கள் மின்னஞ்சலுக்கு OTP அனுப்பப்பட்டுள்ளது. அதை உள்ளிட்டு சரிபார்க்கவும்.
+              </p>
+            </div>
+            
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'சரிபார்க்கிறது...' : 'OTP சரிபார்க்கு'}
+            </button>
+          </form>
+        )}
+
+        <div className="mt-6 text-center">
+          <Link 
+            href="/login" 
+            className="text-sm text-gray-600 hover:text-emerald-600 flex items-center justify-center"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1" />
+            உள்நுழைய திரும்பு
+          </Link>
         </div>
       </div>
     </div>
@@ -307,9 +279,11 @@ function InviteRegisterContent() {
 export default function InviteRegisterPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6 text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-8 h-8 border-4 border-gray-300 border-t-emerald-600 rounded-full animate-spin"></div>
+          </div>
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
