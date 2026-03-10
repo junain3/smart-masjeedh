@@ -50,12 +50,29 @@ export default function DashboardPage() {
 
   // Auth guard effect
   useEffect(() => {
-    console.log("DEBUG Dashboard - Auth guard:", { authLoading, user: user?.email });
+    console.log("DEBUG Dashboard - Auth guard:", { authLoading, user: user?.email, tenantContext: !!tenantContext });
+    
+    // Only redirect if auth is complete and no user exists
     if (!authLoading && !user) {
       console.log("DEBUG Dashboard - Redirecting to login (no user)");
       router.push('/login');
+      return;
     }
-  }, [user, authLoading, router]);
+    
+    // Only redirect if user exists but no tenant context (after reasonable delay)
+    if (!authLoading && user && !tenantContext) {
+      console.log("DEBUG Dashboard - User exists but no tenant context, waiting...");
+      // Wait a bit for tenant context to load
+      const timeout = setTimeout(() => {
+        if (!tenantContext) {
+          console.log("DEBUG Dashboard - Still no tenant context, redirecting to login");
+          router.push('/login');
+        }
+      }, 3000);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [user, authLoading, tenantContext, router]);
 
   // Real-time clock update
   useEffect(() => {
@@ -96,7 +113,7 @@ export default function DashboardPage() {
 
   // Fetch data effect
   useEffect(() => {
-    if (!user) return;
+    if (!user || !tenantContext) return;
     
     async function fetchData() {
       try {
@@ -104,22 +121,15 @@ export default function DashboardPage() {
 
         console.log("DEBUG Dashboard - Fetching data for user:", user.email);
 
-        // Check if user is logged in
-        const ctx = await getTenantContext();
-        console.log("DEBUG Dashboard - Tenant context:", ctx);
-        
-        if (!ctx) {
-          console.log("DEBUG Dashboard - No tenant context, redirecting to login");
-          router.push('/login');
-          return;
-        }
+        // User and tenant context are already validated
+        console.log("DEBUG Dashboard - Using tenant context:", tenantContext);
 
         // Load masjid profile
         try {
           const { data: masjidData, error: masjidErr } = await supabase
             .from("masjids")
             .select("id, masjid_name, tagline, logo_url")
-            .eq("id", ctx.masjidId)
+            .eq("id", tenantContext.masjidId)
             .maybeSingle();
 
           if (masjidErr) throw masjidErr;
@@ -156,7 +166,7 @@ export default function DashboardPage() {
         const { count, error: countError } = await supabase
           .from("families")
           .select("id", { count: "exact", head: true })
-          .eq("masjid_id", ctx.masjidId);
+          .eq("masjid_id", tenantContext.masjidId);
         
         if (countError) throw countError;
         setFamilyCount(count || 0);
@@ -165,7 +175,7 @@ export default function DashboardPage() {
         const { count: mCount, error: mError } = await supabase
           .from("members")
           .select("*", { count: "exact", head: true })
-          .eq("masjid_id", ctx.masjidId);
+          .eq("masjid_id", tenantContext.masjidId);
         
         if (!mError) setMemberCount(mCount || 0);
 
@@ -176,7 +186,7 @@ export default function DashboardPage() {
       }
     }
     fetchData();
-  }, [user, router]);
+  }, [user, tenantContext, router]);
 
   if (authLoading) {
     return (
@@ -342,7 +352,7 @@ export default function DashboardPage() {
 
   const fetchActiveServices = async () => {
     if (!supabase) return;
-    const ctx = await getTenantContext();
+    const ctx = tenantContext || await getTenantContext();
     if (!ctx) return;
 
     const { data } = await supabase
@@ -366,7 +376,7 @@ export default function DashboardPage() {
     try {
       if (decodedText.startsWith("smart-masjeedh:family:")) {
         const familyId = decodedText.split(":")[2];
-        const ctx = await getTenantContext();
+        const ctx = tenantContext || await getTenantContext();
         if (!ctx) return;
 
         const { data, error } = await supabase
@@ -400,7 +410,7 @@ export default function DashboardPage() {
     if (!supabase) return;
     setSubmittingService(true);
     try {
-      const ctx = await getTenantContext();
+      const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
 
       // 1. Fetch all families for this masjid

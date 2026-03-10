@@ -28,16 +28,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Get initial session
     const getInitialSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        console.log("DEBUG: Getting initial session...");
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        console.log("DEBUG: Initial session result:", { 
+          hasSession: !!session, 
+          userEmail: session?.user?.email,
+          error: error?.message 
+        });
+        
         setUser(session?.user ?? null);
         
         if (session?.user) {
+          console.log("DEBUG: User found, getting tenant context...");
           const ctx = await getTenantContext();
+          console.log("DEBUG: Tenant context result:", ctx);
           setTenantContext(ctx);
+        } else {
+          console.log("DEBUG: No user session found");
+          setTenantContext(null);
         }
       } catch (error) {
         console.error("Error getting initial session:", error);
+        setUser(null);
+        setTenantContext(null);
       } finally {
+        console.log("DEBUG: Setting loading to false");
         setLoading(false);
       }
     };
@@ -47,12 +63,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log("Auth state changed:", event, session?.user?.email);
+        console.log("DEBUG: Auth state changed:", event, session?.user?.email);
         
         setUser(session?.user ?? null);
         
         if (session?.user) {
           try {
+            console.log("DEBUG: User logged in, getting tenant context...");
             const ctx = await getTenantContext();
             setTenantContext(ctx);
           } catch (error) {
@@ -60,6 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setTenantContext(null);
           }
         } else {
+          console.log("DEBUG: User logged out");
           setTenantContext(null);
         }
         
