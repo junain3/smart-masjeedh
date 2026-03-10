@@ -116,7 +116,7 @@ export function AdminManager() {
       // Get permissions for the role
       const permissions = getDefaultPermissions(newRole);
       
-      // Add admin with OTP verification
+      // Add admin with OTP verification (no salary required)
       const response = await fetch('/admin/api/add-admin', {
         method: 'POST',
         headers: {
@@ -156,6 +156,7 @@ export function AdminManager() {
         
         Note: This administrator is specific to your masjid only.
         Other masjids cannot see or access this administrator.
+        No salary configuration required for administrators.
       `;
       
       alert(successMessage);
@@ -338,7 +339,7 @@ export function AdminManager() {
               <div className="bg-purple-50 p-4 rounded-lg">
                 <p className="text-sm text-purple-800">
                   👑 <strong>Note:</strong> This will add an administrator to your masjid with OTP verification. 
-                  They will receive administrative access to manage your masjid operations.
+                  Administrators do not require salary configuration and get management access only.
                 </p>
               </div>
 

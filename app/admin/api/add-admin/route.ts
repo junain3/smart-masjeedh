@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     // Generate OTP
     const otp = crypto.randomBytes(3).toString('hex').toUpperCase();
     
-    // Store admin with OTP
+    // Store admin with OTP (no employee record needed)
     const { error: insertError } = await supabase
       .from("user_roles")
       .insert({
