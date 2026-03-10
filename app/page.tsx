@@ -31,6 +31,7 @@ export default function DashboardPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
+
   const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
   const [activeServiceTab, setActiveServiceTab] = useState<"create" | "scan">("create");
   const [serviceName, setServiceName] = useState("");
