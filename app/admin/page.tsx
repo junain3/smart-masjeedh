@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { getTenantContext } from "@/lib/tenant";
 import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
-import { RoleManager } from "@/components/RoleManager";
+import { EnhancedRoleManager } from "@/components/EnhancedRoleManager";
 import { Shield, Mail, Trash2, Percent, Wallet } from "lucide-react";
 
 type RoleRow = {
@@ -513,10 +513,10 @@ export default function AdminSettingsPage() {
               </div>
             </div>
 
-            {/* New Role Management Section */}
+            {/* Enhanced Staff Management Section */}
             <div className="app-card p-6">
-              <h2 className="text-lg font-bold mb-4">Role Management & Permissions</h2>
-              <RoleManager />
+              <h2 className="text-lg font-bold mb-4">Staff & User Management</h2>
+              <EnhancedRoleManager />
             </div>
 
             {/* Existing Role Management */}
