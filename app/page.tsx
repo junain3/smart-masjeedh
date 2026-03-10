@@ -67,6 +67,110 @@ export default function DashboardPage() {
     if (savedLang) setLang(savedLang);
   }, []);
 
+  // Search query effect
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchError("");
+      setMemberResults([]);
+      setFamilyResults([]);
+      setResultType("none");
+      return;
+    }
+
+    const tmr = setTimeout(() => {
+      runSearch(searchQuery);
+    }, 350);
+
+    return () => clearTimeout(tmr);
+  }, [searchQuery]);
+
+  // Services modal effect
+  useEffect(() => {
+    if (isServicesModalOpen) {
+      fetchActiveServices();
+    }
+  }, [isServicesModalOpen]);
+
+  // Fetch data effect
+  useEffect(() => {
+    if (!user) return;
+    
+    async function fetchData() {
+      try {
+        if (!supabase) return;
+
+        // Check if user is logged in
+        const ctx = await getTenantContext();
+        if (!ctx) {
+          router.push('/login');
+          return;
+        }
+
+        // Load masjid profile
+        try {
+          const { data: masjidData, error: masjidErr } = await supabase
+            .from("masjids")
+            .select("id, masjid_name, tagline, logo_url")
+            .eq("id", ctx.masjidId)
+            .maybeSingle();
+
+          if (masjidErr) throw masjidErr;
+
+          if (masjidData) {
+            setMasjid({
+              name: (masjidData as any).masjid_name || "MJM",
+              logo_url: (masjidData as any).logo_url || "",
+              tagline: (masjidData as any).tagline || "Mubeen Jummah Masjid",
+            });
+          } else {
+            // Default Fallback
+            setMasjid({
+              name: "MJM",
+              logo_url: "",
+              tagline: "Mubeen Jummah Masjid",
+            });
+          }
+        } catch (e: any) {
+          const msg = e?.message || "";
+          if (msg.includes("schema cache") || msg.includes("column") || msg.includes("Could not find")) {
+            // ignore - allow dashboard to render
+            setMasjid({
+              name: "MJM",
+              logo_url: "",
+              tagline: "Mubeen Jummah Masjid",
+            });
+          } else {
+            throw e;
+          }
+        }
+
+        // Fetch family count
+        const { count, error: countError } = await supabase
+          .from("families")
+          .select("id", { count: "exact", head: true })
+          .eq("masjid_id", ctx.masjidId);
+        
+        if (countError) throw countError;
+        setFamilyCount(count || 0);
+
+        // Fetch member count
+        const { count: mCount, error: mError } = await supabase
+          .from("members")
+          .select("*", { count: "exact", head: true })
+          .eq("masjid_id", ctx.masjidId);
+        
+        if (!mError) setMemberCount(mCount || 0);
+
+      } catch (err) {
+        console.error("Error fetching data:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [user, router]);
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -229,23 +333,6 @@ export default function DashboardPage() {
     await runSearch(searchQuery);
   };
 
-  useEffect(() => {
-    const q = searchQuery.trim();
-    if (q.length < 2) {
-      setSearchError("");
-      setMemberResults([]);
-      setFamilyResults([]);
-      setResultType("none");
-      return;
-    }
-
-    const tmr = setTimeout(() => {
-      runSearch(searchQuery);
-    }, 350);
-
-    return () => clearTimeout(tmr);
-  }, [searchQuery]);
-
   const fetchActiveServices = async () => {
     if (!supabase) return;
     const ctx = await getTenantContext();
@@ -263,12 +350,6 @@ export default function DashboardPage() {
       setActiveServices(uniqueNames);
     }
   };
-
-  useEffect(() => {
-    if (isServicesModalOpen) {
-      fetchActiveServices();
-    }
-  }, [isServicesModalOpen]);
 
   const handleServiceScan = async (decodedTextRaw: string) => {
     if (!supabase || !selectedScanService) return;
@@ -292,12 +373,12 @@ export default function DashboardPage() {
         if (error) throw error;
         
         if (data && data.length > 0) {
-          setScanStatus({ type: 'success', message: t.service_marked_received });
+          setScanStatus({ type: 'success', message: "Service marked as received" });
           setIsScannerOpen(false);
           // Reset message after 2 seconds
           setTimeout(() => setScanStatus({ type: 'idle', message: '' }), 2000);
         } else {
-          setScanStatus({ type: 'error', message: t.service_no_record });
+          setScanStatus({ type: 'error', message: "No service record found" });
           setTimeout(() => setScanStatus({ type: 'idle', message: '' }), 3000);
         }
       }
@@ -347,93 +428,6 @@ export default function DashboardPage() {
       setSubmittingService(false);
     }
   };
-
-  // Real-time clock update
-  useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Fetch data and auth check
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        if (!supabase) return;
-
-        // Load language from localStorage
-        const savedLang = localStorage.getItem("app_lang") as Language;
-        if (savedLang) setLang(savedLang);
-
-        // Check if user is logged in
-        const ctx = await getTenantContext();
-        if (!ctx) {
-          router.push('/login');
-          return;
-        }
-
-        // Load masjid profile
-        try {
-          const { data: masjidData, error: masjidErr } = await supabase
-            .from("masjids")
-            .select("id, masjid_name, tagline, logo_url")
-            .eq("id", ctx.masjidId)
-            .maybeSingle();
-
-          if (masjidErr) throw masjidErr;
-
-          if (masjidData) {
-            setMasjid({
-              name: (masjidData as any).masjid_name || "MJM",
-              logo_url: (masjidData as any).logo_url || "",
-              tagline: (masjidData as any).tagline || "Mubeen Jummah Masjid",
-            });
-          } else {
-            // Default Fallback
-            setMasjid({
-              name: "MJM",
-              logo_url: "",
-              tagline: "Mubeen Jummah Masjid",
-            });
-          }
-        } catch (e: any) {
-          const msg = e?.message || "";
-          if (msg.includes("schema cache") || msg.includes("column") || msg.includes("Could not find")) {
-            // ignore - allow dashboard to render
-            setMasjid({
-              name: "MJM",
-              logo_url: "",
-              tagline: "Mubeen Jummah Masjid",
-            });
-          } else {
-            throw e;
-          }
-        }
-
-        // Fetch family count
-        const { count, error: countError } = await supabase
-          .from("families")
-          .select("id", { count: "exact", head: true })
-          .eq("masjid_id", ctx.masjidId); // Filter by masjid ID
-        
-        if (countError) throw countError;
-        setFamilyCount(count || 0);
-
-        // Fetch member count
-        const { count: mCount, error: mError } = await supabase
-          .from("members")
-          .select("*", { count: "exact", head: true })
-          .eq("masjid_id", ctx.masjidId);
-        
-        if (!mError) setMemberCount(mCount || 0);
-
-      } catch (err) {
-        console.error("Error fetching data:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, [router]);
 
   const handleLogout = async () => {
     if (!supabase) return;
@@ -570,6 +564,20 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="app-card p-4 text-center">
+            <Users className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+            <p className="text-2xl font-black text-neutral-900">{familyCount || 0}</p>
+            <p className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{t.families}</p>
+          </div>
+          <div className="app-card p-4 text-center">
+            <User className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+            <p className="text-2xl font-black text-neutral-900">{memberCount || 0}</p>
+            <p className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{t.members}</p>
+          </div>
+        </div>
+
         <div className="space-y-3">
           <div className="relative group">
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400 group-focus-within:text-emerald-600 transition-colors" />
@@ -649,13 +657,19 @@ export default function DashboardPage() {
                       className="block app-card p-4 group hover:border-emerald-200 transition-all"
                     >
                       <div className="flex items-center justify-between">
-                        <div className="min-w-0">
-                          <h4 className="text-sm font-black text-neutral-900 truncate">{f.head_name}</h4>
-                          <p className="text-[10px] font-bold text-neutral-600 uppercase">{f.family_code}</p>
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-3xl bg-emerald-50 flex items-center justify-center text-emerald-700 border border-emerald-100">
+                            <Users className="w-6 h-6" />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-black text-neutral-900 truncate">{f.head_name}</h4>
+                            <p className="text-[10px] font-bold text-neutral-600 uppercase">
+                              {f.family_code}
+                              {f.is_widow_head && " • " + (lang === "tm" ? "விதவை" : "Widow")}
+                            </p>
+                          </div>
                         </div>
-                        {f.is_widow_head && (
-                          <span className="app-pill bg-rose-50 text-rose-700 border border-rose-200">Widow</span>
-                        )}
+                        <Edit className="w-4 h-4 text-neutral-400 group-hover:text-emerald-600 transition-colors" />
                       </div>
                     </Link>
                   ))
@@ -665,203 +679,133 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Stats Section */}
-        <div className="grid grid-cols-2 gap-4 pt-1">
-          <div className="app-glass-card p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">{t.total_families}</span>
-                <div className="mt-2 text-3xl font-black text-neutral-900">
-                  {loading ? "..." : familyCount}
-                </div>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-emerald-600/10 text-emerald-700 flex items-center justify-center">
-                <Users className="w-5 h-5" />
-              </div>
-            </div>
-          </div>
-          <div className="app-glass-card p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">{t.total_members}</span>
-                <div className="mt-2 text-3xl font-black text-neutral-900">
-                  {loading ? "..." : memberCount}
-                </div>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-emerald-600/10 text-emerald-700 flex items-center justify-center">
-                <User className="w-5 h-5" />
-              </div>
-            </div>
-          </div>
+        {/* Services Button */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => setIsServicesModalOpen(true)}
+            className="flex-1 app-btn-glow py-5 text-lg"
+          >
+            {"Manage Services"}
+          </button>
         </div>
-
-        {/* Spacer for floating bottom nav */}
-        <div className="h-20" />
       </main>
 
-      {/* Floating Bottom Navigation */}
-      <nav className="app-bottom-nav">
-        <div className="flex items-center gap-2">
-          <Link href="/" className={`app-bottom-nav-item ${"app-bottom-nav-item-active"}`}>
-            <HomeIcon className="w-5 h-5 text-emerald-700" />
-            <span className="text-[10px] font-black uppercase tracking-widest">{t.home}</span>
-          </Link>
-          <Link href="/families" className="app-bottom-nav-item hover:bg-white/60">
-            <Users className="w-5 h-5" />
-            <span className="text-[10px] font-black uppercase tracking-widest">{t.families}</span>
-          </Link>
-          <Link href="/accounts" className="app-bottom-nav-item hover:bg-white/60">
-            <CreditCard className="w-5 h-5" />
-            <span className="text-[10px] font-black uppercase tracking-widest">{t.accounts}</span>
-          </Link>
-          <Link href="/staff" className="app-bottom-nav-item hover:bg-white/60">
-            <Briefcase className="w-5 h-5" />
-            <span className="text-[10px] font-black uppercase tracking-widest">{t.staff}</span>
-          </Link>
-        </div>
-      </nav>
-
-      {/* Services Distribution Modal */}
+      {/* Services Modal */}
       {isServicesModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-300 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-black text-slate-900">{t.services_received}</h2>
-              <button
-                onClick={() => {
-                  setIsServicesModalOpen(false);
-                  setIsScannerOpen(false);
-                }}
-                className="p-2 hover:bg-slate-50 rounded-full transition-colors"
-              >
-                <X className="w-6 h-6 text-slate-300" />
+              <h3 className="text-lg font-black text-neutral-900">{"Manage Services"}</h3>
+              <button onClick={() => setIsServicesModalOpen(false)} className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors">
+                <X className="w-5 h-5 text-neutral-600" />
               </button>
             </div>
 
-            <div className="flex p-1 bg-emerald-50 rounded-3xl mb-8">
+            {/* Tabs */}
+            <div className="flex gap-2 mb-6">
               <button
-                onClick={() => {
-                  setActiveServiceTab("create");
-                  setIsScannerOpen(false);
-                }}
-                className={`flex-1 py-3 rounded-3xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                  activeServiceTab === "create" ? "bg-emerald-700 text-white shadow-sm" : "text-emerald-700"
+                onClick={() => setActiveServiceTab("create")}
+                className={`flex-1 py-3 px-4 rounded-3xl font-bold transition-all ${
+                  activeServiceTab === "create" 
+                    ? "bg-emerald-600 text-white" 
+                    : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                 }`}
               >
-                {t.create_new}
+                {"Create Service"}
               </button>
               <button
                 onClick={() => setActiveServiceTab("scan")}
-                className={`flex-1 py-3 rounded-3xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                  activeServiceTab === "scan" ? "bg-emerald-700 text-white shadow-sm" : "text-emerald-700"
+                className={`flex-1 py-3 px-4 rounded-3xl font-bold transition-all ${
+                  activeServiceTab === "scan" 
+                    ? "bg-emerald-600 text-white" 
+                    : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                 }`}
               >
-                {t.qr_scan_distribution}
+                {"Scan Service"}
               </button>
             </div>
 
-            {activeServiceTab === "create" ? (
-              <form onSubmit={createServiceDistribution} className="space-y-6">
-                <div className="app-field">
-                  <label className="app-label">{t.name}</label>
+            {/* Create Service Tab */}
+            {activeServiceTab === "create" && (
+              <form onSubmit={createServiceDistribution} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-neutral-600 uppercase tracking-widest mb-2">
+                    {"Service Name"}
+                  </label>
                   <input
-                    required
                     type="text"
                     value={serviceName}
                     onChange={(e) => setServiceName(e.target.value)}
-                    className="app-input font-bold"
-                    placeholder="E.g. Ramadan Dates"
+                    placeholder={"e.g., Ramzan Iftar"}
+                    className="app-input"
+                    required
                   />
                 </div>
-
-                <div className="app-field">
-                  <label className="app-label">{t.date}</label>
+                <div>
+                  <label className="block text-xs font-bold text-neutral-600 uppercase tracking-widest mb-2">
+                    {"Date"}
+                  </label>
                   <input
-                    required
                     type="date"
                     value={serviceDate}
                     onChange={(e) => setServiceDate(e.target.value)}
-                    className="app-input font-bold"
+                    className="app-input"
+                    required
                   />
                 </div>
-
-                <div className="bg-emerald-50 p-4 rounded-3xl border border-emerald-100 mb-6">
-                  <p className="text-[10px] text-emerald-700 font-bold leading-relaxed uppercase tracking-tight">
-                    {t.service_create_info}
-                  </p>
-                </div>
-
                 <button
                   type="submit"
                   disabled={submittingService}
-                  className="w-full app-btn-primary py-5 text-lg"
+                  className="w-full app-btn-glow py-4 font-bold"
                 >
-                  {submittingService ? "CREATING..." : t.distribute_all}
+                  {submittingService ? "Creating..." : "Create for All Families"}
                 </button>
               </form>
-            ) : (
-              <div className="space-y-6">
-                <div className="app-field">
-                  <label className="app-label">{t.select_service}</label>
+            )}
+
+            {/* Scan Service Tab */}
+            {activeServiceTab === "scan" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-neutral-600 uppercase tracking-widest mb-2">
+                    {"Select Service"}
+                  </label>
                   <select
                     value={selectedScanService}
                     onChange={(e) => setSelectedScanService(e.target.value)}
-                    className="app-select font-bold appearance-none"
+                    className="app-input"
+                    required
                   >
-                    <option value="">-- {t.select_service} --</option>
-                    {activeServices.map((s) => (
-                      <option key={s.name} value={s.name}>
-                        {s.name}
+                    <option value="">{"Select a service..."}</option>
+                    {activeServices.map((service) => (
+                      <option key={service.name} value={service.name}>
+                        {service.name}
                       </option>
                     ))}
                   </select>
                 </div>
-
-                {!isScannerOpen ? (
-                  <button
-                    onClick={() => {
-                      if (!selectedScanService) {
-                        toast({ kind: "info", title: "Select service", message: t.select_service_first });
-                        return;
-                      }
-                      setIsScannerOpen(true);
-                    }}
-                    className="w-full py-8 rounded-3xl border-2 border-dashed border-neutral-200 text-neutral-600 hover:border-emerald-300 hover:text-emerald-700 transition-all flex flex-col items-center gap-3 bg-white"
-                  >
-                    <QrCode className="w-12 h-12" />
-                    <span className="font-black text-xs uppercase tracking-widest">{t.scan_qr}</span>
-                  </button>
-                ) : (
-                  <div className="space-y-4">
-                    <QrScannerModal
-                      open={isScannerOpen}
-                      title={t.scan_qr}
-                      containerId="service-reader"
-                      onClose={() => setIsScannerOpen(false)}
-                      onDecodedText={handleServiceScan}
-                    />
-
-                    {scanStatus.type !== "idle" && (
-                      <div
-                        className={`p-4 rounded-3xl font-bold text-center text-xs animate-in zoom-in duration-300 ${
-                          scanStatus.type === "success"
-                            ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                            : "bg-rose-50 text-rose-700 border border-rose-200"
-                        }`}
-                      >
-                        {scanStatus.message}
-                      </div>
-                    )}
-
-                    <button onClick={() => setIsScannerOpen(false)} className="w-full app-btn app-btn-soft py-4">
-                      {t.stop_scanner}
-                    </button>
-                  </div>
-                )}
+                <button
+                  onClick={() => setIsScannerOpen(true)}
+                  disabled={!selectedScanService}
+                  className="w-full app-btn-glow py-4 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {"Start Scanning"}
+                </button>
               </div>
             )}
           </div>
         </div>
+      )}
+
+      {/* QR Scanner Modal */}
+      {isScannerOpen && (
+        <QrScannerModal
+          open={isScannerOpen}
+          title="Scan QR Code"
+          containerId="qr-scanner"
+          onClose={() => setIsScannerOpen(false)}
+          onDecodedText={handleServiceScan}
+        />
       )}
     </div>
   );
