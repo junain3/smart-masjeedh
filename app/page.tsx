@@ -62,10 +62,30 @@ export default function DashboardPage() {
     }
   };
 
-  // Auth guard effect - REMOVED for direct access
+  // Smart login auth guard - Check user_roles first
   useEffect(() => {
-    console.log("DEBUG Dashboard - Auth guard REMOVED - Direct access allowed");
-  }, []);
+    console.log("DEBUG Dashboard - Smart login auth guard:", { authLoading, user: user?.email, tenantContext: !!tenantContext });
+    
+    // Only redirect if auth is complete and no user exists
+    if (!authLoading && !user) {
+      console.log("DEBUG Dashboard - Redirecting to login (no user)");
+      router.push('/login');
+      return;
+    }
+    
+    // If user exists but no tenant context, check if they need to signup
+    if (!authLoading && user && !tenantContext) {
+      console.log("DEBUG Dashboard - User exists but no tenant context - redirect to signup");
+      router.push('/signup');
+      return;
+    }
+    
+    // User has tenant context - allow dashboard access
+    if (!authLoading && user && tenantContext) {
+      console.log("DEBUG Dashboard - User has tenant context - dashboard access granted");
+      return;
+    }
+  }, [user, authLoading, tenantContext, router]);
 
   // Real-time clock update
   useEffect(() => {
@@ -189,6 +209,7 @@ export default function DashboardPage() {
     fetchData();
   }, [user, router]);
 
+  // Smart loading states
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -200,8 +221,23 @@ export default function DashboardPage() {
     );
   }
 
-  // Remove all auth checks - direct dashboard access
-  console.log("DEBUG Dashboard - Direct access without auth checks");
+  // User exists but tenant context loading
+  if (user && !tenantContext) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Setting up your masjid...</p>
+          <p className="text-gray-500 text-sm mt-2">This should only take a moment</p>
+        </div>
+      </div>
+    );
+  }
+
+  // No user - should be redirected by auth guard
+  if (!user) {
+    return null;
+  }
 
   const parseQuery = (q: string) => {
     const s = q.trim().toLowerCase();
