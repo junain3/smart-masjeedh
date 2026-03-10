@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search, Briefcase } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+import { useAuth } from "@/components/AuthProvider";
 
 import { getTenantContext } from "@/lib/tenant";
 import { useAppToast } from "@/components/ToastProvider";
@@ -19,6 +20,30 @@ type MasjidProfile = {
 
 export default function DashboardPage() {
   const { toast } = useAppToast();
+  const { user, loading: authLoading, tenantContext } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, authLoading, router]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
   const [time, setTime] = useState(new Date());
   const [familyCount, setFamilyCount] = useState<number | null>(null);
   const [memberCount, setMemberCount] = useState<number | null>(null);
@@ -26,10 +51,6 @@ export default function DashboardPage() {
   const [masjid, setMasjid] = useState<MasjidProfile | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [lang, setLang] = useState<Language>("en");
-  const router = useRouter();
-
-  const t = translations[lang];
-
   const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
   const [activeServiceTab, setActiveServiceTab] = useState<"create" | "scan">("create");
   const [serviceName, setServiceName] = useState("");
