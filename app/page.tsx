@@ -7,9 +7,7 @@ import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Setti
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { useAuth } from '@/components/AuthProvider';
-import { useAppToast } from '@/hooks/useAppToast';
 import MasjidSetup from '@/components/MasjidSetup';
-import Loading from '@/components/Loading';
 import { getTenantContext } from "@/lib/tenant";
 import { QrScannerModal } from "@/components/QrScannerModal";
 
@@ -20,9 +18,8 @@ type MasjidProfile = {
 };
 
 export default function DashboardPage() {
-  const { toast } = useAppToast();
-  const { user, loading: authLoading, tenantContext, setTenantContext } = useAuth();
   const router = useRouter();
+  const { user, loading: authLoading, tenantContext, setTenantContext } = useAuth();
 
   const [time, setTime] = useState(new Date());
   const [familyCount, setFamilyCount] = useState<number | null>(null);
@@ -499,7 +496,7 @@ export default function DashboardPage() {
         .eq("masjid_id", ctx.masjidId);
       
       if (!families || families.length === 0) {
-        toast({ kind: "info", title: "No data", message: "No families found to distribute to." });
+        console.log("No families found to distribute to.");
         return;
       }
 
@@ -515,11 +512,11 @@ export default function DashboardPage() {
       const { error } = await supabase.from("service_distributions").insert(distributions);
       if (error) throw error;
 
-      toast({ kind: "success", title: "Created", message: "Service distribution created for all families!" });
+      console.log("Service distribution created for all families!");
       setIsServicesModalOpen(false);
       setServiceName("");
     } catch (err: any) {
-      toast({ kind: "error", title: "Error", message: err.message || "Failed" });
+      console.error("Error creating service distribution:", err.message || "Failed");
     } finally {
       setSubmittingService(false);
     }
