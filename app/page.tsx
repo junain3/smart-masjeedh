@@ -23,11 +23,49 @@ export default function DashboardPage() {
   const { user, loading: authLoading, tenantContext } = useAuth();
   const router = useRouter();
 
+  const [time, setTime] = useState(new Date());
+  const [familyCount, setFamilyCount] = useState<number | null>(null);
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [masjid, setMasjid] = useState<MasjidProfile | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [lang, setLang] = useState<Language>("en");
+  const t = translations[lang];
+  const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
+  const [activeServiceTab, setActiveServiceTab] = useState<"create" | "scan">("create");
+  const [serviceName, setServiceName] = useState("");
+  const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [submittingService, setSubmittingService] = useState(false);
+  const [activeServices, setActiveServices] = useState<{name: string}[]>([]);
+  const [selectedScanService, setSelectedScanService] = useState("");
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scanStatus, setScanStatus] = useState<{type: 'success' | 'error' | 'idle', message: string}>({type: 'idle', message: ''});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [memberResults, setMemberResults] = useState<any[]>([]);
+  const [familyResults, setFamilyResults] = useState<any[]>([]);
+  const [resultType, setResultType] = useState<"none" | "members" | "families" | "mixed">("none");
+  const searchRequestSeq = useRef(0);
+
+  // Auth guard effect
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
     }
   }, [user, authLoading, router]);
+
+  // Real-time clock update
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Load language from localStorage
+  useEffect(() => {
+    const savedLang = localStorage.getItem("app_lang") as Language;
+    if (savedLang) setLang(savedLang);
+  }, []);
 
   if (authLoading) {
     return (
@@ -43,34 +81,6 @@ export default function DashboardPage() {
   if (!user) {
     return null;
   }
-
-  const [time, setTime] = useState(new Date());
-  const [familyCount, setFamilyCount] = useState<number | null>(null);
-  const [memberCount, setMemberCount] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [masjid, setMasjid] = useState<MasjidProfile | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [lang, setLang] = useState<Language>("en");
-  const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
-  const [activeServiceTab, setActiveServiceTab] = useState<"create" | "scan">("create");
-  const [serviceName, setServiceName] = useState("");
-  const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
-  const [submittingService, setSubmittingService] = useState(false);
-  
-  const [activeServices, setActiveServices] = useState<{name: string}[]>([]);
-  const [selectedScanService, setSelectedScanService] = useState("");
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scanStatus, setScanStatus] = useState<{type: 'success' | 'error' | 'idle', message: string}>({type: 'idle', message: ''});
-
-  type MemberRes = { id: string; family_id: string; full_name: string; age: number; gender: string };
-  type FamilyRes = { id: string; family_code: string; head_name: string; is_widow_head?: boolean };
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchError, setSearchError] = useState("");
-  const [memberResults, setMemberResults] = useState<MemberRes[]>([]);
-  const [familyResults, setFamilyResults] = useState<FamilyRes[]>([]);
-  const [resultType, setResultType] = useState<"none" | "members" | "families" | "mixed">("none");
-  const searchRequestSeq = useRef(0);
 
   const parseQuery = (q: string) => {
     const s = q.trim().toLowerCase();
