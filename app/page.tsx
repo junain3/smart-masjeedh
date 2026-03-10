@@ -242,6 +242,19 @@ export default function DashboardPage() {
     );
   }
 
+  // Show loading state while tenant context is loading
+  if (user && !tenantContext && loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Setting up your masjid...</p>
+          <p className="text-gray-500 text-sm mt-2">This should only take a moment</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     return null;
   }

@@ -21,100 +21,67 @@ export type TenantContext = {
 export async function getTenantContext(): Promise<TenantContext | null> {
   if (!supabase) return null;
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  try {
+    console.log("DEBUG getTenantContext - Starting tenant context retrieval...");
+    
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-  console.log("DEBUG getTenantContext - session:", session?.user?.email);
+    console.log("DEBUG getTenantContext - session:", session?.user?.email);
 
-  if (!session) {
-    console.log("DEBUG getTenantContext - No session found");
-    return null;
-  }
+    if (!session) {
+      console.log("DEBUG getTenantContext - No session found");
+      return null;
+    }
 
-  const userId = session.user.id;
+    const userId = session.user.id;
 
-  // Try to get user role with auth_user_id (for verified users)
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("masjid_id, role, permissions")
-    .eq("auth_user_id", userId)
-    .maybeSingle();
-
-  console.log("DEBUG getTenantContext - user_roles query:", { data, error });
-
-  if (data?.masjid_id) {
-    console.log("DEBUG getTenantContext - Found user role:", data.role);
-    return {
-      masjidId: (data as any).masjid_id,
-      userId,
-      email: session.user.email || null,
-      role: ((data as any).role || "staff") as any,
-      permissions: (((data as any).permissions || {}) as any) || {},
-    };
-  }
-
-  // Fallback for super admin (create masjid if needed)
-  console.log("DEBUG getTenantContext - Checking masjids table for user:", userId);
-  
-  const { data: masjidData, error: masjidError } = await supabase
-    .from("masjids")
-    .select("id")
-    .eq("created_by", userId)
-    .maybeSingle();
-
-  console.log("DEBUG getTenantContext - Masjid query result:", { data: masjidData, error: masjidError?.message });
-
-  if (masjidData?.id) {
-    console.log("DEBUG getTenantContext - Found existing masjid:", masjidData.id);
-    return {
-      masjidId: masjidData.id,
-      userId,
-      email: session.user.email || null,
-      role: "super_admin",
-      permissions: {
-        accounts: true,
-        events: true,
-        members: true,
-        subscriptions_collect: true,
-        subscriptions_approve: true,
-        staff_management: true,
-        reports: true,
-        settings: true
-      },
-    };
-  }
-
-  // Create new masjid for first-time super admin
-  console.log("DEBUG getTenantContext - Creating new masjid for user:", session.user.email);
-  
-  const { data: newMasjid, error: createError } = await supabase
-    .from("masjids")
-    .insert({
-      name: `${session.user.email?.split('@')[0]}'s Masjid`,
-      tagline: "Smart Masjid Management",
-      created_by: userId
-    })
-    .select("id")
-    .single();
-
-  console.log("DEBUG getTenantContext - Masjid creation result:", { data: newMasjid, error: createError?.message });
-
-  if (createError) {
-    console.error("DEBUG getTenantContext - Masjid creation failed:", createError);
-    // Return null instead of throwing, so we can handle gracefully
-    return null;
-  }
-
-  if (newMasjid?.id) {
-    // Create super admin role
-    await supabase
+    // Try to get user role with auth_user_id (for verified users)
+    console.log("DEBUG getTenantContext - Querying user_roles for user:", userId);
+    
+    const { data, error } = await supabase
       .from("user_roles")
-      .insert({
-        masjid_id: newMasjid.id,
-        user_id: crypto.randomUUID(),
-        auth_user_id: userId,
-        email: session.user.email || "",
+      .select("masjid_id, role, permissions")
+      .eq("auth_user_id", userId)
+      .maybeSingle();
+
+    console.log("DEBUG getTenantContext - user_roles query:", { data, error });
+
+    if (data?.masjid_id) {
+      console.log("DEBUG getTenantContext - Found user role:", data.role);
+      return {
+        masjidId: (data as any).masjid_id,
+        userId,
+        email: session.user.email || null,
+        role: ((data as any).role || "staff") as any,
+        permissions: (((data as any).permissions || {}) as any) || {},
+      };
+    }
+
+    // Fallback for super admin (create masjid if needed)
+    console.log("DEBUG getTenantContext - Checking masjids table for user:", userId);
+    
+    const { data: masjidData, error: masjidError } = await supabase
+      .from("masjids")
+      .select("id")
+      .eq("created_by", userId)
+      .maybeSingle();
+
+    console.log("DEBUG getTenantContext - Masjid query result:", { data: masjidData, error: masjidError?.message });
+
+    if (masjidError) {
+      console.error("DEBUG getTenantContext - Masjid query error:", masjidError);
+      // Don't throw, return null to handle gracefully
+      return null;
+    }
+
+    if (masjidData?.id) {
+      console.log("DEBUG getTenantContext - Found existing masjid:", masjidData.id);
+      return {
+        masjidId: masjidData.id,
+        userId,
+        email: session.user.email || null,
         role: "super_admin",
         permissions: {
           accounts: true,
@@ -126,26 +93,76 @@ export async function getTenantContext(): Promise<TenantContext | null> {
           reports: true,
           settings: true
         },
-        verified: true
-      });
+      };
+    }
 
-    return {
-      masjidId: newMasjid.id,
-      userId,
-      email: session.user.email || null,
-      role: "super_admin",
-      permissions: {
-        accounts: true,
-        events: true,
-        members: true,
-        subscriptions_collect: true,
-        subscriptions_approve: true,
-        staff_management: true,
-        reports: true,
-        settings: true
-      },
-    };
+    // Create new masjid for first-time super admin
+    console.log("DEBUG getTenantContext - Creating new masjid for user:", session.user.email);
+    
+    const { data: newMasjid, error: createError } = await supabase
+      .from("masjids")
+      .insert({
+        name: `${session.user.email?.split('@')[0]}'s Masjid`,
+        tagline: "Smart Masjid Management",
+        created_by: userId
+      })
+      .select("id")
+      .single();
+
+    console.log("DEBUG getTenantContext - Masjid creation result:", { data: newMasjid, error: createError?.message });
+
+    if (createError) {
+      console.error("DEBUG getTenantContext - Masjid creation failed:", createError);
+      // Return null instead of throwing, so we can handle gracefully
+      return null;
+    }
+
+    if (newMasjid?.id) {
+      // Create super admin role
+      await supabase
+        .from("user_roles")
+        .insert({
+          masjid_id: newMasjid.id,
+          user_id: crypto.randomUUID(),
+          auth_user_id: userId,
+          email: session.user.email || "",
+          role: "super_admin",
+          permissions: {
+            accounts: true,
+            events: true,
+            members: true,
+            subscriptions_collect: true,
+            subscriptions_approve: true,
+            staff_management: true,
+            reports: true,
+            settings: true
+          },
+          verified: true
+        });
+
+      return {
+        masjidId: newMasjid.id,
+        userId,
+        email: session.user.email || null,
+        role: "super_admin",
+        permissions: {
+          accounts: true,
+          events: true,
+          members: true,
+          subscriptions_collect: true,
+          subscriptions_approve: true,
+          staff_management: true,
+          reports: true,
+          settings: true
+        },
+      };
+    }
+
+    console.log("DEBUG getTenantContext - No solution found, returning null");
+    return null;
+    
+  } catch (error) {
+    console.error("DEBUG getTenantContext - Unexpected error:", error);
+    return null;
   }
-
-  return null;
 }

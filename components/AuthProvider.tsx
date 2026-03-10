@@ -41,7 +41,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (session?.user) {
           console.log("DEBUG: User found, getting tenant context...");
-          const ctx = await getTenantContext();
+          
+          // Add timeout to prevent hanging
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Tenant context timeout')), 10000);
+          });
+          
+          const ctx = await Promise.race([
+            getTenantContext(),
+            timeoutPromise
+          ]);
+          
           console.log("DEBUG: Tenant context result:", ctx);
           setTenantContext(ctx);
         } else {
@@ -70,7 +80,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user) {
           try {
             console.log("DEBUG: User logged in, getting tenant context...");
-            const ctx = await getTenantContext();
+            
+            // Add timeout to prevent hanging
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error('Tenant context timeout')), 10000);
+            });
+            
+            const ctx = await Promise.race([
+              getTenantContext(),
+              timeoutPromise
+            ]);
+            
+            console.log("DEBUG: Tenant context result:", ctx);
             setTenantContext(ctx);
           } catch (error) {
             console.error("Error getting tenant context:", error);
