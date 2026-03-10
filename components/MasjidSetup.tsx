@@ -159,7 +159,7 @@ export default function MasjidSetup({ onSetupComplete }: MasjidSetupProps) {
 
       <div className="mt-6 text-center">
         <button
-          onClick={() => router.push('/register')}
+          onClick={() => router.push('/signup')}
           className="text-slate-600 hover:text-slate-800 text-sm"
         >
           Want to register a different masjid instead?

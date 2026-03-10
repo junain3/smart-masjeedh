@@ -113,7 +113,7 @@ export default function MasjidLoginPage() {
             New to Smart Masjeedh?
           </p>
           <Link 
-            href="/register" 
+            href="/signup" 
             className="inline-flex items-center justify-center w-full app-btn-soft py-4 text-emerald-700"
           > 
             Register your Masjid 
