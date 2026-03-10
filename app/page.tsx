@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search, Briefcase } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
-import { useAuth } from "@/components/AuthProvider";
-
+import { useAuth } from '@/components/AuthProvider';
+import { useAppToast } from '@/hooks/useAppToast';
+import MasjidSetup from '@/components/MasjidSetup';
+import Loading from '@/components/Loading';
 import { getTenantContext } from "@/lib/tenant";
-import { useAppToast } from "@/components/ToastProvider";
 import { QrScannerModal } from "@/components/QrScannerModal";
 
 type MasjidProfile = {
@@ -20,7 +21,7 @@ type MasjidProfile = {
 
 export default function DashboardPage() {
   const { toast } = useAppToast();
-  const { user, loading: authLoading, tenantContext } = useAuth();
+  const { user, loading: authLoading, tenantContext, setTenantContext } = useAuth();
   const router = useRouter();
 
   const [time, setTime] = useState(new Date());
@@ -46,9 +47,23 @@ export default function DashboardPage() {
   const [memberResults, setMemberResults] = useState<any[]>([]);
   const [familyResults, setFamilyResults] = useState<any[]>([]);
   const [resultType, setResultType] = useState<"none" | "members" | "families" | "mixed">("none");
+  const [showMasjidSetup, setShowMasjidSetup] = useState(false);
   const searchRequestSeq = useRef(0);
 
-  // Auth guard effect
+  // Handle masjid setup completion
+  const handleMasjidSetupComplete = async () => {
+    console.log("DEBUG Dashboard - Masjid setup completed, refreshing tenant context...");
+    
+    // Refresh tenant context
+    try {
+      const newTenantContext = await getTenantContext();
+      console.log("DEBUG Dashboard - New tenant context:", newTenantContext);
+      setTenantContext(newTenantContext);
+      setShowMasjidSetup(false);
+    } catch (error) {
+      console.error("DEBUG Dashboard - Failed to refresh tenant context:", error);
+    }
+  };
   useEffect(() => {
     console.log("DEBUG Dashboard - Auth guard:", { authLoading, user: user?.email, tenantContext: !!tenantContext });
     
@@ -203,6 +218,14 @@ export default function DashboardPage() {
 
   // Show loading state if user exists but tenant context is still loading
   if (user && !tenantContext && !loading) {
+    if (showMasjidSetup) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <MasjidSetup onSetupComplete={handleMasjidSetupComplete} />
+        </div>
+      );
+    }
+    
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center max-w-md mx-auto p-6">
@@ -225,7 +248,7 @@ export default function DashboardPage() {
           </div>
           <div className="space-y-3">
             <button 
-              onClick={() => window.location.reload()}
+              onClick={() => setShowMasjidSetup(true)}
               className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors"
             >
               Set Up My Masjid

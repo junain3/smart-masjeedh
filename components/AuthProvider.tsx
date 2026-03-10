@@ -8,6 +8,7 @@ type AuthContextType = {
   user: any;
   loading: boolean;
   tenantContext: any;
+  setTenantContext: (context: any) => void;
   signOut: () => Promise<void>;
 };
 
@@ -110,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, tenantContext, signOut }}>
+    <AuthContext.Provider value={{ user, loading, tenantContext, setTenantContext, signOut }}>
       {children}
     </AuthContext.Provider>
   );
