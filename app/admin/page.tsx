@@ -9,6 +9,7 @@ import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
 import { AdminManager } from "@/components/AdminManager";
 import { StaffManager } from "@/components/StaffManager";
+import { StaffCollectionManager } from "@/components/StaffCollectionManager";
 import { Shield, Mail, Trash2, Percent, Wallet } from "lucide-react";
 
 type RoleRow = {
@@ -519,6 +520,9 @@ export default function AdminSettingsPage() {
 
             {/* Staff Management Section */}
             <StaffManager />
+
+            {/* Staff Collection Management Section */}
+            <StaffCollectionManager />
 
             {/* Existing Role Management */}
             {invites.length > 0 && (
