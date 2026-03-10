@@ -202,13 +202,41 @@ export default function DashboardPage() {
   }
 
   // Show loading state if user exists but tenant context is still loading
-  if (user && !tenantContext) {
+  if (user && !tenantContext && !loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Setting up your masjid...</p>
-          <p className="text-gray-500 text-sm mt-2">This should only take a moment</p>
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <span className="text-3xl">🏗️</span>
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-4">Masjid Setup Required</h2>
+          <p className="text-slate-600 mb-6">
+            We need to set up your masjid profile to get started. This will only take a moment.
+          </p>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+            <p className="text-sm text-amber-800 mb-2">
+              <strong>What happens next:</strong>
+            </p>
+            <ul className="text-xs text-amber-700 space-y-1 text-left">
+              <li>• Create your masjid profile</li>
+              <li>• Set up admin permissions</li>
+              <li>• Access your dashboard</li>
+            </ul>
+          </div>
+          <div className="space-y-3">
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors"
+            >
+              Set Up My Masjid
+            </button>
+            <button 
+              onClick={() => router.push('/register')}
+              className="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-colors"
+            >
+              Register New Masjid
+            </button>
+          </div>
         </div>
       </div>
     );

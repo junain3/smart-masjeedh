@@ -91,13 +91,20 @@ export async function getTenantContext(): Promise<TenantContext | null> {
   const { data: newMasjid, error: createError } = await supabase
     .from("masjids")
     .insert({
-      name: `${session.user.email}'s Masjid`,
+      name: `${session.user.email?.split('@')[0]}'s Masjid`,
+      tagline: "Smart Masjid Management",
       created_by: userId
     })
     .select("id")
     .single();
 
   console.log("DEBUG getTenantContext - Masjid creation result:", { data: newMasjid, error: createError?.message });
+
+  if (createError) {
+    console.error("DEBUG getTenantContext - Masjid creation failed:", createError);
+    // Return null instead of throwing, so we can handle gracefully
+    return null;
+  }
 
   if (newMasjid?.id) {
     // Create super admin role
