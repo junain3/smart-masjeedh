@@ -54,7 +54,7 @@ export default function MasjidRegisterPage() {
           .from('masjids')
           .insert([
             { 
-              name: masjidName, 
+              masjid_name: masjidName, 
               tagline: tagline,
               created_by: authData.user.id
             }

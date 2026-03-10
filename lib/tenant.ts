@@ -102,7 +102,7 @@ export async function getTenantContext(): Promise<TenantContext | null> {
     const { data: newMasjid, error: createError } = await supabase
       .from("masjids")
       .insert({
-        name: `${session.user.email?.split('@')[0]}'s Masjid`,
+        masjid_name: `${session.user.email?.split('@')[0]}'s Masjid`,
         tagline: "Smart Masjid Management",
         created_by: userId
       })

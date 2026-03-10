@@ -35,7 +35,7 @@ export default function MasjidSetup({ onSetupComplete }: MasjidSetupProps) {
       const { data: masjidData, error: masjidError } = await supabase
         .from("masjids")
         .insert({
-          name: formData.name || `${session.user.email?.split('@')[0]}'s Masjid`,
+          masjid_name: formData.name || `${session.user.email?.split('@')[0]}'s Masjid`,
           tagline: formData.tagline || "Smart Masjid Management",
           created_by: session.user.id
         })
