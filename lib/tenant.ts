@@ -25,18 +25,26 @@ export async function getTenantContext(): Promise<TenantContext | null> {
     data: { session },
   } = await supabase.auth.getSession();
 
-  if (!session) return null;
+  console.log("DEBUG getTenantContext - session:", session?.user?.email);
+
+  if (!session) {
+    console.log("DEBUG getTenantContext - No session found");
+    return null;
+  }
 
   const userId = session.user.id;
 
   // Try to get user role with auth_user_id (for verified users)
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("user_roles")
     .select("masjid_id, role, permissions")
     .eq("auth_user_id", userId)
     .maybeSingle();
 
+  console.log("DEBUG getTenantContext - user_roles query:", { data, error });
+
   if (data?.masjid_id) {
+    console.log("DEBUG getTenantContext - Found user role:", data.role);
     return {
       masjidId: (data as any).masjid_id,
       userId,

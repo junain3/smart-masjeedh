@@ -50,7 +50,9 @@ export default function DashboardPage() {
 
   // Auth guard effect
   useEffect(() => {
+    console.log("DEBUG Dashboard - Auth guard:", { authLoading, user: user?.email });
     if (!authLoading && !user) {
+      console.log("DEBUG Dashboard - Redirecting to login (no user)");
       router.push('/login');
     }
   }, [user, authLoading, router]);
@@ -100,9 +102,14 @@ export default function DashboardPage() {
       try {
         if (!supabase) return;
 
+        console.log("DEBUG Dashboard - Fetching data for user:", user.email);
+
         // Check if user is logged in
         const ctx = await getTenantContext();
+        console.log("DEBUG Dashboard - Tenant context:", ctx);
+        
         if (!ctx) {
+          console.log("DEBUG Dashboard - No tenant context, redirecting to login");
           router.push('/login');
           return;
         }
