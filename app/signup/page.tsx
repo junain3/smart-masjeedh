@@ -81,7 +81,7 @@ export default function SignupPage() {
           user_id: authData.user.id,
           auth_user_id: authData.user.id,
           email: formData.email,
-          role: "admin",
+          role: "super_admin",
           permissions: {
             accounts: true,
             events: true,
