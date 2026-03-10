@@ -59,18 +59,12 @@ export default function DashboardPage() {
       return;
     }
     
-    // Only redirect if user exists but no tenant context (after reasonable delay)
+    // DO NOT redirect if user exists but tenant context is loading
+    // Let the tenant context load naturally
     if (!authLoading && user && !tenantContext) {
-      console.log("DEBUG Dashboard - User exists but no tenant context, waiting...");
-      // Wait a bit for tenant context to load
-      const timeout = setTimeout(() => {
-        if (!tenantContext) {
-          console.log("DEBUG Dashboard - Still no tenant context, redirecting to login");
-          router.push('/login');
-        }
-      }, 3000);
-      
-      return () => clearTimeout(timeout);
+      console.log("DEBUG Dashboard - User exists, waiting for tenant context...");
+      // Don't redirect - let tenant context load
+      return;
     }
   }, [user, authLoading, tenantContext, router]);
 
@@ -113,7 +107,7 @@ export default function DashboardPage() {
 
   // Fetch data effect
   useEffect(() => {
-    if (!user || !tenantContext) return;
+    if (!user) return;
     
     async function fetchData() {
       try {
@@ -121,15 +115,23 @@ export default function DashboardPage() {
 
         console.log("DEBUG Dashboard - Fetching data for user:", user.email);
 
-        // User and tenant context are already validated
-        console.log("DEBUG Dashboard - Using tenant context:", tenantContext);
+        // Get tenant context - don't fail if it doesn't exist yet
+        const ctx = tenantContext || await getTenantContext();
+        console.log("DEBUG Dashboard - Tenant context:", ctx);
+        
+        if (!ctx) {
+          console.log("DEBUG Dashboard - No tenant context yet, showing empty dashboard");
+          // Don't redirect - just show empty state
+          setLoading(false);
+          return;
+        }
 
         // Load masjid profile
         try {
           const { data: masjidData, error: masjidErr } = await supabase
             .from("masjids")
             .select("id, masjid_name, tagline, logo_url")
-            .eq("id", tenantContext.masjidId)
+            .eq("id", ctx.masjidId)
             .maybeSingle();
 
           if (masjidErr) throw masjidErr;
@@ -166,7 +168,7 @@ export default function DashboardPage() {
         const { count, error: countError } = await supabase
           .from("families")
           .select("id", { count: "exact", head: true })
-          .eq("masjid_id", tenantContext.masjidId);
+          .eq("masjid_id", ctx.masjidId);
         
         if (countError) throw countError;
         setFamilyCount(count || 0);
@@ -175,7 +177,7 @@ export default function DashboardPage() {
         const { count: mCount, error: mError } = await supabase
           .from("members")
           .select("*", { count: "exact", head: true })
-          .eq("masjid_id", tenantContext.masjidId);
+          .eq("masjid_id", ctx.masjidId);
         
         if (!mError) setMemberCount(mCount || 0);
 
@@ -186,7 +188,7 @@ export default function DashboardPage() {
       }
     }
     fetchData();
-  }, [user, tenantContext, router]);
+  }, [user, router]);
 
   if (authLoading) {
     return (
@@ -194,6 +196,19 @@ export default function DashboardPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state if user exists but tenant context is still loading
+  if (user && !tenantContext) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Setting up your masjid...</p>
+          <p className="text-gray-500 text-sm mt-2">This should only take a moment</p>
         </div>
       </div>
     );

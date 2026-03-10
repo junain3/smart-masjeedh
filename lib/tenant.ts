@@ -55,13 +55,18 @@ export async function getTenantContext(): Promise<TenantContext | null> {
   }
 
   // Fallback for super admin (create masjid if needed)
-  const { data: masjidData } = await supabase
+  console.log("DEBUG getTenantContext - Checking masjids table for user:", userId);
+  
+  const { data: masjidData, error: masjidError } = await supabase
     .from("masjids")
     .select("id")
     .eq("created_by", userId)
     .maybeSingle();
 
+  console.log("DEBUG getTenantContext - Masjid query result:", { data: masjidData, error: masjidError?.message });
+
   if (masjidData?.id) {
+    console.log("DEBUG getTenantContext - Found existing masjid:", masjidData.id);
     return {
       masjidId: masjidData.id,
       userId,
@@ -81,7 +86,9 @@ export async function getTenantContext(): Promise<TenantContext | null> {
   }
 
   // Create new masjid for first-time super admin
-  const { data: newMasjid } = await supabase
+  console.log("DEBUG getTenantContext - Creating new masjid for user:", session.user.email);
+  
+  const { data: newMasjid, error: createError } = await supabase
     .from("masjids")
     .insert({
       name: `${session.user.email}'s Masjid`,
@@ -89,6 +96,8 @@ export async function getTenantContext(): Promise<TenantContext | null> {
     })
     .select("id")
     .single();
+
+  console.log("DEBUG getTenantContext - Masjid creation result:", { data: newMasjid, error: createError?.message });
 
   if (newMasjid?.id) {
     // Create super admin role
