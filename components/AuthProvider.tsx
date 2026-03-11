@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           
           // Add timeout to prevent hanging
           const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Tenant context timeout')), 10000);
+            setTimeout(() => reject(new Error('Tenant context timeout')), 15000);
           });
           
           const ctx = await Promise.race([
@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             
             // Add timeout to prevent hanging
             const timeoutPromise = new Promise((_, reject) => {
-              setTimeout(() => reject(new Error('Tenant context timeout')), 10000);
+              setTimeout(() => reject(new Error('Tenant context timeout')), 15000);
             });
             
             const ctx = await Promise.race([
