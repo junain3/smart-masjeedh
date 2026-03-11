@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Calendar, Plus, ArrowLeft, FileText, QrCode, Edit2, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
-import { getTenantContext } from "@/lib/tenant";
+import { useAuth } from "@/components/AuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
 
@@ -16,6 +16,7 @@ type Family = { id: string; family_code: string; head_name: string };
 export default function EventsPage() {
   const router = useRouter();
   const { toast, confirm } = useAppToast();
+  const { user, loading: authLoading, tenantContext } = useAuth();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -32,18 +33,20 @@ export default function EventsPage() {
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
-    fetchEvents();
-  }, []);
+    
+    // Only fetch events if we have tenant context
+    if (tenantContext) {
+      fetchEvents();
+    } else {
+      setLoading(false);
+    }
+  }, [tenantContext]);
 
   async function fetchEvents() {
-    if (!supabase) return;
+    if (!supabase || !tenantContext) return;
     setLoading(true);
     try {
-      const ctx = await getTenantContext();
-      if (!ctx) {
-        router.push("/login");
-        return;
-      }
+      const ctx = tenantContext;
 
       // Validate masjid exists before proceeding
       const { data: masjidCheck, error: masjidError } = await supabase
@@ -82,8 +85,7 @@ export default function EventsPage() {
   }
 
   async function openNewEvent() {
-    const ctx = await getTenantContext();
-    if (!ctx) {
+    if (!tenantContext) {
       toast({ 
         kind: "error", 
         title: "Context Missing", 
@@ -91,6 +93,8 @@ export default function EventsPage() {
       });
       return;
     }
+
+    const ctx = tenantContext;
 
     // Validate masjid exists before opening create modal
     const { data: masjidCheck, error: masjidError } = await supabase
@@ -113,9 +117,8 @@ export default function EventsPage() {
   }
 
   async function preloadFamilies() {
-    if (!supabase) return;
-    const ctx = await getTenantContext();
-    if (!ctx) return;
+    if (!supabase || !tenantContext) return;
+    const ctx = tenantContext;
     const { data } = await supabase
       .from("families")
       .select("id,family_code,head_name")
@@ -126,18 +129,10 @@ export default function EventsPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!supabase) return;
+    if (!supabase || !tenantContext) return;
     setSubmitting(true);
     try {
-      const ctx = await getTenantContext();
-      if (!ctx) {
-        toast({ 
-          kind: "error", 
-          title: "Context Missing", 
-          message: "Please login again to refresh your session." 
-        });
-        return;
-      }
+      const ctx = tenantContext;
 
       // Validate masjid exists before creating event
       const { data: masjidCheck, error: masjidError } = await supabase
@@ -228,12 +223,10 @@ export default function EventsPage() {
 
   async function handleEditSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!supabase) return;
-    if (!editingId) return;
+    if (!supabase || !editingId || !tenantContext) return;
     setSubmitting(true);
     try {
-      const ctx = await getTenantContext();
-      if (!ctx) return;
+      const ctx = tenantContext;
 
       // Validate masjid exists before editing event
       const { data: masjidCheck, error: masjidError } = await supabase
@@ -278,7 +271,7 @@ export default function EventsPage() {
   }
 
   async function deleteEvent(ev: EventRow) {
-    if (!supabase) return;
+    if (!supabase || !tenantContext) return;
     const ok = await confirm({
       title: "Delete event?",
       message: `This will remove '${ev.name}'.`,
@@ -288,8 +281,7 @@ export default function EventsPage() {
     if (!ok) return;
 
     try {
-      const ctx = await getTenantContext();
-      if (!ctx) return;
+      const ctx = tenantContext;
 
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
       const canEvents = isAdmin || ctx.permissions?.events !== false;
@@ -436,7 +428,7 @@ export default function EventsPage() {
     }
   };
 
-  if (loading) return <div className="p-8 text-center">{t.loading}</div>;
+  if (loading || authLoading) return <div className="p-8 text-center">{t.loading}</div>;
 
   if (!allowed) {
     return (

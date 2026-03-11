@@ -18,11 +18,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
   const [tenantContext, setTenantContext] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [tenantLoading, setTenantLoading] = useState(false);
+  const [tenantPromise, setTenantPromise] = useState<any>(null);
 
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setTenantContext(null);
+    setTenantPromise(null);
+  };
+
+  // Cached tenant context fetcher
+  const fetchTenantContext = async () => {
+    // Return existing promise if already loading
+    if (tenantPromise) {
+      return tenantPromise;
+    }
+
+    // Return cached context if available
+    if (tenantContext) {
+      return tenantContext;
+    }
+
+    // Create new promise
+    const promise = (async () => {
+      setTenantLoading(true);
+      try {
+        console.log("DEBUG: Fetching tenant context...");
+        const ctx = await getTenantContext();
+        console.log("DEBUG: Tenant context result:", ctx);
+        setTenantContext(ctx);
+        return ctx;
+      } catch (error) {
+        console.error("Error fetching tenant context:", error);
+        setTenantContext(null);
+        return null;
+      } finally {
+        setTenantLoading(false);
+        setTenantPromise(null);
+      }
+    })();
+
+    setTenantPromise(promise);
+    return promise;
   };
 
   useEffect(() => {
@@ -42,19 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (session?.user) {
           console.log("DEBUG: User found, getting tenant context...");
-          
-          // Add timeout to prevent hanging
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Tenant context timeout')), 15000);
-          });
-          
-          const ctx = await Promise.race([
-            getTenantContext(),
-            timeoutPromise
-          ]);
-          
-          console.log("DEBUG: Tenant context result:", ctx);
-          setTenantContext(ctx);
+          await fetchTenantContext();
         } else {
           console.log("DEBUG: No user session found");
           setTenantContext(null);
@@ -81,19 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user) {
           try {
             console.log("DEBUG: User logged in, getting tenant context...");
-            
-            // Add timeout to prevent hanging
-            const timeoutPromise = new Promise((_, reject) => {
-              setTimeout(() => reject(new Error('Tenant context timeout')), 15000);
-            });
-            
-            const ctx = await Promise.race([
-              getTenantContext(),
-              timeoutPromise
-            ]);
-            
-            console.log("DEBUG: Tenant context result:", ctx);
-            setTenantContext(ctx);
+            await fetchTenantContext();
           } catch (error) {
             console.error("Error getting tenant context:", error);
             setTenantContext(null);
@@ -101,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           console.log("DEBUG: User logged out");
           setTenantContext(null);
+          setTenantPromise(null);
         }
         
         setLoading(false);
@@ -110,17 +125,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Combined loading state
+  const isLoading = loading || tenantLoading;
+
   return (
-    <AuthContext.Provider value={{ user, loading, tenantContext, setTenantContext, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading: isLoading,
+        tenantContext,
+        setTenantContext,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
-}
+};
