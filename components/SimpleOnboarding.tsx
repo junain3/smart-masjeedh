@@ -71,9 +71,8 @@ export default function SimpleOnboarding({ onComplete }: SimpleOnboardingProps) 
 
       console.log("DEBUG: User role created successfully");
 
-      // Step 3: Complete onboarding and redirect
-      console.log("DEBUG: Onboarding completed, redirecting to dashboard");
-      router.push("/dashboard");
+      // Step 3: Complete onboarding and let auth provider handle redirect
+      console.log("DEBUG: Onboarding completed, calling onComplete");
       onComplete();
 
     } catch (err) {

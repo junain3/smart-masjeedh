@@ -1,6 +1,6 @@
 "use client";
 
-import { useSimpleAuth } from "@/components/SimpleAuthProvider";
+import { useProperAuth } from "@/components/ProperAuthProvider";
 import { translations, Language } from "@/lib/i18n/translations";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -8,7 +8,7 @@ import Link from "next/link";
 import SimpleOnboarding from "@/components/SimpleOnboarding";
 
 export default function HomePage() {
-  const { user, loading, requiresOnboarding } = useSimpleAuth();
+  const { user, loading, requiresOnboarding, refreshTenantContext } = useProperAuth();
   const router = useRouter();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
@@ -46,7 +46,7 @@ export default function HomePage() {
   // If user is authenticated but needs onboarding (truly new user), show setup
   if (user && requiresOnboarding) {
     console.log("DEBUG: Showing onboarding for new user");
-    return <SimpleOnboarding onComplete={() => router.push("/dashboard")} />;
+    return <SimpleOnboarding onComplete={refreshTenantContext} />;
   }
 
   // If no user, show landing page
