@@ -57,7 +57,7 @@ export default function MasjidSetup({ onSetupComplete }: MasjidSetupProps) {
         .from("user_roles")
         .insert({
           masjid_id: masjidData.id,
-          user_id: crypto.randomUUID(),
+          user_id: session.user.id, // Use auth user ID as user_id for consistency
           auth_user_id: session.user.id,
           email: session.user.email || "",
           role: "super_admin",

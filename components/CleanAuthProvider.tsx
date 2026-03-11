@@ -34,7 +34,7 @@ export function CleanAuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log("DEBUG: Fetching tenant context for user:", userId);
       
-      // Check user_roles first
+      // Check user_roles first - simple direct query
       const { data: roleData, error: roleError } = await supabase
         .from("user_roles")
         .select("masjid_id, role, permissions")
@@ -42,9 +42,9 @@ export function CleanAuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (roleError) {
-        console.log("DEBUG: No user_roles found, checking masjids");
+        console.log("DEBUG: No user_roles found, checking if user has masjid");
         
-        // Check if user created a masjid
+        // Check if user created a masjid but doesn't have user_roles yet
         const { data: masjidData, error: masjidError } = await supabase
           .from("masjids")
           .select("id")
@@ -52,18 +52,21 @@ export function CleanAuthProvider({ children }: { children: React.ReactNode }) {
           .single();
 
         if (masjidError || !masjidData) {
-          console.log("DEBUG: No masjid found, requires onboarding");
+          console.log("DEBUG: No masjid found, truly new user - requires onboarding");
           return null;
         }
 
-        // Create user_roles for existing masjid
+        // User has masjid but no user_roles - create missing user_roles
+        console.log("DEBUG: User has masjid but no user_roles, creating user_roles");
+        const { data: userData } = await supabase.auth.getUser();
+        
         const { error: insertError } = await supabase
           .from("user_roles")
           .insert({
             masjid_id: masjidData.id,
             user_id: userId,
             auth_user_id: userId,
-            email: (await supabase.auth.getUser()).data.user?.email,
+            email: userData.user?.email,
             role: "super_admin",
             permissions: {
               accounts: true,
@@ -76,7 +79,9 @@ export function CleanAuthProvider({ children }: { children: React.ReactNode }) {
               settings: true
             },
             verified: true
-          });
+          })
+          .select()
+          .single();
 
         if (insertError) {
           console.error("DEBUG: Failed to create user_roles:", insertError);
@@ -87,7 +92,7 @@ export function CleanAuthProvider({ children }: { children: React.ReactNode }) {
         return {
           masjidId: masjidData.id,
           userId,
-          email: (await supabase.auth.getUser()).data.user?.email,
+          email: userData.user?.email,
           role: "super_admin",
           permissions: {
             accounts: true,
@@ -102,7 +107,8 @@ export function CleanAuthProvider({ children }: { children: React.ReactNode }) {
         };
       }
 
-      // Return existing user_roles context
+      // User has user_roles - return existing context
+      console.log("DEBUG: Found existing user_roles");
       return {
         masjidId: roleData.masjid_id,
         userId,
