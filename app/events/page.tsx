@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Calendar, Plus, ArrowLeft, FileText, QrCode, Edit2, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
-import { useCleanAuth } from "@/components/CleanAuthProvider";
+import { useSimpleAuth } from "@/components/SimpleAuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
 
@@ -16,7 +16,7 @@ type Family = { id: string; family_code: string; head_name: string };
 export default function EventsPage() {
   const router = useRouter();
   const { toast, confirm } = useAppToast();
-  const { user, loading: authLoading, tenantContext } = useCleanAuth();
+  const { user, loading: authLoading, tenantContext } = useSimpleAuth();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
   const [events, setEvents] = useState<EventRow[]>([]);

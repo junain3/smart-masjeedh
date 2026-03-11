@@ -1,6 +1,6 @@
 import "./globals.css";
 import { ToastProvider } from "@/components/ToastProvider";
-import { CleanAuthProvider } from "@/components/CleanAuthProvider";
+import { SimpleAuthProvider } from "@/components/SimpleAuthProvider";
 import { Inter } from "next/font/google";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -9,9 +9,9 @@ export default function RootLayout(props: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className={`${inter.className} min-h-screen bg-neutral-50 text-neutral-900`}>
-        <CleanAuthProvider>
+        <SimpleAuthProvider>
           <ToastProvider>{props.children}</ToastProvider>
-        </CleanAuthProvider>
+        </SimpleAuthProvider>
       </body>
     </html>
   );

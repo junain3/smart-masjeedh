@@ -1,14 +1,14 @@
 "use client";
 
-import { useCleanAuth } from "@/components/CleanAuthProvider";
+import { useSimpleAuth } from "@/components/SimpleAuthProvider";
 import { translations, Language } from "@/lib/i18n/translations";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import MasjidSetup from "@/components/MasjidSetup";
+import SimpleOnboarding from "@/components/SimpleOnboarding";
 
 export default function HomePage() {
-  const { user, loading, requiresOnboarding } = useCleanAuth();
+  const { user, loading, requiresOnboarding } = useSimpleAuth();
   const router = useRouter();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
@@ -37,7 +37,7 @@ export default function HomePage() {
 
   // If user is authenticated but needs onboarding, show setup
   if (user && requiresOnboarding) {
-    return <MasjidSetup onSetupComplete={() => router.push("/dashboard")} />;
+    return <SimpleOnboarding onComplete={() => router.push("/dashboard")} />;
   }
 
   // If no user, show landing page
