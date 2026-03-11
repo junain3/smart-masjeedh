@@ -29,14 +29,23 @@ export default function HomePage() {
     );
   }
 
-  // If user is authenticated and has tenant context, redirect to dashboard
+  // If user is authenticated and has tenant context, they should already be redirected to dashboard
+  // This page should only show for unauthenticated users or users needing onboarding
   if (user && !requiresOnboarding) {
-    router.push("/dashboard");
-    return null;
+    // User has tenant context, should be redirected by auth provider
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Redirecting to dashboard...</p>
+        </div>
+      </div>
+    );
   }
 
-  // If user is authenticated but needs onboarding, show setup
+  // If user is authenticated but needs onboarding (truly new user), show setup
   if (user && requiresOnboarding) {
+    console.log("DEBUG: Showing onboarding for new user");
     return <SimpleOnboarding onComplete={() => router.push("/dashboard")} />;
   }
 

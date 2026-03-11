@@ -4,12 +4,22 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase'; 
+import { useSimpleAuth } from '@/components/SimpleAuthProvider';
 
 export default function MasjidLoginPage() { 
   const [email, setEmail] = useState(''); 
   const [password, setPassword] = useState(''); 
   const [loading, setLoading] = useState(false); 
   const router = useRouter();
+  const { user } = useSimpleAuth();
+
+  // If user is already logged in, redirect to dashboard
+  React.useEffect(() => {
+    if (user) {
+      console.log('DEBUG: User already logged in, redirecting to dashboard');
+      router.push('/dashboard');
+    }
+  }, [user, router]);
 
   const handleLogin = async (e: React.FormEvent) => { 
     e.preventDefault(); 

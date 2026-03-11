@@ -44,12 +44,12 @@ export function SimpleAuthProvider({ children }: { children: React.ReactNode }) 
       console.log("DEBUG: user_roles query:", { data: roleData, error: roleError?.message });
 
       if (roleError || !roleData) {
-        console.log("DEBUG: No user_roles found - new user");
+        console.log("DEBUG: No user_roles found - user needs onboarding");
         return null;
       }
 
       // User has user_roles - return context
-      console.log("DEBUG: Found user_roles - returning context");
+      console.log("DEBUG: Found user_roles - user has masjid, returning context");
       return {
         masjidId: roleData.masjid_id,
         userId,
