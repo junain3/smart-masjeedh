@@ -182,7 +182,7 @@ export default function VerifyPage() {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Verify Your Email</h1>
           <p className="text-slate-600">
-            We've sent a 6-digit code to {email}
+            We&apos;ve sent a 6-digit code to {email}
           </p>
         </div>
 
@@ -232,7 +232,7 @@ export default function VerifyPage() {
 
         <div className="text-center">
           <p className="text-slate-600 text-sm mb-2">
-            Didn't receive the code?
+            Didn&apos;t receive the code?
           </p>
           <button
             onClick={resendCode}
