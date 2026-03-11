@@ -37,7 +37,7 @@ export default function HomePage() {
 
   // If user is authenticated but needs onboarding, show setup
   if (user && requiresOnboarding) {
-    return <MasjidSetup onComplete={() => router.push("/dashboard")} />;
+    return <MasjidSetup onSetupComplete={() => router.push("/dashboard")} />;
   }
 
   // If no user, show landing page
