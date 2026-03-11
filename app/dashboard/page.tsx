@@ -1,6 +1,6 @@
 "use client";
 
-import { useSimpleAuth } from "@/components/SimpleAuthProvider";
+import { useProperAuth } from "@/components/ProperAuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { translations, Language } from "@/lib/i18n/translations";
 import { useEffect, useState } from "react";
@@ -8,7 +8,7 @@ import { Calendar, Users, FileText, Settings, Plus } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardPage() {
-  const { user, loading, tenantContext } = useSimpleAuth();
+  const { user, loading, tenantContext } = useProperAuth();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
 
