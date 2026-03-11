@@ -19,6 +19,7 @@ type AuthContextType = {
   signOut: () => Promise<void>;
   requiresOnboarding: boolean;
   refreshTenantContext: () => Promise<void>;
+  authError: string | null;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,6 +29,7 @@ export function ProperAuthProvider({ children }: { children: React.ReactNode }) 
   const [tenantContext, setTenantContext] = useState<TenantContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [requiresOnboarding, setRequiresOnboarding] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const router = useRouter();
 
   // Check if user has existing masjid setup
@@ -35,16 +37,51 @@ export function ProperAuthProvider({ children }: { children: React.ReactNode }) 
     try {
       console.log("DEBUG: Checking masjid setup for user:", userId);
       
-      // Check if user has user_roles entry
-      const { data: roleData, error: roleError } = await supabase
-        .from("user_roles")
-        .select("masjid_id")
-        .eq("auth_user_id", userId)
-        .single();
+      // First try with auth_user_id column
+      let roleData, roleError;
+      
+      try {
+        const result = await supabase
+          .from("user_roles")
+          .select("masjid_id")
+          .eq("auth_user_id", userId)
+          .single();
+        
+        roleData = result.data;
+        roleError = result.error;
+        
+        console.log("DEBUG: User roles check with auth_user_id:", { data: roleData, error: roleError?.message });
+      } catch (err) {
+        console.log("DEBUG: auth_user_id query failed, trying user_id");
+        roleError = err;
+      }
 
-      console.log("DEBUG: User roles check:", { data: roleData, error: roleError?.message });
-
+      // If auth_user_id failed, try user_id
       if (roleError || !roleData) {
+        try {
+          const result = await supabase
+            .from("user_roles")
+            .select("masjid_id")
+            .eq("user_id", userId)
+            .single();
+          
+          roleData = result.data;
+          roleError = result.error;
+          
+          console.log("DEBUG: User roles check with user_id:", { data: roleData, error: roleError?.message });
+        } catch (err) {
+          console.log("DEBUG: user_id query also failed");
+          roleError = err;
+        }
+      }
+
+      // If both queries failed, this is a system error
+      if (roleError) {
+        console.error("DEBUG: Both user_roles queries failed:", roleError);
+        throw new Error(`Database query failed: ${roleError.message}`);
+      }
+
+      if (!roleData) {
         console.log("DEBUG: No user_roles found - user needs onboarding");
         return false;
       }
@@ -68,7 +105,8 @@ export function ProperAuthProvider({ children }: { children: React.ReactNode }) 
 
     } catch (error) {
       console.error("DEBUG: Error checking masjid setup:", error);
-      return false;
+      // Re-throw to let caller handle as system error
+      throw error;
     }
   }, []);
 
@@ -77,13 +115,51 @@ export function ProperAuthProvider({ children }: { children: React.ReactNode }) 
     try {
       console.log("DEBUG: Loading tenant context for user:", userId);
       
-      const { data: roleData, error: roleError } = await supabase
-        .from("user_roles")
-        .select("masjid_id, role, permissions")
-        .eq("auth_user_id", userId)
-        .single();
+      // First try with auth_user_id column
+      let roleData, roleError;
+      
+      try {
+        const result = await supabase
+          .from("user_roles")
+          .select("masjid_id, role, permissions")
+          .eq("auth_user_id", userId)
+          .single();
+        
+        roleData = result.data;
+        roleError = result.error;
+        
+        console.log("DEBUG: Tenant context with auth_user_id:", { data: roleData, error: roleError?.message });
+      } catch (err) {
+        console.log("DEBUG: auth_user_id query failed, trying user_id");
+        roleError = err;
+      }
 
+      // If auth_user_id failed, try user_id
       if (roleError || !roleData) {
+        try {
+          const result = await supabase
+            .from("user_roles")
+            .select("masjid_id, role, permissions")
+            .eq("user_id", userId)
+            .single();
+          
+          roleData = result.data;
+          roleError = result.error;
+          
+          console.log("DEBUG: Tenant context with user_id:", { data: roleData, error: roleError?.message });
+        } catch (err) {
+          console.log("DEBUG: user_id query also failed");
+          roleError = err;
+        }
+      }
+
+      // If both queries failed, this is a system error
+      if (roleError) {
+        console.error("DEBUG: Both tenant context queries failed:", roleError);
+        throw new Error(`Database query failed: ${roleError.message}`);
+      }
+
+      if (!roleData) {
         console.log("DEBUG: No user_roles found");
         return null;
       }
@@ -101,7 +177,8 @@ export function ProperAuthProvider({ children }: { children: React.ReactNode }) 
 
     } catch (error) {
       console.error("DEBUG: Error loading tenant context:", error);
-      return null;
+      // Re-throw to let caller handle as system error
+      throw error;
     }
   }, []);
 
@@ -153,11 +230,13 @@ export function ProperAuthProvider({ children }: { children: React.ReactNode }) 
           setRequiresOnboarding(true);
         }
 
-      } catch (error) {
-        console.error("DEBUG: Auth initialization error:", error);
-      } finally {
-        setLoading(false);
-      }
+      // Handle errors in auth initialization
+        } catch (error) {
+          console.error("DEBUG: Auth initialization error:", error);
+          setAuthError(error instanceof Error ? error.message : "Authentication failed");
+        } finally {
+          setLoading(false);
+        }
     };
 
     initializeAuth();
@@ -217,6 +296,7 @@ export function ProperAuthProvider({ children }: { children: React.ReactNode }) 
         signOut,
         requiresOnboarding,
         refreshTenantContext,
+        authError,
       }}
     >
       {children}

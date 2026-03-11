@@ -8,7 +8,7 @@ import Link from "next/link";
 import SimpleOnboarding from "@/components/SimpleOnboarding";
 
 export default function HomePage() {
-  const { user, loading, requiresOnboarding, refreshTenantContext } = useProperAuth();
+  const { user, loading, requiresOnboarding, refreshTenantContext, authError } = useProperAuth();
   const router = useRouter();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
@@ -24,6 +24,26 @@ export default function HomePage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state if there's an auth error
+  if (authError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+            <h2 className="text-red-800 text-lg font-semibold mb-2">Authentication Error</h2>
+            <p className="text-red-600 text-sm">{authError}</p>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-emerald-600 text-white px-6 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
