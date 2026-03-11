@@ -10,6 +10,7 @@ import { useCleanAuth } from "@/components/CleanAuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
 import Image from "next/image";
+import { getTenantContext } from "@/lib/tenant";
 
 export default function SettingsPage() {
   const router = useRouter();
