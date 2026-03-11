@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
@@ -30,7 +30,7 @@ export function CleanAuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   // Fetch tenant context exactly once
-  const fetchTenantContext = async (userId: string): Promise<TenantContext | null> => {
+  const fetchTenantContext = useCallback(async (userId: string): Promise<TenantContext | null> => {
     try {
       console.log("DEBUG: Fetching tenant context for user:", userId);
       
@@ -115,7 +115,7 @@ export function CleanAuthProvider({ children }: { children: React.ReactNode }) {
       console.error("DEBUG: Error fetching tenant context:", error);
       return null;
     }
-  };
+  }, []);
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -186,7 +186,7 @@ export function CleanAuthProvider({ children }: { children: React.ReactNode }) {
     );
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [router, fetchTenantContext]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
