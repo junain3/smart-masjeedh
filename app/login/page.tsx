@@ -118,6 +118,21 @@ export default function MasjidLoginPage() {
           > 
             Register your Masjid 
           </Link> 
+          
+          <div className="pt-4 border-t border-slate-50">
+            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-3">
+              Quick Login Options
+            </p>
+            <div className="space-y-2">
+              <Link 
+                href="/easy-login" 
+                className="inline-flex items-center justify-center w-full app-btn-soft py-3 text-blue-700"
+              > 
+                📧 Login with Email Code
+              </Link> 
+            </div>
+          </div>
+          
           <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-2">
             Your Masjid space will be created and awaits Super‑Admin approval.
           </p>

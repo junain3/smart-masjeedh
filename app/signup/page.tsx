@@ -101,23 +101,32 @@ export default function SignupPage() {
 
       console.log("DEBUG: User role created successfully");
 
-      // Step 4: Auto-login the user
-      const { error: loginError } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password,
-      });
+      // Step 4: Generate and send verification code
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Store verification code
+      const { error: verificationError } = await supabase
+        .from("email_verifications")
+        .insert({
+          email: formData.email,
+          code: verificationCode,
+          temp_password: "verified",
+        });
 
-      if (loginError) {
-        console.log("DEBUG: Auto-login failed, but signup succeeded");
-        // Don't throw error, just redirect to login
-        setSuccess(true);
-        return;
+      if (verificationError) {
+        console.log("DEBUG: Verification code storage failed, but signup succeeded");
+        // Don't throw error, continue with flow
+      } else {
+        console.log("DEBUG: Verification code stored:", verificationCode);
+        console.log("DEBUG: Email would be sent to:", formData.email);
+        
+        // TODO: Send actual email
+        // For now, show code to user
+        alert(`Your verification code is: ${verificationCode}`);
       }
 
-      console.log("DEBUG: Auto-login successful");
-
-      // Step 5: Redirect to dashboard
-      router.push("/");
+      // Step 5: Redirect to verification page
+      router.push(`/verify?email=${encodeURIComponent(formData.email)}`);
 
     } catch (err: any) {
       console.error("DEBUG: Signup error:", err);
