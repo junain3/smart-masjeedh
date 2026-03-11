@@ -120,7 +120,7 @@ export default function EasyLoginPage() {
 
         <div className="mt-6 text-center">
           <p className="text-slate-600 text-sm">
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <button
               onClick={() => router.push("/signup")}
               className="text-emerald-600 hover:text-emerald-700 font-medium"
