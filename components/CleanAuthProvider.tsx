@@ -41,6 +41,8 @@ export function CleanAuthProvider({ children }: { children: React.ReactNode }) {
         .eq("auth_user_id", userId)
         .single();
 
+      console.log("DEBUG: user_roles query result:", { data: roleData, error: roleError?.message });
+
       if (roleError) {
         console.log("DEBUG: No user_roles found, checking if user has masjid");
         
@@ -50,6 +52,8 @@ export function CleanAuthProvider({ children }: { children: React.ReactNode }) {
           .select("id")
           .eq("created_by", userId)
           .single();
+
+        console.log("DEBUG: masjids query result:", { data: masjidData, error: masjidError?.message });
 
         if (masjidError || !masjidData) {
           console.log("DEBUG: No masjid found, truly new user - requires onboarding");
@@ -146,12 +150,10 @@ export function CleanAuthProvider({ children }: { children: React.ReactNode }) {
           setTenantContext(context);
           setRequiresOnboarding(false);
           
-          // Redirect to dashboard if not already there
-          if (window.location.pathname === "/") {
-            router.push("/dashboard");
-          }
+          // Always redirect to dashboard if user has context
+          router.push("/dashboard");
         } else {
-          console.log("DEBUG: Requires onboarding");
+          console.log("DEBUG: Requires onboarding - truly new user");
           setRequiresOnboarding(true);
         }
 
