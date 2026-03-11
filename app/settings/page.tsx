@@ -3,11 +3,13 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, Globe, Camera, Tag, Home, User } from "lucide-react";
+import { ArrowLeft, Save, Globe, Camera, Tag, Home, User, Upload, X, Check, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
-import { getTenantContext } from "@/lib/tenant";
+import { useCleanAuth } from "@/components/CleanAuthProvider";
+import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
+import Image from "next/image";
 
 export default function SettingsPage() {
   const router = useRouter();
