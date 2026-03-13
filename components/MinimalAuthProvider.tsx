@@ -139,6 +139,16 @@ export function MinimalAuthProvider({ children }: { children: React.ReactNode })
       try {
         console.log("DEBUG: Initializing auth...");
         
+        // Check if Supabase is properly configured
+        if (!supabase) {
+          console.error("DEBUG: Supabase client not initialized");
+          if (mounted) {
+            setAuthError("Supabase configuration error");
+            setLoading(false);
+          }
+          return;
+        }
+        
         // Get initial session
         const { data: { session }, error } = await supabase.auth.getSession();
         
@@ -181,7 +191,9 @@ export function MinimalAuthProvider({ children }: { children: React.ReactNode })
         } catch (error) {
           console.error("DEBUG: Error loading tenant context:", error);
           if (mounted) {
+            // Don't fail completely if tenant context fails
             setAuthError(error instanceof Error ? error.message : "Failed to load tenant context");
+            setRequiresOnboarding(true);
             setLoading(false);
           }
         }
@@ -194,6 +206,15 @@ export function MinimalAuthProvider({ children }: { children: React.ReactNode })
         }
       }
     };
+
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (mounted && loading) {
+        console.log("DEBUG: Auth initialization timeout, forcing complete");
+        setLoading(false);
+        setAuthError("Authentication timeout - please refresh");
+      }
+    }, 10000); // 10 second timeout
 
     initializeAuth();
 
@@ -238,6 +259,7 @@ export function MinimalAuthProvider({ children }: { children: React.ReactNode })
 
     return () => {
       mounted = false;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, [loadTenantContext, tenantContext, user]);
