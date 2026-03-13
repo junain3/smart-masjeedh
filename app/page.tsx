@@ -1,14 +1,16 @@
 "use client";
 
-import { useMinimalAuth } from "@/components/MinimalAuthProvider";
+import { useMockAuth } from "@/components/MockAuthProvider";
 import { translations, Language } from "@/lib/i18n/translations";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import SimpleOnboarding from "@/components/SimpleOnboarding";
 
+export const dynamic = 'force-dynamic';
+
 export default function HomePage() {
-  const { user, loading, requiresOnboarding, refreshTenantContext, authError } = useMinimalAuth();
+  const { user, loading, requiresOnboarding, refreshTenantContext, authError } = useMockAuth();
   const router = useRouter();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];

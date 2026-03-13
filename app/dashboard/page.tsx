@@ -1,14 +1,16 @@
 "use client";
 
-import { useMinimalAuth } from "@/components/MinimalAuthProvider";
+import { useMockAuth } from "@/components/MockAuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { translations, Language } from "@/lib/i18n/translations";
 import { useEffect, useState } from "react";
 import { Calendar, Users, FileText, Settings, Plus } from "lucide-react";
 import Link from "next/link";
 
+export const dynamic = 'force-dynamic';
+
 export default function DashboardPage() {
-  const { user, loading, tenantContext } = useMinimalAuth();
+  const { user, loading, tenantContext } = useMockAuth();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
 

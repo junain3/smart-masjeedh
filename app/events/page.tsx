@@ -6,8 +6,10 @@ import { useRouter } from "next/navigation";
 import { Calendar, Plus, ArrowLeft, FileText, QrCode, Edit2, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
-import { useMinimalAuth } from "@/components/MinimalAuthProvider";
+import { useMockAuth } from "@/components/MockAuthProvider";
 import { AppShell } from "@/components/AppShell";
+
+export const dynamic = 'force-dynamic';
 import { useAppToast } from "@/components/ToastProvider";
 
 type EventRow = { id: string; name: string; date: string };
@@ -16,7 +18,7 @@ type Family = { id: string; family_code: string; head_name: string };
 export default function EventsPage() {
   const router = useRouter();
   const { toast, confirm } = useAppToast();
-  const { user, loading: authLoading, tenantContext } = useMinimalAuth();
+  const { user, loading: authLoading, tenantContext } = useMockAuth();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
   const [events, setEvents] = useState<EventRow[]>([]);
