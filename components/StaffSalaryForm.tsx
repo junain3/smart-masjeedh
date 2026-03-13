@@ -14,7 +14,7 @@ export default function StaffSalaryForm({ masjidId, onStaffAdded }: StaffSalaryF
     email: "",
     phone: "",
     role: "staff" as "super_admin" | "co_admin" | "staff" | "editor",
-    salary: "",
+    basic_salary: "",
     salary_type: "monthly" as "monthly" | "weekly" | "daily" | "hourly",
     bank_name: "",
     bank_account: "",
@@ -31,8 +31,8 @@ export default function StaffSalaryForm({ masjidId, onStaffAdded }: StaffSalaryF
 
     try {
       // Validate salary details
-      if (!formData.salary || parseFloat(formData.salary) <= 0) {
-        setError("Salary amount is required and must be greater than 0");
+      if (!formData.basic_salary || parseFloat(formData.basic_salary) <= 0) {
+        setError("Basic salary is required and must be greater than 0");
         return;
       }
 
@@ -64,7 +64,7 @@ export default function StaffSalaryForm({ masjidId, onStaffAdded }: StaffSalaryF
         email: formData.email,
         phone: formData.phone,
         role: formData.role,
-        salary: parseFloat(formData.salary),
+        basic_salary: parseFloat(formData.basic_salary),
         salary_type: formData.salary_type,
         bank_name: formData.bank_name,
         bank_account: formData.bank_account,
@@ -97,7 +97,7 @@ export default function StaffSalaryForm({ masjidId, onStaffAdded }: StaffSalaryF
         email: "",
         phone: "",
         role: "staff",
-        salary: "",
+        basic_salary: "",
         salary_type: "monthly",
         bank_name: "",
         bank_account: "",
@@ -215,15 +215,15 @@ export default function StaffSalaryForm({ masjidId, onStaffAdded }: StaffSalaryF
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Salary Amount *
+              Basic Salary *
             </label>
             <input
               type="number"
               required
               min="0"
               step="0.01"
-              value={formData.salary}
-              onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+              value={formData.basic_salary}
+              onChange={(e) => setFormData({ ...formData, basic_salary: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>

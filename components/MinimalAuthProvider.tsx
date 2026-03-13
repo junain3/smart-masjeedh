@@ -126,7 +126,16 @@ export function MinimalAuthProvider({ children }: { children: React.ReactNode })
 
   // Initialize auth
   useEffect(() => {
+    let mounted = true;
+    
     const initializeAuth = async () => {
+      // Prevent re-initialization if already loaded
+      if (!mounted || (user && tenantContext)) {
+        console.log("DEBUG: Auth already initialized, skipping");
+        setLoading(false);
+        return;
+      }
+      
       try {
         console.log("DEBUG: Initializing auth...");
         
@@ -135,43 +144,55 @@ export function MinimalAuthProvider({ children }: { children: React.ReactNode })
         
         if (error) {
           console.error("DEBUG: Session error:", error);
-          setAuthError(error.message);
-          setLoading(false);
+          if (mounted) {
+            setAuthError(error.message);
+            setLoading(false);
+          }
           return;
         }
 
         if (!session) {
           console.log("DEBUG: No session found");
-          setLoading(false);
+          if (mounted) {
+            setLoading(false);
+          }
           return;
         }
 
         console.log("DEBUG: Session found:", session.user.email);
-        setUser(session.user);
+        if (mounted) {
+          setUser(session.user);
+        }
 
         // Load tenant context
         try {
           const context = await loadTenantContext(session.user.id);
-          if (context) {
-            setTenantContext(context);
-            setRequiresOnboarding(false);
-            console.log("DEBUG: Tenant context loaded successfully");
-          } else {
-            console.log("DEBUG: No tenant context found");
-            setRequiresOnboarding(true);
+          if (mounted) {
+            if (context) {
+              setTenantContext(context);
+              setRequiresOnboarding(false);
+              console.log("DEBUG: Tenant context loaded successfully");
+            } else {
+              console.log("DEBUG: No tenant context found");
+              setRequiresOnboarding(true);
+            }
+            setLoading(false);
           }
         } catch (error) {
           console.error("DEBUG: Error loading tenant context:", error);
-          setAuthError(error instanceof Error ? error.message : "Failed to load tenant context");
+          if (mounted) {
+            setAuthError(error instanceof Error ? error.message : "Failed to load tenant context");
+            setLoading(false);
+          }
         }
 
-      // Handle errors in auth initialization
-        } catch (error) {
-          console.error("DEBUG: Auth initialization error:", error);
+      } catch (error) {
+        console.error("DEBUG: Auth initialization error:", error);
+        if (mounted) {
           setAuthError(error instanceof Error ? error.message : "Authentication failed");
-        } finally {
           setLoading(false);
         }
+      }
     };
 
     initializeAuth();
@@ -180,6 +201,8 @@ export function MinimalAuthProvider({ children }: { children: React.ReactNode })
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log("DEBUG: Auth state changed:", event, session?.user?.email);
+        
+        if (!mounted) return;
         
         if (event === "SIGNED_IN" && session) {
           setUser(session.user);
@@ -213,8 +236,11 @@ export function MinimalAuthProvider({ children }: { children: React.ReactNode })
       }
     );
 
-    return () => subscription.unsubscribe();
-  }, [loadTenantContext]);
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [loadTenantContext, tenantContext, user]);
 
   return (
     <AuthContext.Provider
