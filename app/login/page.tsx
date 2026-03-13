@@ -18,8 +18,9 @@ export default function MasjidLoginPage() {
   // If user is already logged in, redirect to dashboard
   React.useEffect(() => {
     if (user) {
-      console.log('DEBUG: User already logged in, redirecting to dashboard');
-      router.push('/dashboard');
+      console.log('DEBUG: User already logged in, but staying on login page for now');
+      // Temporarily disable redirect to prevent loop
+      // router.push('/dashboard');
     }
   }, [user, router]);
 
