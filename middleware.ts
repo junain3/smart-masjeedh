@@ -40,6 +40,12 @@ export async function middleware(req: NextRequest) {
 
     console.log('DEBUG: User authenticated:', session.user.email);
 
+    // If already on dashboard, don't redirect again
+    if (req.nextUrl.pathname === '/dashboard') {
+      console.log('DEBUG: Already on dashboard, allowing access');
+      return NextResponse.next();
+    }
+
     // Check if user has masjid_id
     const { data: userRole, error: roleError } = await supabase
       .from('user_roles')
@@ -72,7 +78,7 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(new URL('/dashboard', req.url));
     }
 
-    // If user has masjid_id and is on login/signup, redirect to dashboard
+    // If user has masjid_id and is on login/signup/root, redirect to dashboard
     if (req.nextUrl.pathname === '/login' || req.nextUrl.pathname === '/signup' || req.nextUrl.pathname === '/') {
       return NextResponse.redirect(new URL('/dashboard', req.url));
     }

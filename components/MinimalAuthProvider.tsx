@@ -184,20 +184,25 @@ export function MinimalAuthProvider({ children }: { children: React.ReactNode })
         if (event === "SIGNED_IN" && session) {
           setUser(session.user);
           
-          // Load tenant context
-          try {
-            const context = await loadTenantContext(session.user.id);
-            if (context) {
-              setTenantContext(context);
-              setRequiresOnboarding(false);
-              console.log("DEBUG: Tenant context loaded on sign in");
-            } else {
-              console.log("DEBUG: No tenant context found on sign in");
-              setRequiresOnboarding(true);
+          // Only load tenant context if not already loaded
+          if (!tenantContext) {
+            console.log("DEBUG: Loading tenant context on sign in");
+            try {
+              const context = await loadTenantContext(session.user.id);
+              if (context) {
+                setTenantContext(context);
+                setRequiresOnboarding(false);
+                console.log("DEBUG: Tenant context loaded on sign in");
+              } else {
+                console.log("DEBUG: No tenant context found on sign in");
+                setRequiresOnboarding(true);
+              }
+            } catch (error) {
+              console.error("DEBUG: Error loading tenant context on sign in:", error);
+              setAuthError(error instanceof Error ? error.message : "Failed to load tenant context");
             }
-          } catch (error) {
-            console.error("DEBUG: Error loading tenant context on sign in:", error);
-            setAuthError(error instanceof Error ? error.message : "Failed to load tenant context");
+          } else {
+            console.log("DEBUG: Tenant context already loaded, skipping");
           }
         } else if (event === "SIGNED_OUT") {
           setUser(null);
@@ -209,7 +214,7 @@ export function MinimalAuthProvider({ children }: { children: React.ReactNode })
     );
 
     return () => subscription.unsubscribe();
-  }, [loadTenantContext]);
+  }, [loadTenantContext, tenantContext]);
 
   return (
     <AuthContext.Provider
