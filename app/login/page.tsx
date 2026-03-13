@@ -4,14 +4,14 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase'; 
-import { useProperAuth } from '@/components/ProperAuthProvider';
+import { useMinimalAuth } from '@/components/MinimalAuthProvider';
 
 export default function MasjidLoginPage() { 
   const [email, setEmail] = useState(''); 
   const [password, setPassword] = useState(''); 
   const [loading, setLoading] = useState(false); 
   const router = useRouter();
-  const { user } = useProperAuth();
+  const { user } = useMinimalAuth();
 
   // If user is already logged in, redirect to dashboard
   React.useEffect(() => {

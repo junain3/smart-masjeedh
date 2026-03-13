@@ -1,6 +1,6 @@
 "use client";
 
-import { useProperAuth } from "@/components/ProperAuthProvider";
+import { useMinimalAuth } from "@/components/MinimalAuthProvider";
 import { translations, Language } from "@/lib/i18n/translations";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -8,7 +8,7 @@ import Link from "next/link";
 import SimpleOnboarding from "@/components/SimpleOnboarding";
 
 export default function HomePage() {
-  const { user, loading, requiresOnboarding, refreshTenantContext, authError } = useProperAuth();
+  const { user, loading, requiresOnboarding, refreshTenantContext, authError } = useMinimalAuth();
   const router = useRouter();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
