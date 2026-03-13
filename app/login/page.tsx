@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase'; 
-import { useMockAuth } from '@/components/MockAuthProvider';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,16 +12,12 @@ export default function MasjidLoginPage() {
   const [password, setPassword] = useState(''); 
   const [loading, setLoading] = useState(false); 
   const router = useRouter();
-  const { user } = useMockAuth();
 
-  // If user is already logged in, redirect to dashboard
+  // Direct to dashboard - no auth checks needed
   React.useEffect(() => {
-    if (user) {
-      console.log('DEBUG: User already logged in, but staying on login page for now');
-      // Temporarily disable redirect to prevent loop
-      // router.push('/dashboard');
-    }
-  }, [user, router]);
+    console.log('DEBUG: Redirecting to dashboard');
+    router.push('/dashboard');
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => { 
     e.preventDefault(); 
