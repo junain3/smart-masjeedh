@@ -214,7 +214,7 @@ export function MinimalAuthProvider({ children }: { children: React.ReactNode })
     );
 
     return () => subscription.unsubscribe();
-  }, [loadTenantContext, tenantContext]);
+  }, [loadTenantContext]);
 
   return (
     <AuthContext.Provider
