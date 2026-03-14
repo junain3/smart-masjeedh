@@ -3,14 +3,13 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Search, TrendingUp, TrendingDown, Wallet, Calendar, Tag, MoreVertical, X, Edit, Trash2, FileText, QrCode } from "lucide-react";
+import { ArrowLeft, Plus, Search, TrendingUp, TrendingDown, Wallet, Calendar, Tag, MoreVertical, X, Edit, Trash2, FileText, QrCode, Home as HomeIcon, Users, CreditCard, Menu, LogOut, Settings, HelpCircle, Briefcase } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
-import { AppShell } from "@/components/AppShell";
 import { useAppToast } from "@/components/ToastProvider";
-import { EmptyState } from "@/components/EmptyState";
 import { QrScannerModal } from "@/components/QrScannerModal";
+import { useMockAuth } from "@/components/MockAuthProvider";
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +33,7 @@ type Family = {
 export default function AccountsPage() {
   const router = useRouter();
   const { toast, confirm } = useAppToast();
+  const { user, loading: authLoading, tenantContext } = useMockAuth();
   const [lang, setLang] = useState<Language>("en");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
@@ -58,6 +58,7 @@ export default function AccountsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [allowed, setAllowed] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const t = translations[lang];
 
@@ -95,76 +96,56 @@ export default function AccountsPage() {
     return true;
   });
 
+  const filteredTransactions = financialTransactions.filter((tx) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q === "") return true;
+    return (
+      (tx.description || "").toLowerCase().includes(q) ||
+      (tx.category || "").toLowerCase().includes(q) ||
+      (tx.type || "").toLowerCase().includes(q)
+    );
+  });
+
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
-    fetchData();
   }, []);
 
-  const handleQrDecodedText = (decodedText: string) => {
-    if (!decodedText) return;
-    if (decodedText.startsWith("smart-masjeedh:family:")) {
-      const familyId = decodedText.split(":")[2];
-      setSelectedFamilyId(familyId);
-      setType("subscription");
-      setIsModalOpen(true);
-      setIsScannerOpen(false);
-    }
-  };
-
   useEffect(() => {
-    if (editingTransaction) {
-      setAmount(editingTransaction.amount.toString());
-      setDescription(editingTransaction.description);
-      setType(editingTransaction.type === "income" && editingTransaction.family_id ? "subscription" : editingTransaction.type as any);
-      setCategory(editingTransaction.category);
-      setDate(editingTransaction.date);
-      setSelectedFamilyId(editingTransaction.family_id || "");
-      setIsModalOpen(true);
-    }
-  }, [editingTransaction]);
+    if (!user) return;
+    fetchData();
+  }, [user]);
 
   async function fetchData() {
     if (!supabase) return;
     setLoading(true);
     try {
-      const ctx = await getTenantContext();
+      const ctx = tenantContext || await getTenantContext();
       if (!ctx) {
         router.push("/login");
         return;
       }
 
-      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
-      const canAccounts = isAdmin || ctx.permissions?.accounts !== false;
-      setAllowed(canAccounts);
-      if (!canAccounts) {
-        setTransactions([]);
-        setFamilies([]);
-        return;
-      }
-
-      const { data: txData, error: txError } = await supabase
+      const { data: transactionsData, error: transactionsError } = await supabase
         .from("transactions")
         .select("*")
         .eq("masjid_id", ctx.masjidId)
         .order("date", { ascending: false });
 
-      if (txError) {
-        if (!txError.message.includes('table')) throw txError;
-      } else if (txData) {
-        setTransactions(txData);
-      }
+      if (transactionsError) throw transactionsError;
+      setTransactions(transactionsData || []);
 
-      const { data: famData } = await supabase
+      const { data: familiesData, error: familiesError } = await supabase
         .from("families")
         .select("id, family_code, head_name")
         .eq("masjid_id", ctx.masjidId)
-        .order("family_code", { ascending: true });
-      
-      if (famData) setFamilies(famData);
+        .order("family_code");
 
+      if (familiesError) throw familiesError;
+      setFamilies(familiesData || []);
     } catch (err: any) {
-      console.error("Fetch error:", err.message);
+      console.error("Fetch error:", err);
+      toast({ kind: "error", title: "Error", message: err.message || "Failed to fetch data" });
     } finally {
       setLoading(false);
     }
@@ -176,21 +157,12 @@ export default function AccountsPage() {
     setSubmitting(true);
 
     try {
-      const ctx = await getTenantContext();
+      const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
 
-      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
-      const canAccounts = isAdmin || ctx.permissions?.accounts !== false;
-      if (!canAccounts) {
-        toast({ kind: "error", title: "Access denied", message: "You don't have permission." });
-        return;
-      }
-
+      const finalDescription = type === "subscription" ? `Subscription: ${description}` : description;
       const finalType = type === "subscription" ? "income" : type;
-      const finalCategory = type === "subscription" ? t.subscription : category;
-      const finalDescription = type === "subscription" 
-        ? `${t.subscription} - ${families.find(f => f.id === selectedFamilyId)?.family_code}`
-        : description;
+      const finalCategory = type === "subscription" ? "subscription" : category;
 
       if (editingTransaction) {
         const { error } = await supabase
@@ -260,258 +232,348 @@ export default function AccountsPage() {
     }
   };
 
-  if (loading)
-    return (
-      <AppShell title={t.accounts}>
-        <div className="app-card p-6 text-center">
-          <p className="text-xs font-black uppercase tracking-widest text-neutral-600">{t.loading}</p>
-        </div>
-      </AppShell>
-    );
+  const handleLogout = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    router.push("/login");
+  };
 
-  if (!allowed) {
+  if (authLoading || loading) {
     return (
-      <AppShell title={t.accounts}>
-        <div className="app-card p-6 text-center text-[11px] font-bold text-neutral-600">
-          Access denied.
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">{t.loading || "Loading..."}</p>
         </div>
-      </AppShell>
+      </div>
     );
   }
 
+  if (!user) {
+    return null;
+  }
+
   return (
-    <AppShell title={t.accounts}>
-      <div className="space-y-6">
-        {/* Balance Card */}
-        <div className="rounded-3xl p-8 text-white shadow-xl relative overflow-hidden bg-gradient-to-br from-neutral-900 via-neutral-900 to-emerald-900">
-          <div className="absolute top-0 right-0 p-8 opacity-10">
-            <Wallet className="w-24 h-24" />
+    <div className="min-h-screen bg-neutral-50 flex">
+      {/* Sidebar */}
+      <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-72 bg-white border-r border-neutral-200 transform transition-transform duration-300 ease-in-out ${
+        isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      }`}>
+        <div className="h-full flex flex-col">
+          {/* Logo */}
+          <div className="p-6 border-b border-neutral-200">
+            <h1 className="text-2xl font-black text-neutral-900">MJM</h1>
+            <p className="text-sm text-neutral-600">Mubeen Jummah Masjid</p>
           </div>
-          <div className="relative z-10 space-y-1">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">{t.balance}</p>
-            <h2 className="text-4xl font-black">Rs. {financialTransactions.reduce((sum, t) => sum + (getFinancialKind(t) === "income" ? t.amount : -t.amount), 0).toLocaleString()}</h2>
-          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 p-4 space-y-2">
+            <Link href="/" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+              <HomeIcon className="w-5 h-5" />
+              <span>{t.dashboard}</span>
+            </Link>
+            <Link href="/families" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+              <Users className="w-5 h-5" />
+              <span>{t.families}</span>
+            </Link>
+            <Link href="/accounts" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 bg-emerald-50 text-emerald-700 rounded-3xl font-bold transition-all border-2 border-emerald-200">
+              <CreditCard className="w-5 h-5" />
+              <span>{t.accounts}</span>
+            </Link>
+            <Link href="/staff" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+              <Briefcase className="w-5 h-5 text-emerald-600" />
+              <span>{t.staff_management || t.staff}</span>
+            </Link>
+            <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+              <Settings className="w-5 h-5" />
+              <span>{t.settings}</span>
+            </Link>
+            <Link href="/events" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+              <Calendar className="w-5 h-5 text-amber-500" />
+              <span>{t.events || "Events"}</span>
+            </Link>
+            <div className="flex items-center gap-4 p-4 opacity-40 text-neutral-600 rounded-3xl font-bold cursor-not-allowed">
+              <HelpCircle className="w-5 h-5" />
+              <span>Help & Support</span>
+            </div>
+          </nav>
+
+          <button 
+            onClick={handleLogout}
+            className="m-4 flex items-center gap-4 p-4 text-red-600 hover:bg-red-50 rounded-3xl font-bold transition-all"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>{t.logout}</span>
+          </button>
         </div>
+      </aside>
 
-        {/* Add Transaction Button */}
-        <button
-          onClick={() => {
-            resetForm();
-            setIsModalOpen(true);
-          }}
-          className="w-full py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all"
-        >
-          {t.add_transaction}
-        </button>
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-h-screen">
+        {/* Header */}
+        <header className="p-4 flex items-center justify-between sticky top-0 bg-white/80 backdrop-blur-md z-20 border-b border-neutral-200">
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="lg:hidden p-2 text-neutral-600 hover:bg-neutral-50 rounded-3xl transition-colors"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+          <h1 className="text-xl font-black text-neutral-900">{t.accounts}</h1>
+          <div className="w-10"></div>
+        </header>
 
-        {/* Transactions List */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest ml-1">{t.transactions}</h3>
-          {financialTransactions.length === 0 ? (
-            <EmptyState
-              title={lang === "tm" ? "பரிவர்த்தனைகள் இல்லை" : "No transactions"}
-              description={lang === "tm" ? "முதல் பரிவர்த்தனையைச் சேர்க்கவும்" : "Add your first transaction to get started."}
-              icon={<Wallet className="w-8 h-8" />}
+        {/* Page Content */}
+        <main className="flex-1 p-4 lg:p-6 space-y-6">
+          {/* Balance Card */}
+          <div className="rounded-3xl p-8 text-white shadow-xl relative overflow-hidden bg-gradient-to-br from-neutral-900 via-neutral-900 to-emerald-900">
+            <div className="absolute top-0 right-0 p-8 opacity-10">
+              <Wallet className="w-24 h-24" />
+            </div>
+            <div className="relative z-10 space-y-1">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">{t.balance}</p>
+              <h2 className="text-4xl font-black">Rs. {financialTransactions.reduce((sum, t) => sum + (getFinancialKind(t) === "income" ? t.amount : -t.amount), 0).toLocaleString()}</h2>
+            </div>
+          </div>
+
+          {/* Add Transaction Button */}
+          <button
+            onClick={() => {
+              resetForm();
+              setIsModalOpen(true);
+            }}
+            className="w-full py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all"
+          >
+            {t.add_transaction}
+          </button>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-neutral-400" />
+            <input
+              type="text"
+              placeholder={t.search || "Search transactions..."}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-4 bg-white border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
             />
-          ) : (
-            financialTransactions.map((tx, idx) => {
-              const kind = getFinancialKind(tx);
-              const altBg = idx % 2 === 0 ? "bg-white/65" : "bg-emerald-50/20";
-              return (
-                <div
-                  key={tx.id}
-                  className={`app-glass-card ${altBg} p-5 flex items-center justify-between group hover:border-emerald-200 transition-all relative overflow-hidden`}
-                >
+          </div>
+
+          {/* Transactions List */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest ml-1">{t.transactions}</h3>
+            {filteredTransactions.length === 0 ? (
+              <div className="bg-white rounded-3xl p-8 text-center border border-neutral-200">
+                <Wallet className="w-12 h-12 mx-auto mb-4 text-neutral-300" />
+                <h3 className="font-semibold text-neutral-900 mb-2">
+                  {searchQuery ? "No transactions found" : (lang === "tm" ? "பரிவர்த்தனைகள் இல்லை" : "No transactions")}
+                </h3>
+                <p className="text-sm text-neutral-600">
+                  {searchQuery ? "Try a different search term" : (lang === "tm" ? "முதல் பரிவர்த்தனையைச் சேர்க்கவும்" : "Add your first transaction to get started.")}
+                </p>
+              </div>
+            ) : (
+              filteredTransactions.map((tx, idx) => {
+                const kind = getFinancialKind(tx);
+                const altBg = idx % 2 === 0 ? "bg-white/65" : "bg-emerald-50/20";
+                return (
                   <div
-                    className={`absolute left-0 top-3 bottom-3 w-1 rounded-full ${
-                      kind === "income" ? "bg-emerald-600" : "bg-rose-600"
-                    }`}
-                  />
-                  <div className="flex items-center gap-4">
+                    key={tx.id}
+                    className={`bg-white rounded-3xl p-5 flex items-center justify-between group hover:border-emerald-200 transition-all relative overflow-hidden border ${altBg}`}
+                  >
                     <div
-                      className={`w-12 h-12 rounded-3xl border flex items-center justify-center ${
-                        kind === "income"
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                          : "bg-rose-50 text-rose-700 border-rose-200"
+                      className={`absolute left-0 top-3 bottom-3 w-1 rounded-full ${
+                        kind === "income" ? "bg-emerald-600" : "bg-rose-600"
                       }`}
-                    >
-                      {kind === "income" ? (
-                        <TrendingUp className="w-6 h-6" />
-                      ) : (
-                        <TrendingDown className="w-6 h-6" />
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className={`text-sm font-black uppercase tracking-widest ${
+                          kind === "income" ? "text-emerald-600" : "text-rose-600"
+                        }`}>
+                          {kind === "income" ? "Income" : "Expense"}
+                        </span>
+                        <span className="text-xs text-neutral-500">{tx.date}</span>
+                      </div>
+                      <p className="font-semibold text-neutral-900 mb-1">{tx.description}</p>
+                      {tx.category && (
+                        <p className="text-sm text-neutral-600">{tx.category}</p>
                       )}
                     </div>
-                    <div>
-                      <h4 className="text-sm font-black text-neutral-900">
-                        {tx.description}
-                      </h4>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] font-bold text-neutral-600 uppercase">
-                          {tx.category}
-                        </span>
-                        <span className="text-neutral-300">•</span>
-                        <span className="text-[10px] font-bold text-neutral-600 uppercase">
-                          {tx.date}
-                        </span>
+                    <div className="text-right">
+                      <p className={`text-xl font-black ${
+                        kind === "income" ? "text-emerald-600" : "text-rose-600"
+                      }`}>
+                        {kind === "income" ? "+" : "-"}Rs. {tx.amount.toLocaleString()}
+                      </p>
+                      <div className="flex gap-1 mt-2">
+                        <button
+                          onClick={() => {
+                            setEditingTransaction(tx);
+                            setAmount(tx.amount.toString());
+                            setDescription(tx.description.replace(/^(Subscription|Income|Expense):\s*/i, ""));
+                            setCategory(tx.category);
+                            setDate(tx.date);
+                            setType(tx.type);
+                            setIsModalOpen(true);
+                          }}
+                          className="p-1 text-neutral-400 hover:text-emerald-600 transition-colors"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteTransaction(tx.id)}
+                          className="p-1 text-neutral-400 hover:text-rose-600 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <div className="text-right mr-2">
-                      <p
-                        className={`font-black text-sm ${
-                          kind === "income"
-                            ? "text-emerald-700"
-                            : "text-rose-700"
-                        }`}
-                      >
-                        {kind === "income" ? "+" : "-"} Rs.{" "}
-                        {tx.amount.toLocaleString()}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setEditingTransaction(tx)}
-                      className="p-2 text-neutral-600 hover:bg-neutral-50 rounded-3xl transition-all"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => deleteTransaction(tx.id)}
-                      className="p-2 text-rose-700 hover:bg-rose-50 rounded-3xl transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                );
+              })
+            )}
+          </div>
+        </main>
       </div>
 
-      {/* Add Transaction Modal */}
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Add/Edit Transaction Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
-          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-black text-neutral-900">{t.add_transaction}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors">
-                <X className="w-6 h-6 text-neutral-400" />
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-black text-neutral-900">
+                {editingTransaction ? "Edit Transaction" : t.add_transaction}
+              </h2>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Type Toggle */}
-              <div className="grid grid-cols-3 gap-2 p-1 bg-neutral-50 rounded-3xl border border-neutral-200">
-                <button
-                  type="button"
-                  onClick={() => setType("income")}
-                  className={`py-3 rounded-3xl font-black text-[10px] uppercase tracking-widest transition-all ${
-                    type === "income" ? "bg-white text-emerald-700 shadow-sm" : "text-neutral-600"
-                  }`}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  {t.type}
+                </label>
+                <select
+                  value={type}
+                  onChange={(e) => setType(e.target.value as any)}
+                  className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  {t.income}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setType("subscription")}
-                  className={`py-3 rounded-3xl font-black text-[10px] uppercase tracking-widest transition-all ${
-                    type === "subscription" ? "bg-white text-emerald-700 shadow-sm" : "text-neutral-600"
-                  }`}
-                >
-                  {t.subscription}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setType("expense")}
-                  className={`py-3 rounded-3xl font-black text-[10px] uppercase tracking-widest transition-all ${
-                    type === "expense" ? "bg-white text-rose-700 shadow-sm" : "text-neutral-600"
-                  }`}
-                >
-                  {t.expense}
-                </button>
+                  <option value="income">Income</option>
+                  <option value="expense">Expense</option>
+                  <option value="subscription">Subscription</option>
+                </select>
               </div>
 
-              {type === "subscription" && (
-                <div className="app-field animate-in fade-in slide-in-from-top-2 duration-300">
-                  <label className="app-label">{t.select_family}</label>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  {t.amount}
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  {t.description}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="Enter description"
+                />
+              </div>
+
+              {type === "income" || type === "expense" ? (
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    {t.category}
+                  </label>
+                  <input
+                    type="text"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Enter category"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    {t.family}
+                  </label>
                   <select
-                    required
                     value={selectedFamilyId}
-                    onChange={e => setSelectedFamilyId(e.target.value)}
-                    className="app-select font-bold appearance-none"
+                    onChange={(e) => setSelectedFamilyId(e.target.value)}
+                    className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    <option value="">{t.select_family}</option>
-                    {families.map(f => (
-                      <option key={f.id} value={f.id}>{f.family_code} - {f.head_name}</option>
+                    <option value="">Select Family</option>
+                    {families.map((family) => (
+                      <option key={family.id} value={family.id}>
+                        {family.family_code} - {family.head_name}
+                      </option>
                     ))}
                   </select>
                 </div>
               )}
 
-              <div className="app-field">
-                <label className="app-label">{t.amount}</label>
-                <input 
-                  required
-                  type="number"
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                  className="app-input text-lg font-black"
-                  placeholder="0"
-                  step="0.01"
-                />
-              </div>
-
-              {type !== "subscription" && (
-                <div className="app-field">
-                  <label className="app-label">{t.description}</label>
-                  <input 
-                    required
-                    type="text"
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    className="app-input font-bold"
-                    placeholder={t.description}
-                  />
-                </div>
-              )}
-
-              {type !== "subscription" && (
-                <div className="app-field">
-                  <label className="app-label">{t.category}</label>
-                  <input 
-                    required
-                    type="text"
-                    value={category}
-                    onChange={e => setCategory(e.target.value)}
-                    className="app-input font-bold"
-                    placeholder={t.category}
-                  />
-                </div>
-              )}
-
-              <div className="app-field">
-                <label className="app-label">{t.date}</label>
-                <input 
-                  required
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  {t.date}
+                </label>
+                <input
                   type="date"
+                  required
                   value={date}
-                  onChange={e => setDate(e.target.value)}
-                  className="app-input font-bold"
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all"
+                className="w-full py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-50 transition-all"
               >
-                {submitting ? t.loading : (editingTransaction ? "Update Transaction" : t.add_transaction)}
+                {submitting ? "Saving..." : (editingTransaction ? "Update" : t.save)}
               </button>
             </form>
           </div>
         </div>
       )}
-    </AppShell>
+
+      {/* QR Scanner Modal */}
+      {isScannerOpen && (
+        <QrScannerModal
+          open={isScannerOpen}
+          title="Scan QR Code"
+          containerId="qr-scanner"
+          onClose={() => setIsScannerOpen(false)}
+          onDecodedText={() => {}}
+        />
+      )}
+    </div>
   );
 }
