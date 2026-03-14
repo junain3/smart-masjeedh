@@ -7,6 +7,7 @@ import { Calendar, Plus, ArrowLeft, FileText, QrCode, Edit2, Trash2, X } from "l
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { useMinimalAuth } from "@/components/MinimalAuthProvider";
+import { getTenantContext } from "@/lib/tenant";
 import { AppShell } from "@/components/AppShell";
 
 export const dynamic = 'force-dynamic';
