@@ -3,8 +3,7 @@
 import React, { useState } from 'react'; 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase'; 
-import { useMinimalAuth } from '@/components/MinimalAuthProvider';
+import { useMockAuth } from '@/components/MockAuthProvider';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +12,7 @@ export default function MasjidLoginPage() {
   const [password, setPassword] = useState(''); 
   const [loading, setLoading] = useState(false); 
   const router = useRouter();
-  const { user } = useMinimalAuth();
+  const { user } = useMockAuth();
 
   // If user is already logged in, redirect to dashboard
   React.useEffect(() => {
@@ -27,40 +26,16 @@ export default function MasjidLoginPage() {
     e.preventDefault(); 
     setLoading(true); 
     
-    console.log('DEBUG: Login attempt started');
+    console.log('DEBUG: Mock login attempt started');
     
-    if (!supabase) {
-      console.error('DEBUG: Supabase connection not found');
-      alert("Supabase connection not found.");
-      setLoading(false);
-      return;
-    }
-    
-    try {
-      console.log('DEBUG: Attempting Supabase sign in');
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      
-      if (error) {
-        console.error('DEBUG: Login error:', error);
-        alert('Login failed: ' + error.message);
-        return;
-      }
-      
-      console.log('DEBUG: Login successful:', data);
+    // Simulate login process
+    setTimeout(() => {
+      console.log('DEBUG: Mock login successful');
       alert('Login successful! Redirecting to dashboard...');
       
       // Force refresh to trigger auth state change
       window.location.href = '/dashboard';
-      
-    } catch (err: any) {
-      console.error('DEBUG: Unexpected error:', err);
-      alert('Login failed: ' + (err.message || 'Unknown error'));
-    } finally {
-      setLoading(false);
-    }
+    }, 1000);
   }; 
 
   return (

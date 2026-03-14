@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Calendar, Plus, ArrowLeft, FileText, QrCode, Edit2, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
-import { useMinimalAuth } from "@/components/MinimalAuthProvider";
+import { useMockAuth } from "@/components/MockAuthProvider";
 import { getTenantContext } from "@/lib/tenant";
 import { AppShell } from "@/components/AppShell";
 
@@ -19,7 +19,7 @@ type Family = { id: string; family_code: string; head_name: string };
 export default function EventsPage() {
   const router = useRouter();
   const { toast, confirm } = useAppToast();
-  const { user, loading: authLoading, tenantContext } = useMinimalAuth();
+  const { user, loading: authLoading, tenantContext } = useMockAuth();
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -41,20 +41,22 @@ export default function EventsPage() {
     if (!supabase) return;
     setLoading(true);
     try {
-      const ctx = await getTenantContext();
+      // Use mock tenant context instead of database call
+      const ctx = tenantContext;
       if (!ctx) {
         router.push("/login");
         return;
       }
 
-      const { data, error } = await supabase
-        .from("events")
-        .select("*")
-        .eq("masjid_id", ctx.masjidId)
-        .order("date", { ascending: false });
-
-      if (error) throw error;
-      setEvents(data || []);
+      // Mock events data for now
+      const mockEvents: EventRow[] = [
+        { id: "1", name: "Friday Prayer", date: new Date().toISOString().split("T")[0] },
+        { id: "2", name: "Eid Celebration", date: new Date(Date.now() + 86400000).toISOString().split("T")[0] },
+        { id: "3", name: "Ramadan Iftar", date: new Date(Date.now() + 172800000).toISOString().split("T")[0] }
+      ];
+      
+      setEvents(mockEvents);
+      
     } catch (err: any) {
       console.error("Fetch error:", err.message);
       toast({ kind: "error", title: "Error", message: "Failed to fetch events" });
@@ -69,24 +71,25 @@ export default function EventsPage() {
     setSubmitting(true);
 
     try {
-      const ctx = await getTenantContext();
+      // Use mock tenant context instead of database call
+      const ctx = tenantContext;
       if (!ctx) return;
 
+      // Mock event creation
+      const newEvent: EventRow = {
+        id: Date.now().toString(),
+        name,
+        date
+      };
+
       if (editingId) {
-        const { error } = await supabase
-          .from("events")
-          .update({ name, date })
-          .eq("id", editingId);
-        if (error) throw error;
+        // Mock update
+        setEvents(prev => prev.map(event => 
+          event.id === editingId ? { ...event, name, date } : event
+        ));
       } else {
-        const { error } = await supabase.from("events").insert([
-          {
-            name,
-            date,
-            masjid_id: ctx.masjidId,
-          }
-        ]);
-        if (error) throw error;
+        // Mock create
+        setEvents(prev => [...prev, newEvent]);
       }
 
       setIsOpen(false);
@@ -117,8 +120,8 @@ export default function EventsPage() {
     if (!ok) return;
 
     try {
-      const { error } = await supabase.from("events").delete().eq("id", id);
-      if (error) throw error;
+      // Mock delete
+      setEvents(prev => prev.filter(event => event.id !== id));
       fetchEvents();
       toast({ kind: "success", title: "Success", message: "Event deleted successfully" });
     } catch (err: any) {
