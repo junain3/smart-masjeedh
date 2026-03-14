@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search, Briefcase } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
-import { useMinimalAuth } from "@/components/MinimalAuthProvider";
+import { useMockAuth } from "@/components/MockAuthProvider";
 
 import { getTenantContext } from "@/lib/tenant";
 import { useAppToast } from "@/components/ToastProvider";
@@ -20,7 +20,7 @@ type MasjidProfile = {
 
 export default function DashboardPage() {
   const { toast } = useAppToast();
-  const { user, loading: authLoading, tenantContext } = useMinimalAuth();
+  const { user, loading: authLoading, tenantContext } = useMockAuth();
   const router = useRouter();
 
   const [time, setTime] = useState(new Date());
