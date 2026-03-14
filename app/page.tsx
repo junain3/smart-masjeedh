@@ -2,13 +2,13 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useMinimalAuth } from "@/components/MinimalAuthProvider";
+import { useMockAuth } from "@/components/MockAuthProvider";
 
 export const dynamic = 'force-dynamic';
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, loading } = useMinimalAuth();
+  const { user, loading } = useMockAuth();
 
   useEffect(() => {
     if (!loading) {
