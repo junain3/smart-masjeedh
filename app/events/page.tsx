@@ -153,7 +153,7 @@ export default function EventsPage() {
             setIsOpen(true);
           }}
           className="p-3 bg-emerald-600 text-white rounded-3xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all"
-          title={t.add_event}
+          title={t.new_event}
         >
           <Plus className="w-6 h-6" />
         </button>
@@ -175,7 +175,7 @@ export default function EventsPage() {
                 }}
                 className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
               >
-                {t.add_event}
+                {t.new_event}
               </button>
             </div>
           ) : (
@@ -222,7 +222,7 @@ export default function EventsPage() {
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-black text-neutral-900">{t.add_event}</h2>
+              <h2 className="text-2xl font-black text-neutral-900">{t.new_event}</h2>
               <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors">
                 <X className="w-6 h-6 text-neutral-400" />
               </button>
