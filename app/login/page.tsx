@@ -3,7 +3,7 @@
 import React, { useState } from 'react'; 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useMockAuth } from '@/components/MockAuthProvider';
+import { useMinimalAuth } from '@/components/MinimalAuthProvider';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +12,7 @@ export default function MasjidLoginPage() {
   const [password, setPassword] = useState(''); 
   const [loading, setLoading] = useState(false); 
   const router = useRouter();
-  const { user } = useMockAuth();
+  const { user } = useMinimalAuth();
 
   // If user is already logged in, redirect to dashboard
   React.useEffect(() => {
