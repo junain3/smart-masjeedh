@@ -4,6 +4,7 @@
 // These examples show how to safely handle transactions
 // in a multi-user environment with strict user isolation
 
+import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
 // =====================================================
