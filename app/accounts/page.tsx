@@ -33,7 +33,7 @@ type Family = {
 
 export default function AccountsPage() {
   const router = useRouter();
-  const { user, loading: authLoading, isAuthenticated } = useAuthSession();
+  const { user, loading: authLoading, isAuthenticated, signOut } = useAuthSession();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [families, setFamilies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
