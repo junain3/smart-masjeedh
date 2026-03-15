@@ -31,7 +31,10 @@ export default function MasjidRegisterPage() {
       console.log('DEBUG: Creating auth user...');
       const { data: authData, error: authError } = await supabase.auth.signUp({ 
         email, 
-        password, 
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/login`
+        }
       }); 
 
       console.log('DEBUG: Auth result:', { 
@@ -109,9 +112,16 @@ export default function MasjidRegisterPage() {
 
           console.log('DEBUG: Registration successful!');
           
-          // 4. Show success message
+          // 4. Show success message with email verification
           setStep(2);
           setLoading(false);
+          
+          // Show email verification message
+          if (authData.user && !authData.user.email_confirmed_at) {
+            setTimeout(() => {
+              alert(`📧 Email verification sent to ${email}!\n\nPlease check your inbox and click the verification link to complete registration.\n\nAfter verification, you can login with your credentials.`);
+            }, 1000);
+          }
         }
       }
     } catch (error: any) {
@@ -205,8 +215,22 @@ export default function MasjidRegisterPage() {
               <p className="text-slate-600 mb-4">
                 உங்கள் மஸ்ஜித் &quot;{masjidName}&quot; வெற்றிகரமாக உருவாக்கப்பட்டது
               </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-4">
+                <div className="flex items-center justify-center mb-2">
+                  <svg className="w-6 h-6 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                  </svg>
+                  <span className="text-blue-800 font-bold">மின்னஞ்சல் உறுதிப்படுத்தல்</span>
+                </div>
+                <p className="text-blue-700 text-sm">
+                  உறுதிப்படுத்தல் இணைப்பு <strong>{email}</strong> க்கு அனுப்பப்பட்டுள்ளது
+                </p>
+                <p className="text-blue-600 text-xs mt-2">
+                  உங்கள் மின்னஞ்சலை சரிபார்த்து உறுதிப்படுத்தல் இணைப்பைக் கிளிக் செய்யவும்
+                </p>
+              </div>
               <p className="text-slate-500 text-sm">
-                தயவுசெய்து உங்கள் மின்னஞ்சலை சரிபார்க்கவும். உறுதிப்படுத்தல் இணைப்பு அனுப்பப்பட்டுள்ளது.
+                உறுதிப்படுத்தலுக்குப் பிறகு உள்நுழையலாம்
               </p>
             </div>
             <button 
