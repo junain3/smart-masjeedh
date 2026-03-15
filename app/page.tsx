@@ -584,6 +584,20 @@ export default function DashboardPage() {
           </p>
         </div>
 
+        {/* Quick Stats Cards - Below Masjid Name Bar */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white border-2 border-emerald-200 rounded-2xl p-4 text-center shadow-lg">
+            <Users className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+            <p className="text-xs font-black text-emerald-700 uppercase tracking-widest">TOTAL FAMILIES</p>
+            <p className="text-3xl font-black text-emerald-800">{familyCount || 2}</p>
+          </div>
+          <div className="bg-white border-2 border-emerald-200 rounded-2xl p-4 text-center shadow-lg">
+            <User className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+            <p className="text-xs font-black text-emerald-700 uppercase tracking-widest">TOTAL MEMBERS</p>
+            <p className="text-3xl font-black text-emerald-800">{memberCount || 1}</p>
+          </div>
+        </div>
+
         {/* Search Bar */}
         <div className="relative group">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400 group-focus-within:text-emerald-600 transition-colors" />
@@ -621,20 +635,6 @@ export default function DashboardPage() {
           </Link>
           <div className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center">
             <MoreHorizontal className="w-6 h-6 text-emerald-700" />
-          </div>
-        </div>
-
-        {/* Quick Stats Cards */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-emerald-50 rounded-2xl p-4 text-center border border-emerald-100">
-            <Users className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-            <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest">TOTAL FAMILIES</p>
-            <p className="text-3xl font-black text-emerald-800">{familyCount || 2}</p>
-          </div>
-          <div className="bg-emerald-50 rounded-2xl p-4 text-center border border-emerald-100">
-            <User className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-            <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest">TOTAL MEMBERS</p>
-            <p className="text-3xl font-black text-emerald-800">{memberCount || 1}</p>
           </div>
         </div>
       </main>
