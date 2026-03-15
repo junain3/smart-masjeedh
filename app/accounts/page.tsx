@@ -230,6 +230,79 @@ export default function AccountsPage() {
     } catch (err: any) {
       toast({ kind: "error", title: "Error", message: err.message || "Failed" });
     }
+  }
+
+  const handlePrintPDF = async () => {
+    try {
+      // Create printable HTML
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      if (!printWindow) {
+        alert('Please allow popups for this website to print PDF');
+        return;
+      }
+      
+      const html = `
+        <html>
+          <head>
+            <title>Account Transactions - MJM</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; }
+              h1 { color: #047857; text-align: center; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #047857; color: white; }
+              .income { color: #059669; }
+              .expense { color: #dc2626; }
+              .subscription { color: #7c3aed; }
+              .header { text-align: center; margin-bottom: 30px; }
+              .date { text-align: right; margin-bottom: 20px; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>Mubeen Jummah Masjid</h1>
+              <h2>Account Transactions</h2>
+            </div>
+            <div class="date">Generated: ${new Date().toLocaleDateString()}</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Category</th>
+                  <th>Type</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${transactions.map(tx => `
+                  <tr>
+                    <td>${new Date(tx.date).toLocaleDateString()}</td>
+                    <td>${tx.description}</td>
+                    <td>${tx.category || '-'}</td>
+                    <td><span class="${tx.type}">${tx.type}</span></td>
+                    <td class="${tx.type}">${tx.type === 'income' ? '+' : '-'}₹${tx.amount}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            <div style="margin-top: 20px; text-align: right;">
+              <strong>Total Income: ₹${transactions.filter(tx => tx.type === 'income').reduce((sum, tx) => sum + tx.amount, 0)}</strong><br>
+              <strong>Total Expense: ₹${transactions.filter(tx => tx.type === 'expense').reduce((sum, tx) => sum + tx.amount, 0)}</strong><br>
+              <strong>Total Subscriptions: ₹${transactions.filter(tx => tx.type === 'subscription').reduce((sum, tx) => sum + tx.amount, 0)}</strong>
+            </div>
+          </body>
+        </html>
+      `;
+      
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.print();
+      
+    } catch (error) {
+      console.error('Accounts: PDF generation error:', error);
+      alert('PDF generation failed: ' + (error as Error).message);
+    }
   };
 
   const handleLogout = async () => {
@@ -335,15 +408,23 @@ export default function AccountsPage() {
           </div>
 
           {/* Add Transaction Button */}
-          <button
-            onClick={() => {
-              resetForm();
-              setIsModalOpen(true);
-            }}
-            className="w-full py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all"
-          >
-            {t.add_transaction}
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                resetForm();
+                setIsModalOpen(true);
+              }}
+              className="flex-1 py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all"
+            >
+              {t.add_transaction}
+            </button>
+            <button
+              onClick={handlePrintPDF}
+              className="flex-1 py-4 bg-blue-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all"
+            >
+              Download PDF
+            </button>
+          </div>
 
           {/* Search */}
           <div className="relative">

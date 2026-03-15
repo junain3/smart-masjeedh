@@ -20,7 +20,12 @@ DROP POLICY IF EXISTS "Users can delete members in their masjid" ON members;
 DROP POLICY IF EXISTS "Users can view user_roles of their masjid" ON user_roles;
 DROP POLICY IF EXISTS "Users can insert user_roles in their masjid" ON user_roles;
 DROP POLICY IF EXISTS "Users can update user_roles in their masjid" ON user_roles;
-DROP POLICY IF EXISTS "Users can delete user_roles in their masjid" ON user_roles;
+DROP POLICY IF EXISTS "Users can delete user_roles of their masjid" ON user_roles;
+
+DROP POLICY IF EXISTS "Users can view transactions of their masjid" ON transactions;
+DROP POLICY IF EXISTS "Users can insert transactions in their masjid" ON transactions;
+DROP POLICY IF EXISTS "Users can update transactions in their masjid" ON transactions;
+DROP POLICY IF EXISTS "Users can delete transactions in their masjid" ON transactions;
 
 -- Step 2: Enable RLS on all tables
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
@@ -28,6 +33,7 @@ ALTER TABLE families ENABLE ROW LEVEL SECURITY;
 ALTER TABLE members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE masjids ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 
 -- Step 3: Create secure policies for events table
 CREATE POLICY "Users can view events of their masjid"
@@ -173,7 +179,43 @@ USING (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
 ));
 
--- Step 7: Create secure policies for masjids table
+-- Step 7: Create secure policies for transactions table
+CREATE POLICY "Users can view transactions of their masjid"
+ON transactions
+FOR SELECT
+TO authenticated
+USING (masjid_id IN (
+  SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
+));
+
+CREATE POLICY "Users can insert transactions in their masjid"
+ON transactions
+FOR INSERT
+TO authenticated
+WITH CHECK (masjid_id IN (
+  SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
+));
+
+CREATE POLICY "Users can update transactions in their masjid"
+ON transactions
+FOR UPDATE
+TO authenticated
+USING (masjid_id IN (
+  SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
+))
+WITH CHECK (masjid_id IN (
+  SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
+));
+
+CREATE POLICY "Users can delete transactions in their masjid"
+ON transactions
+FOR DELETE
+TO authenticated
+USING (masjid_id IN (
+  SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
+));
+
+-- Step 8: Create secure policies for masjids table
 CREATE POLICY "Users can view masjids they have access to"
 ON masjids
 FOR SELECT
