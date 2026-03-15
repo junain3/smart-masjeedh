@@ -20,7 +20,7 @@ type MasjidProfile = {
 
 export default function DashboardPage() {
   const { toast } = useAppToast();
-  const { user, loading: authLoading, tenantContext } = useMockAuth();
+  const { user, loading: authLoading, tenantContext, signOut } = useMockAuth();
   const router = useRouter();
 
   const [time, setTime] = useState(new Date());
@@ -462,8 +462,7 @@ export default function DashboardPage() {
   };
 
   const handleLogout = async () => {
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    await signOut();
     router.push('/login');
   };
 

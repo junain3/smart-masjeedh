@@ -27,7 +27,7 @@ type Staff = {
 export default function StaffPage() {
   const router = useRouter();
   const { toast, confirm } = useAppToast();
-  const { user, loading: authLoading, tenantContext } = useMockAuth();
+  const { user, loading: authLoading, tenantContext, signOut } = useMockAuth();
   const [lang, setLang] = useState<Language>("en");
   const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
@@ -228,10 +228,8 @@ export default function StaffPage() {
   };
 
   const handleLogout = async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
-    }
-    router.push("/login");
+    await signOut();
+    router.push('/login');
   };
 
   if (authLoading || loading) {

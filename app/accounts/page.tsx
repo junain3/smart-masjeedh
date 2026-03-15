@@ -33,7 +33,7 @@ type Family = {
 export default function AccountsPage() {
   const router = useRouter();
   const { toast, confirm } = useAppToast();
-  const { user, loading: authLoading, tenantContext } = useMockAuth();
+  const { user, loading: authLoading, tenantContext, signOut } = useMockAuth();
   const [lang, setLang] = useState<Language>("en");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
@@ -233,10 +233,8 @@ export default function AccountsPage() {
   };
 
   const handleLogout = async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
-    }
-    router.push("/login");
+    await signOut();
+    router.push('/login');
   };
 
   if (authLoading || loading) {
