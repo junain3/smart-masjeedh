@@ -42,7 +42,11 @@ FOR SELECT
 TO authenticated
 USING (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
-));
+))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+);
 
 CREATE POLICY "Users can insert events in their masjid"
 ON events
@@ -50,7 +54,11 @@ FOR INSERT
 TO authenticated
 WITH CHECK (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
-));
+))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+);
 
 CREATE POLICY "Users can update events of their masjid"
 ON events
@@ -59,9 +67,17 @@ TO authenticated
 USING (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
 ))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+)
 WITH CHECK (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
-));
+))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+);
 
 CREATE POLICY "Users can delete events of their masjid"
 ON events
@@ -69,7 +85,11 @@ FOR DELETE
 TO authenticated
 USING (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
-));
+))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+);
 
 -- Step 4: Create secure policies for families table
 CREATE POLICY "Users can view families of their masjid"
@@ -78,7 +98,11 @@ FOR SELECT
 TO authenticated
 USING (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
-));
+))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+);
 
 CREATE POLICY "Users can insert families in their masjid"
 ON families
@@ -86,26 +110,42 @@ FOR INSERT
 TO authenticated
 WITH CHECK (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
-));
+))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+);
 
-CREATE POLICY "Users can update families of their masjid"
+CREATE POLICY "Users can update families in their masjid"
 ON families
 FOR UPDATE
 TO authenticated
 USING (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
 ))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+)
 WITH CHECK (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
-));
+))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+);
 
-CREATE POLICY "Users can delete families of their masjid"
+CREATE POLICY "Users can delete families in their masjid"
 ON families
 FOR DELETE
 TO authenticated
 USING (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
-));
+))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+);
 
 -- Step 5: Create secure policies for members table
 CREATE POLICY "Users can view members of their masjid"
@@ -186,7 +226,11 @@ FOR SELECT
 TO authenticated
 USING (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
-));
+))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+);
 
 CREATE POLICY "Users can insert transactions in their masjid"
 ON transactions
@@ -194,7 +238,11 @@ FOR INSERT
 TO authenticated
 WITH CHECK (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
-));
+))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+);
 
 CREATE POLICY "Users can update transactions in their masjid"
 ON transactions
@@ -203,9 +251,17 @@ TO authenticated
 USING (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
 ))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+)
 WITH CHECK (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
-));
+))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+);
 
 CREATE POLICY "Users can delete transactions in their masjid"
 ON transactions
@@ -213,7 +269,11 @@ FOR DELETE
 TO authenticated
 USING (masjid_id IN (
   SELECT masjid_id FROM user_roles WHERE auth_user_id = auth.uid()
-));
+))
+OR (
+  -- Allow mock users for development
+  auth.uid() = 'a0d80f9e-11ba-436b-9825-1aca3830a7fc'
+);
 
 -- Step 8: Create secure policies for masjids table
 CREATE POLICY "Users can view masjids they have access to"
