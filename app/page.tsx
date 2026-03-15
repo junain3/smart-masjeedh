@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search, Briefcase } from "lucide-react";
+import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search, Briefcase, MoreHorizontal, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { useMockAuth } from "@/components/MockAuthProvider";
@@ -553,7 +553,7 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-7 space-y-8 w-full">
+      <main className="flex-1 p-4 space-y-6 w-full">
         {/* Date Display */}
         <div className="text-center">
           <p className="text-lg font-bold text-neutral-900">
@@ -561,95 +561,105 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Dashboard Hero */}
-        <div className="app-hero relative overflow-hidden">
-          <div className="absolute -top-20 -right-16 w-64 h-64 rounded-full bg-white/10 blur-2xl" />
-          <div className="absolute -bottom-20 -left-16 w-64 h-64 rounded-full bg-black/10 blur-2xl" />
-          <div className="relative flex items-center gap-5">
-            <div className="w-16 h-16 rounded-full app-glass border-2 border-white/70 flex items-center justify-center overflow-hidden">
-              {masjid?.logo_url ? (
-                <img src={masjid.logo_url} alt="Logo" className="w-full h-full object-cover" />
-              ) : (
-                <div className="text-white/90">
-                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2L4 7v11h16V7l-8-5z"></path>
-                    <path d="M12 22v-4"></path>
-                    <path d="M8 18v4"></path>
-                    <path d="M16 18v4"></path>
-                    <path d="M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path>
-                  </svg>
-                </div>
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/75">
-                Welcome back
-              </p>
-              <h2 className="mt-1 text-2xl font-black tracking-tight text-white truncate">
-                {user?.email?.split('@')[0] || "mohammedjunain"}!
-              </h2>
-              <p className="mt-1 text-[11px] font-bold text-white/80 truncate">
-                {(masjid?.name || "MUBEEN JUMMA MASJEEDH").toUpperCase()}
-              </p>
-            </div>
+        {/* Circular Mosque Logo */}
+        <div className="flex justify-center">
+          <div className="w-24 h-24 rounded-full bg-emerald-100 border-4 border-emerald-200 flex items-center justify-center">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#047857" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2L4 7v11h16V7l-8-5z"></path>
+              <path d="M12 22v-4"></path>
+              <path d="M8 18v4"></path>
+              <path d="M16 18v4"></path>
+              <path d="M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path>
+            </svg>
           </div>
         </div>
 
-        {/* Stats Cards */}
+        {/* Masjid Name Bar */}
+        <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-3xl p-6 text-center shadow-xl">
+          <h1 className="text-2xl font-black text-white tracking-wide">
+            MUBEEN JUMMAH MASJID
+          </h1>
+          <p className="text-sm text-emerald-100 mt-1">
+            Mubeen Jummah Masjid
+          </p>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative group">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400 group-focus-within:text-emerald-600 transition-colors" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={lang === "tm" ? "எதை வேண்டுமானாலும் தேடுக..." : "Search anything..."}
+            className="app-input pl-12 font-bold"
+          />
+        </div>
+
+        {/* Menu Grid - 4 Column Circular Icons */}
+        <div className="grid grid-cols-4 gap-4 justify-items-center">
+          <Link href="/families" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <Users className="w-6 h-6 text-emerald-700" />
+          </Link>
+          <Link href="/accounts" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <CreditCard className="w-6 h-6 text-emerald-700" />
+          </Link>
+          <Link href="/collections" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <FileText className="w-6 h-6 text-emerald-700" />
+          </Link>
+          <Link href="/events" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <Calendar className="w-6 h-6 text-emerald-700" />
+          </Link>
+          <Link href="/staff" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <Briefcase className="w-6 h-6 text-emerald-700" />
+          </Link>
+          <Link href="/accounts" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <Settings className="w-6 h-6 text-emerald-700" />
+          </Link>
+          <Link href="/settings" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <Settings className="w-6 h-6 text-emerald-700" />
+          </Link>
+          <div className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center">
+            <MoreHorizontal className="w-6 h-6 text-emerald-700" />
+          </div>
+        </div>
+
+        {/* Quick Stats Cards */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="app-card p-4 text-center">
+          <div className="bg-emerald-50 rounded-2xl p-4 text-center border border-emerald-100">
             <Users className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-            <p className="text-2xl font-black text-neutral-900">{familyCount || 0}</p>
-            <p className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{t.families}</p>
+            <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest">TOTAL FAMILIES</p>
+            <p className="text-3xl font-black text-emerald-800">{familyCount || 2}</p>
           </div>
-          <div className="app-card p-4 text-center">
+          <div className="bg-emerald-50 rounded-2xl p-4 text-center border border-emerald-100">
             <User className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-            <p className="text-2xl font-black text-neutral-900">{memberCount || 0}</p>
-            <p className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{t.members}</p>
+            <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest">TOTAL MEMBERS</p>
+            <p className="text-3xl font-black text-emerald-800">{memberCount || 1}</p>
           </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 gap-4">
-          <Link href="/families" className="app-card p-4 text-center group hover:border-emerald-200 transition-all">
-            <Users className="w-8 h-8 text-emerald-600 mx-auto mb-2 group-hover:scale-110 transition-transform" />
-            <p className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{t.families}</p>
-          </Link>
-          <Link href="/accounts" className="app-card p-4 text-center group hover:border-emerald-200 transition-all">
-            <CreditCard className="w-8 h-8 text-emerald-600 mx-auto mb-2 group-hover:scale-110 transition-transform" />
-            <p className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{t.accounts}</p>
-          </Link>
-          <Link href="/staff" className="app-card p-4 text-center group hover:border-emerald-200 transition-all">
-            <Briefcase className="w-8 h-8 text-emerald-600 mx-auto mb-2 group-hover:scale-110 transition-transform" />
-            <p className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{t.staff_management || "Staff"}</p>
-          </Link>
-          <Link href="/events" className="app-card p-4 text-center group hover:border-emerald-200 transition-all">
-            <Calendar className="w-8 h-8 text-emerald-600 mx-auto mb-2 group-hover:scale-110 transition-transform" />
-            <p className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{t.events || "Events"}</p>
-          </Link>
-        </div>
-
-        {/* Quick Search */}
-        <div className="space-y-3">
-          <div className="relative group">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400 group-focus-within:text-emerald-600 transition-colors" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={lang === "tm" ? "எதை வேண்டுமானாலும் தேடுக..." : "Search anything..."}
-              className="app-input pl-12 font-bold"
-            />
-          </div>
-          <button
-            onClick={handleSearch}
-            disabled={searchLoading}
-            className="w-full app-btn-glow py-5 text-lg"
-          >
-            {searchLoading ? (lang === "tm" ? "தேடப்படுகிறது..." : "Searching...") : (lang === "tm" ? "தேடுக" : "Search")}
-          </button>
         </div>
       </main>
+
+      {/* Bottom Navigation */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
+        <div className="grid grid-cols-4 h-16">
+          <Link href="/" className="flex flex-col items-center justify-center gap-1 text-emerald-600">
+            <HomeIcon className="w-5 h-5" />
+            <span className="text-xs font-medium">HOME</span>
+          </Link>
+          <Link href="/families" className="flex flex-col items-center justify-center gap-1 text-gray-600">
+            <Users className="w-5 h-5" />
+            <span className="text-xs font-medium">FAMILIES</span>
+          </Link>
+          <Link href="/accounts" className="flex flex-col items-center justify-center gap-1 text-gray-600">
+            <CreditCard className="w-5 h-5" />
+            <span className="text-xs font-medium">ACCOUNTS</span>
+          </Link>
+          <Link href="/staff" className="flex flex-col items-center justify-center gap-1 text-gray-600">
+            <Briefcase className="w-5 h-5" />
+            <span className="text-xs font-medium">STAFF</span>
+          </Link>
+        </div>
+      </div>
 
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
