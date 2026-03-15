@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText } from "lucide-react";
+import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
@@ -441,16 +441,18 @@ export default function FamiliesPage() {
         <div className="flex items-center gap-2">
           <button 
             onClick={() => setIsPdfOptionsOpen(true)}
-            className="p-2.5 bg-slate-50 text-blue-600 rounded-xl hover:bg-blue-50 transition-all active:scale-95"
+            className="p-2.5 bg-slate-50 text-blue-600 rounded-xl hover:bg-blue-50 transition-all active:scale-95 flex items-center gap-1"
             title={t.download_pdf}
           >
-            <FileText className="h-5 w-5" />
+            <Download className="h-4 w-4" />
+            <span className="text-xs font-bold">PDF</span>
           </button>
           <button 
             onClick={() => setIsScannerOpen(true)}
-            className="p-2.5 bg-slate-50 text-slate-600 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95"
+            className="p-2.5 bg-slate-50 text-slate-600 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95 flex items-center gap-1"
           >
-            <QrCode className="h-5 w-5" />
+            <QrCode className="h-4 w-4" />
+            <span className="text-xs font-bold">QR</span>
           </button>
           <button 
             onClick={fetchFamilies}

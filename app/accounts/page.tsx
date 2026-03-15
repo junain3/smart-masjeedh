@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Search, TrendingUp, TrendingDown, Wallet, Calendar, Tag, MoreVertical, X, Edit, Trash2, FileText, QrCode, Home as HomeIcon, Users, CreditCard, Menu, LogOut, Settings, HelpCircle, Briefcase } from "lucide-react";
+import { ArrowLeft, Plus, Search, TrendingUp, TrendingDown, Wallet, Calendar, Tag, MoreVertical, X, Edit, Trash2, FileText, QrCode, Home as HomeIcon, Users, CreditCard, Menu, LogOut, Settings, HelpCircle, Briefcase, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
@@ -310,6 +310,13 @@ export default function AccountsPage() {
     router.push('/login');
   };
 
+  const handleQrDecodedText = (decodedText: string) => {
+    if (!decodedText) return;
+    // Handle QR code scanning for transactions
+    console.log('QR scanned:', decodedText);
+    setIsScannerOpen(false);
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -420,9 +427,16 @@ export default function AccountsPage() {
             </button>
             <button
               onClick={handlePrintPDF}
-              className="flex-1 py-4 bg-blue-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all"
+              className="flex-1 py-4 bg-blue-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
             >
+              <Download className="w-5 h-5" />
               Download PDF
+            </button>
+            <button
+              onClick={() => setIsScannerOpen(true)}
+              className="py-4 px-4 bg-purple-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-purple-700 active:scale-95 transition-all"
+            >
+              <QrCode className="w-5 h-5" />
             </button>
           </div>
 
@@ -650,7 +664,7 @@ export default function AccountsPage() {
           title="Scan QR Code"
           containerId="qr-scanner"
           onClose={() => setIsScannerOpen(false)}
-          onDecodedText={() => {}}
+          onDecodedText={handleQrDecodedText}
         />
       )}
     </div>
