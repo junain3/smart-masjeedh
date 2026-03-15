@@ -60,6 +60,7 @@ export default function AccountsPage() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [allowed, setAllowed] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const t = translations[lang];
 
@@ -120,33 +121,39 @@ export default function AccountsPage() {
   async function fetchData() {
     if (!supabase) return;
     setLoading(true);
+    setErrorMessage("");
     try {
-      const ctx = tenantContext || await getTenantContext();
-      if (!ctx) {
-        router.push("/login");
-        return;
+      // Get authenticated user - BLOCK if not logged in
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error("User not authenticated. Please login again.");
       }
 
+      // Fetch ONLY user's transactions - RLS ensures this
       const { data: transactionsData, error: transactionsError } = await supabase
         .from("transactions")
         .select("*")
-        .eq("masjid_id", ctx.masjidId)
+        .eq("user_id", user.id) // Explicit user filter
         .order("date", { ascending: false });
 
       if (transactionsError) throw transactionsError;
-      setTransactions(transactionsData || []);
 
+      // Fetch families for subscriptions (user's families only)
       const { data: familiesData, error: familiesError } = await supabase
         .from("families")
         .select("id, family_code, head_name")
-        .eq("masjid_id", ctx.masjidId)
-        .order("family_code");
+        .eq("user_id", user.id); // User's families only
 
       if (familiesError) throw familiesError;
+
+      setTransactions(transactionsData || []);
       setFamilies(familiesData || []);
+      setErrorMessage("");
     } catch (err: any) {
       console.error("Fetch error:", err);
-      toast({ kind: "error", title: "Error", message: err.message || "Failed to fetch data" });
+      setErrorMessage(err.message || "Failed to load data. Please login again.");
+      setTransactions([]);
+      setFamilies([]);
     } finally {
       setLoading(false);
     }
@@ -158,14 +165,18 @@ export default function AccountsPage() {
     setSubmitting(true);
 
     try {
-      const ctx = tenantContext || await getTenantContext();
-      if (!ctx) return;
+      // Get authenticated user - BLOCK if not logged in
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error("User not authenticated. Please login again.");
+      }
 
       const finalDescription = type === "subscription" ? `Subscription: ${description}` : description;
       const finalType = type === "subscription" ? "income" : type;
       const finalCategory = type === "subscription" ? "subscription" : category;
 
       if (editingTransaction) {
+        // Update existing transaction - MUST include user_id check
         const { error } = await supabase
           .from("transactions")
           .update({
@@ -176,9 +187,12 @@ export default function AccountsPage() {
             date,
             family_id: type === "subscription" ? selectedFamilyId : null
           })
-          .eq("id", editingTransaction.id);
+          .eq("id", editingTransaction.id)
+          .eq("user_id", user.id); // Extra safety check
+        
         if (error) throw error;
       } else {
+        // Insert new transaction - MUST include user_id
         const { error } = await supabase.from("transactions").insert([
           {
             amount: parseFloat(amount),
@@ -186,11 +200,11 @@ export default function AccountsPage() {
             type: finalType,
             category: finalCategory,
             date,
-            masjid_id: ctx.masjidId,
-            user_id: user?.id,
+            user_id: user.id, // CRITICAL: Always include user_id
             family_id: type === "subscription" ? selectedFamilyId : null
           }
         ]);
+        
         if (error) throw error;
       }
 
@@ -198,7 +212,12 @@ export default function AccountsPage() {
       resetForm();
       fetchData();
     } catch (err: any) {
-      toast({ kind: "error", title: "Error", message: err.message || "Failed" });
+      console.error("Transaction error:", err);
+      toast({ 
+        kind: "error", 
+        title: "Transaction Failed", 
+        message: err.message || "Failed to save transaction. Please ensure you're logged in." 
+      });
     } finally {
       setSubmitting(false);
     }
