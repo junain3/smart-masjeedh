@@ -230,12 +230,7 @@ export default function AccountsPage() {
 
   async function deleteTransaction(id: string) {
     if (!supabase) return;
-    const ok = await confirm({
-      title: t.confirm_delete,
-      message: t.confirm_delete,
-      confirmText: t.remove || "Remove",
-      cancelText: t.cancel || "Cancel",
-    });
+    const ok = window.confirm(t.confirm_delete);
     if (!ok) return;
     try {
       const { error } = await supabase
