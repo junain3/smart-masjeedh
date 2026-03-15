@@ -41,7 +41,8 @@ export default function EventsPage() {
     if (!supabase) return;
     setLoading(true);
     try {
-      const ctx = await getTenantContext();
+      // Use tenantContext from useMockAuth instead of getTenantContext
+      const ctx = tenantContext || await getTenantContext();
       if (!ctx) {
         router.push("/login");
         return;
@@ -70,7 +71,8 @@ export default function EventsPage() {
     setSubmitting(true);
 
     try {
-      const ctx = await getTenantContext();
+      // Use tenantContext from useMockAuth instead of getTenantContext
+      const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
 
       if (editingId) {

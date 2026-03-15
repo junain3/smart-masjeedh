@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { useAppToast } from "@/components/ToastProvider";
+import { useMockAuth } from "@/components/MockAuthProvider";
 
 type Employee = {
   id: string;
@@ -43,6 +44,7 @@ export default function EmployeeProfilePage() {
   const params = useParams<{ id: string }>();
   const employeeId = params.id;
   const { toast } = useAppToast();
+  const { tenantContext } = useMockAuth();
 
   const [lang, setLang] = useState<Language>("en");
   const t = translations[lang];
@@ -72,7 +74,8 @@ export default function EmployeeProfilePage() {
     if (!supabase) return;
     setLoading(true);
     try {
-      const ctx = await getTenantContext();
+      // Use tenantContext from useMockAuth instead of getTenantContext
+      const ctx = tenantContext || await getTenantContext();
       if (!ctx) {
         router.push("/login");
         return;
@@ -158,7 +161,8 @@ export default function EmployeeProfilePage() {
     if (!supabase || !employee) return;
     setSubmitting(true);
     try {
-      const ctx = await getTenantContext();
+      // Use tenantContext from useMockAuth instead of getTenantContext
+      const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
 
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";

@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { QrScannerModal } from "@/components/QrScannerModal";
+import { useMockAuth } from "@/components/MockAuthProvider";
 
 type Family = {
   id: string;
@@ -39,6 +40,7 @@ const dummyFamilies: Family[] = [
 
 export default function FamiliesPage() {
   const router = useRouter();
+  const { user, tenantContext } = useMockAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [headName, setHeadName] = useState("");
   const [address, setAddress] = useState("");
@@ -47,21 +49,22 @@ export default function FamiliesPage() {
   const [subscriptionAmount, setSubscriptionAmount] = useState("");
   const [openingBalance, setOpeningBalance] = useState("");
   const [isWidowHead, setIsWidowHead] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [families, setFamilies] = useState<Family[]>(dummyFamilies);
   const [isLive, setIsLive] = useState(false);
+  const [families, setFamilies] = useState<Family[]>([]);
   const [isFetching, setIsFetching] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [lang, setLang] = useState<Language>("en");
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [editingFamily, setEditingFamily] = useState<Family | null>(null);
   const [isPdfOptionsOpen, setIsPdfOptionsOpen] = useState(false);
   const [pdfCols, setPdfCols] = useState<{code:boolean; head:boolean; address:boolean; phone:boolean; sub:boolean}>({code:true, head:true, address:true, phone:true, sub:true});
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid">("all");
   const [allowed, setAllowed] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [lang, setLang] = useState<Language>("en");
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const t = translations[lang];
 
@@ -118,7 +121,8 @@ export default function FamiliesPage() {
     if (!supabase) return;
     setIsFetching(true);
     try {
-      const ctx = await getTenantContext();
+      // Use tenantContext from useMockAuth instead of getTenantContext
+      const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
 
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
@@ -163,7 +167,8 @@ export default function FamiliesPage() {
     }
 
     try {
-      const ctx = await getTenantContext();
+      // Use tenantContext from useMockAuth instead of getTenantContext
+      const ctx = tenantContext || await getTenantContext();
       if (!ctx) throw new Error("லாகின் செய்யப்படவில்லை.");
 
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
@@ -231,7 +236,8 @@ export default function FamiliesPage() {
   async function deleteFamily(id: string) {
     if (!supabase || !confirm(t.confirm_delete)) return;
     try {
-      const ctx = await getTenantContext();
+      // Use tenantContext from useMockAuth instead of getTenantContext
+      const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
 
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
