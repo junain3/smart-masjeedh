@@ -15,6 +15,7 @@ type AuthContextType = {
   loading: boolean;
   tenantContext: TenantContext | null;
   signOut: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
   requiresOnboarding: boolean;
   refreshTenantContext: () => Promise<void>;
   authError: string | null;
@@ -23,27 +24,8 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function MockAuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any>({
-    id: "a0d80f9e-11ba-436b-9825-1aca3830a7fc",
-    email: "mohammedjunain@gmail.com",
-    created_at: new Date().toISOString()
-  });
-  
-  const [tenantContext, setTenantContext] = useState<TenantContext>({
-    masjidId: "176b1412-2eae-46f4-8cd5-4cb5ad4f285f",
-    userId: "a0d80f9e-11ba-436b-9825-1aca3830a7fc",
-    email: "mohammedjunain@gmail.com",
-    role: "super_admin",
-    permissions: {
-      manage_users: true,
-      manage_events: true,
-      manage_families: true,
-      manage_members: true,
-      manage_finances: true,
-      manage_settings: true,
-    }
-  });
-  
+  const [user, setUser] = useState<any>(null);
+  const [tenantContext, setTenantContext] = useState<TenantContext | null>(null);
   const [loading, setLoading] = useState(false);
   const [requiresOnboarding, setRequiresOnboarding] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -54,6 +36,44 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
     setTenantContext(null);
     setRequiresOnboarding(false);
     setAuthError(null);
+  };
+
+  const signIn = async (email: string, password: string) => {
+    console.log("DEBUG: Mock signIn called");
+    setLoading(true);
+    
+    // Simulate login process
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Set mock user and tenant context
+    const mockUser = {
+      id: "a0d80f9e-11ba-436b-9825-1aca3830a7fc",
+      email: email || "mohammedjunain@gmail.com",
+      created_at: new Date().toISOString()
+    };
+    
+    const mockTenantContext = {
+      masjidId: "176b1412-2eae-46f4-8cd5-4cb5ad4f285f",
+      userId: "a0d80f9e-11ba-436b-9825-1aca3830a7fc",
+      email: email || "mohammedjunain@gmail.com",
+      role: "super_admin" as const,
+      permissions: {
+        manage_users: true,
+        manage_events: true,
+        manage_families: true,
+        manage_members: true,
+        manage_finances: true,
+        manage_settings: true,
+      }
+    };
+    
+    setUser(mockUser);
+    setTenantContext(mockTenantContext);
+    setRequiresOnboarding(false);
+    setAuthError(null);
+    setLoading(false);
+    
+    console.log("DEBUG: Mock signIn completed");
   };
 
   const refreshTenantContext = async () => {
@@ -68,6 +88,7 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         tenantContext,
         signOut,
+        signIn,
         requiresOnboarding,
         refreshTenantContext,
         authError,

@@ -12,7 +12,7 @@ export default function MasjidLoginPage() {
   const [password, setPassword] = useState(''); 
   const [loading, setLoading] = useState(false); 
   const router = useRouter();
-  const { user } = useMockAuth();
+  const { user, signIn } = useMockAuth();
 
   // If user is already logged in, redirect to dashboard
   React.useEffect(() => {
@@ -28,14 +28,18 @@ export default function MasjidLoginPage() {
     
     console.log('DEBUG: Mock login attempt started');
     
-    // Simulate login process
-    setTimeout(() => {
-      console.log('DEBUG: Mock login successful');
-      alert('Login successful! Redirecting to dashboard...');
+    try {
+      // Use MockAuth signIn function
+      await signIn(email, password);
       
-      // Force refresh to trigger auth state change
-      window.location.href = '/dashboard';
-    }, 1000);
+      console.log('DEBUG: Mock login successful');
+      
+      // Direct redirect without alert
+      router.push('/dashboard');
+    } catch (error) {
+      console.error('DEBUG: Login error:', error);
+      setLoading(false);
+    }
   }; 
 
   return (
