@@ -113,14 +113,10 @@ export default function DashboardPage() {
       try {
         if (!supabase) return;
 
-        console.log("DEBUG Dashboard - Fetching data for user:", user.email);
-
         // Get tenant context - don't fail if it doesn't exist yet
         const ctx = tenantContext || await getTenantContext();
-        console.log("DEBUG Dashboard - Tenant context:", ctx);
         
         if (!ctx) {
-          console.log("DEBUG Dashboard - No tenant context yet, showing empty dashboard");
           // Don't redirect - just show empty state
           setLoading(false);
           return;
@@ -589,12 +585,12 @@ export default function DashboardPage() {
           <div className="bg-white border-2 border-emerald-200 rounded-2xl p-4 text-center shadow-lg">
             <Users className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
             <p className="text-xs font-black text-emerald-700 uppercase tracking-widest">TOTAL FAMILIES</p>
-            <p className="text-3xl font-black text-emerald-800">{familyCount || 2}</p>
+            <p className="text-3xl font-black text-emerald-800">{familyCount || 0}</p>
           </div>
           <div className="bg-white border-2 border-emerald-200 rounded-2xl p-4 text-center shadow-lg">
             <User className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
             <p className="text-xs font-black text-emerald-700 uppercase tracking-widest">TOTAL MEMBERS</p>
-            <p className="text-3xl font-black text-emerald-800">{memberCount || 1}</p>
+            <p className="text-3xl font-black text-emerald-800">{memberCount || 0}</p>
           </div>
         </div>
 
