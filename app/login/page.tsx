@@ -29,8 +29,9 @@ export default function MasjidLoginPage() {
       // Use MockAuth signIn function
       await signIn(email, password);
       
-      // Direct redirect to home page
-      router.push('/');
+      // Mock user always has masjid_id in development
+      // In production, check user profile for masjid_id
+      router.push('/dashboard');
     } catch (error) {
       setLoading(false);
     }

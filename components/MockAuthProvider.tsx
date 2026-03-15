@@ -47,7 +47,8 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
     const mockUser = {
       id: "a0d80f9e-11ba-436b-9825-1aca3830a7fc",
       email: email || "mohammedjunain@gmail.com",
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      masjid_id: "176b1412-2eae-46f4-8cd5-4cb5ad4f285f"
     };
     
     const mockTenantContext = {
