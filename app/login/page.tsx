@@ -14,10 +14,10 @@ export default function MasjidLoginPage() {
   const router = useRouter();
   const { user, signIn } = useMockAuth();
 
-  // If user is already logged in, redirect to dashboard
+  // If user is already logged in, redirect to home
   React.useEffect(() => {
     if (user) {
-      router.push('/dashboard');
+      router.push('/');
     }
   }, [user, router]);
 
@@ -29,8 +29,8 @@ export default function MasjidLoginPage() {
       // Use MockAuth signIn function
       await signIn(email, password);
       
-      // Direct redirect to dashboard
-      router.push('/dashboard');
+      // Direct redirect to home page
+      router.push('/');
     } catch (error) {
       setLoading(false);
     }

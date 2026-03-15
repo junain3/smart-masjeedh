@@ -13,9 +13,9 @@ export default function SettingsPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Link href="/dashboard" className="flex items-center text-gray-600 hover:text-gray-900">
+              <Link href="/" className="flex items-center text-gray-600 hover:text-gray-900">
                 <ArrowLeft className="w-5 h-5 mr-2" />
-                Back to Dashboard
+                Back to Home
               </Link>
             </div>
             <div className="flex items-center">
