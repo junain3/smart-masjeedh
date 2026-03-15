@@ -6,9 +6,9 @@ import Link from "next/link";
 import { ArrowLeft, Plus, Search, TrendingUp, TrendingDown, Wallet, Calendar, Tag, MoreVertical, X, Edit, Trash2, FileText, QrCode, Home as HomeIcon, Users, CreditCard, Menu, LogOut, Settings, HelpCircle, Briefcase, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
-import { getTenantContext } from "@/lib/tenant";
+import { useAuthSession } from "@/hooks/useAuthSession";
+import { AuthGuard } from "@/components/AuthGuard";
 import { QrScannerModal } from "@/components/QrScannerModal";
-import { useMockAuth } from "@/components/MockAuthProvider";
 import { useAppToast } from "@/components/ToastProvider";
 import { AppShell } from "@/components/AppShell";
 
@@ -33,20 +33,12 @@ type Family = {
 
 export default function AccountsPage() {
   const router = useRouter();
-  const { toast, confirm } = useAppToast();
-  const { user, loading: authLoading, tenantContext, signOut } = useMockAuth();
-  const [lang, setLang] = useState<Language>("en");
+  const { user, loading: authLoading, isAuthenticated } = useAuthSession();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [families, setFamilies] = useState<Family[]>([]);
+  const [families, setFamilies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  
-  // Report filter states
-  const [reportType, setReportType] = useState<"all" | "income" | "expense">("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [showReportOptions, setShowReportOptions] = useState(false);
   
   // Form states
@@ -61,6 +53,8 @@ export default function AccountsPage() {
   const [allowed, setAllowed] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const { toast } = useAppToast();
+  const [lang, setLang] = useState<Language>("en");
 
   const t = translations[lang];
 
@@ -114,9 +108,10 @@ export default function AccountsPage() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
-    fetchData();
-  }, [user]);
+    if (isAuthenticated && user) {
+      fetchData();
+    }
+  }, [isAuthenticated, user]);
 
   async function fetchData() {
     if (!supabase) return;
