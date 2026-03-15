@@ -583,13 +583,13 @@ export default function DashboardPage() {
             </div>
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/75">
-                Smart Masjeedh
+                Welcome back
               </p>
               <h2 className="mt-1 text-2xl font-black tracking-tight text-white truncate">
-                {(masjid?.name || "MUBEEN JUMMA MASJEEDH").toUpperCase()}
+                {user?.email?.split('@')[0] || "mohammedjunain"}!
               </h2>
               <p className="mt-1 text-[11px] font-bold text-white/80 truncate">
-                {masjid?.tagline || "Mubeen Jummah Masjid"}
+                {(masjid?.name || "MUBEEN JUMMA MASJEEDH").toUpperCase()}
               </p>
             </div>
           </div>
@@ -609,6 +609,27 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Quick Actions */}
+        <div className="grid grid-cols-2 gap-4">
+          <Link href="/families" className="app-card p-4 text-center group hover:border-emerald-200 transition-all">
+            <Users className="w-8 h-8 text-emerald-600 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+            <p className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{t.families}</p>
+          </Link>
+          <Link href="/accounts" className="app-card p-4 text-center group hover:border-emerald-200 transition-all">
+            <CreditCard className="w-8 h-8 text-emerald-600 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+            <p className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{t.accounts}</p>
+          </Link>
+          <Link href="/staff" className="app-card p-4 text-center group hover:border-emerald-200 transition-all">
+            <Briefcase className="w-8 h-8 text-emerald-600 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+            <p className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{t.staff_management || "Staff"}</p>
+          </Link>
+          <Link href="/events" className="app-card p-4 text-center group hover:border-emerald-200 transition-all">
+            <Calendar className="w-8 h-8 text-emerald-600 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+            <p className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{t.events || "Events"}</p>
+          </Link>
+        </div>
+
+        {/* Quick Search */}
         <div className="space-y-3">
           <div className="relative group">
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400 group-focus-within:text-emerald-600 transition-colors" />
@@ -627,215 +648,14 @@ export default function DashboardPage() {
           >
             {searchLoading ? (lang === "tm" ? "தேடப்படுகிறது..." : "Searching...") : (lang === "tm" ? "தேடுக" : "Search")}
           </button>
-          {searchError && (
-            <div className="app-card bg-amber-50 border-amber-200 px-4 py-3 text-[10px] font-bold text-amber-800">
-              {searchError}
-            </div>
-          )}
-        </div>
-
-        {resultType !== "none" && (
-          <div className="space-y-6">
-            {(resultType === "members" || resultType === "mixed") && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest">{t.member_results}</h3>
-                {memberResults.length === 0 ? (
-                  <div className="py-10 text-center app-card">
-                    <div className="w-16 h-16 bg-neutral-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-neutral-300 border border-neutral-200">
-                      <User className="w-8 h-8" />
-                    </div>
-                    <p className="text-neutral-600 font-bold uppercase tracking-widest text-xs">{t.no_matches}</p>
-                  </div>
-                ) : (
-                  memberResults.map((m) => (
-                    <Link
-                      key={m.id}
-                      href={`/families/${m.family_id}`}
-                      className="block app-card p-4 group hover:border-emerald-200 transition-all"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-3xl bg-emerald-50 flex items-center justify-center text-emerald-700 border border-emerald-100">
-                          <User className="w-6 h-6" />
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="text-sm font-black text-neutral-900 truncate">{m.full_name}</h4>
-                          <p className="text-[10px] font-bold text-neutral-600 uppercase">
-                            {m.gender} • {m.age}
-                          </p>
-                        </div>
-                      </div>
-                    </Link>
-                  ))
-                )}
-              </div>
-            )}
-
-            {(resultType === "families" || resultType === "mixed") && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest">{t.family_results}</h3>
-                {familyResults.length === 0 ? (
-                  <div className="py-10 text-center app-card">
-                    <div className="w-16 h-16 bg-neutral-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-neutral-300 border border-neutral-200">
-                      <Users className="w-8 h-8" />
-                    </div>
-                    <p className="text-neutral-600 font-bold uppercase tracking-widest text-xs">{t.no_matches}</p>
-                  </div>
-                ) : (
-                  familyResults.map((f) => (
-                    <Link
-                      key={f.id}
-                      href={`/families/${f.id}`}
-                      className="block app-card p-4 group hover:border-emerald-200 transition-all"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-3xl bg-emerald-50 flex items-center justify-center text-emerald-700 border border-emerald-100">
-                            <Users className="w-6 h-6" />
-                          </div>
-                          <div className="min-w-0">
-                            <h4 className="text-sm font-black text-neutral-900 truncate">{f.head_name}</h4>
-                            <p className="text-[10px] font-bold text-neutral-600 uppercase">
-                              {f.family_code}
-                              {f.is_widow_head && " • " + (lang === "tm" ? "விதவை" : "Widow")}
-                            </p>
-                          </div>
-                        </div>
-                        <Edit className="w-4 h-4 text-neutral-400 group-hover:text-emerald-600 transition-colors" />
-                      </div>
-                    </Link>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Services Button */}
-        <div className="flex gap-3">
-          <button
-            onClick={() => setIsServicesModalOpen(true)}
-            className="flex-1 app-btn-glow py-5 text-lg"
-          >
-            {"Manage Services"}
-          </button>
         </div>
       </main>
 
-      {/* Services Modal */}
-      {isServicesModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-black text-neutral-900">{"Manage Services"}</h3>
-              <button onClick={() => setIsServicesModalOpen(false)} className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors">
-                <X className="w-5 h-5 text-neutral-600" />
-              </button>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex gap-2 mb-6">
-              <button
-                onClick={() => setActiveServiceTab("create")}
-                className={`flex-1 py-3 px-4 rounded-3xl font-bold transition-all ${
-                  activeServiceTab === "create" 
-                    ? "bg-emerald-600 text-white" 
-                    : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-                }`}
-              >
-                {"Create Service"}
-              </button>
-              <button
-                onClick={() => setActiveServiceTab("scan")}
-                className={`flex-1 py-3 px-4 rounded-3xl font-bold transition-all ${
-                  activeServiceTab === "scan" 
-                    ? "bg-emerald-600 text-white" 
-                    : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-                }`}
-              >
-                {"Scan Service"}
-              </button>
-            </div>
-
-            {/* Create Service Tab */}
-            {activeServiceTab === "create" && (
-              <form onSubmit={createServiceDistribution} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-neutral-600 uppercase tracking-widest mb-2">
-                    {"Service Name"}
-                  </label>
-                  <input
-                    type="text"
-                    value={serviceName}
-                    onChange={(e) => setServiceName(e.target.value)}
-                    placeholder={"e.g., Ramzan Iftar"}
-                    className="app-input"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-neutral-600 uppercase tracking-widest mb-2">
-                    {"Date"}
-                  </label>
-                  <input
-                    type="date"
-                    value={serviceDate}
-                    onChange={(e) => setServiceDate(e.target.value)}
-                    className="app-input"
-                    required
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={submittingService}
-                  className="w-full app-btn-glow py-4 font-bold"
-                >
-                  {submittingService ? "Creating..." : "Create for All Families"}
-                </button>
-              </form>
-            )}
-
-            {/* Scan Service Tab */}
-            {activeServiceTab === "scan" && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-neutral-600 uppercase tracking-widest mb-2">
-                    {"Select Service"}
-                  </label>
-                  <select
-                    value={selectedScanService}
-                    onChange={(e) => setSelectedScanService(e.target.value)}
-                    className="app-input"
-                    required
-                  >
-                    <option value="">{"Select a service..."}</option>
-                    {activeServices.map((service) => (
-                      <option key={service.name} value={service.name}>
-                        {service.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  onClick={() => setIsScannerOpen(true)}
-                  disabled={!selectedScanService}
-                  className="w-full app-btn-glow py-4 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {"Start Scanning"}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* QR Scanner Modal */}
-      {isScannerOpen && (
-        <QrScannerModal
-          open={isScannerOpen}
-          title="Scan QR Code"
-          containerId="qr-scanner"
-          onClose={() => setIsScannerOpen(false)}
-          onDecodedText={handleServiceScan}
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
         />
       )}
     </div>
