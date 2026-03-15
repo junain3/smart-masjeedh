@@ -192,9 +192,12 @@ CREATE POLICY "Users can insert transactions in their masjid"
 ON transactions
 FOR INSERT
 TO authenticated
-WITH CHECK (masjid_id = (
-  SELECT masjid_id FROM user_profiles WHERE auth_user_id = auth.uid()
-));
+WITH CHECK (
+  masjid_id = (
+    SELECT masjid_id FROM user_profiles WHERE auth_user_id = auth.uid()
+  )
+  AND user_id = auth.uid()
+);
 
 CREATE POLICY "Users can update transactions in their masjid"
 ON transactions
@@ -203,9 +206,12 @@ TO authenticated
 USING (masjid_id = (
   SELECT masjid_id FROM user_profiles WHERE auth_user_id = auth.uid()
 ))
-WITH CHECK (masjid_id = (
-  SELECT masjid_id FROM user_profiles WHERE auth_user_id = auth.uid()
-));
+WITH CHECK (
+  masjid_id = (
+    SELECT masjid_id FROM user_profiles WHERE auth_user_id = auth.uid()
+  )
+  AND user_id = auth.uid()
+);
 
 CREATE POLICY "Users can delete transactions in their masjid"
 ON transactions
@@ -213,7 +219,13 @@ FOR DELETE
 TO authenticated
 USING (masjid_id = (
   SELECT masjid_id FROM user_profiles WHERE auth_user_id = auth.uid()
-));
+))
+WITH CHECK (
+  masjid_id = (
+    SELECT masjid_id FROM user_profiles WHERE auth_user_id = auth.uid()
+  )
+  AND user_id = auth.uid()
+);
 
 -- Step 8: Create secure policies for masjids table
 CREATE POLICY "Users can view masjids they have access to"

@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ArrowLeft, Plus, Search, TrendingUp, TrendingDown, Wallet, Calendar, Tag, MoreVertical, X, Edit, Trash2, FileText, QrCode, Home as HomeIcon, Users, CreditCard, Menu, LogOut, Settings, HelpCircle, Briefcase, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
-import { useAppToast } from "@/components/ToastProvider";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useMockAuth } from "@/components/MockAuthProvider";
+import { useAppToast } from "@/components/ToastProvider";
+import { AppShell } from "@/components/AppShell";
 
 export const dynamic = 'force-dynamic';
 
@@ -186,6 +187,7 @@ export default function AccountsPage() {
             category: finalCategory,
             date,
             masjid_id: ctx.masjidId,
+            user_id: user?.id,
             family_id: type === "subscription" ? selectedFamilyId : null
           }
         ]);
