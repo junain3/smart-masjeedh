@@ -53,6 +53,7 @@ export default function AccountsPage() {
   const [allowed, setAllowed] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useAppToast();
   const [lang, setLang] = useState<Language>("en");
 
