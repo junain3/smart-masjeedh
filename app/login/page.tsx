@@ -17,7 +17,6 @@ export default function MasjidLoginPage() {
   // If user is already logged in, redirect to dashboard
   React.useEffect(() => {
     if (user) {
-      console.log('DEBUG: User already logged in, redirecting to dashboard');
       router.push('/dashboard');
     }
   }, [user, router]);
@@ -26,18 +25,13 @@ export default function MasjidLoginPage() {
     e.preventDefault(); 
     setLoading(true); 
     
-    console.log('DEBUG: Mock login attempt started');
-    
     try {
       // Use MockAuth signIn function
       await signIn(email, password);
       
-      console.log('DEBUG: Mock login successful');
-      
-      // Direct redirect without alert
+      // Direct redirect to dashboard
       router.push('/dashboard');
     } catch (error) {
-      console.error('DEBUG: Login error:', error);
       setLoading(false);
     }
   }; 

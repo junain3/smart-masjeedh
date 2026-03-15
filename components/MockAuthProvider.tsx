@@ -31,7 +31,6 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
 
   const signOut = async () => {
-    console.log("DEBUG: Mock sign out");
     setUser(null);
     setTenantContext(null);
     setRequiresOnboarding(false);
@@ -39,7 +38,6 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    console.log("DEBUG: Mock signIn called");
     setLoading(true);
     
     // Simulate login process
@@ -72,12 +70,9 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
     setRequiresOnboarding(false);
     setAuthError(null);
     setLoading(false);
-    
-    console.log("DEBUG: Mock signIn completed");
   };
 
   const refreshTenantContext = async () => {
-    console.log("DEBUG: Mock refresh tenant context");
     // Mock refresh - no actual change
   };
 
