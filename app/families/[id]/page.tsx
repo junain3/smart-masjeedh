@@ -378,8 +378,7 @@ export default function FamilyDetailsPage() {
   }
 
   return (
-    <AuthGuard>
-      <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-6 font-sans">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-6 font-sans">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -805,6 +804,5 @@ export default function FamilyDetailsPage() {
         </div>
       )}
     </div>
-    </AuthGuard>
   );
 }

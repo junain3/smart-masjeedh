@@ -341,8 +341,7 @@ export default function AccountsPage() {
   }
 
   return (
-    <AuthGuard>
-      <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-72 bg-white border-r border-neutral-200 transform transition-transform duration-300 ease-in-out ${
         isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
@@ -677,6 +676,5 @@ export default function AccountsPage() {
         />
       )}
     </div>
-    </AuthGuard>
   );
 }
