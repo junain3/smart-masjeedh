@@ -13,11 +13,23 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+
     const checkAuth = async () => {
       try {
         console.log("🔐 AUTH GUARD: Checking session...");
+        
+        // Set timeout to prevent infinite loading
+        timeoutId = setTimeout(() => {
+          if (mounted && loading) {
+            console.log("🔐 AUTH GUARD: Timeout reached, redirecting to login");
+            router.push("/login");
+          }
+        }, 5000); // 5 second timeout
         
         // Check session first
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -28,9 +40,12 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
           hasSession: !!sessionData.session
         });
 
+        if (!mounted) return;
+
         if (sessionError) {
           console.error("🔐 AUTH GUARD - Session Error:", sessionError);
-          throw sessionError;
+          router.push("/login");
+          return;
         }
 
         if (!sessionData.session) {
@@ -48,9 +63,12 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
           hasUser: !!userData.user
         });
 
+        if (!mounted) return;
+
         if (userError) {
           console.error("🔐 AUTH GUARD - User Error:", userError);
-          throw userError;
+          router.push("/login");
+          return;
         }
 
         if (!userData.user) {
@@ -65,11 +83,17 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
         });
 
         setAuthenticated(true);
+        setChecked(true);
       } catch (error) {
         console.error("🔐 AUTH GUARD: Authentication check failed:", error);
-        router.push("/login");
+        if (mounted) {
+          router.push("/login");
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          clearTimeout(timeoutId);
+        }
       }
     };
 
@@ -84,23 +108,29 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
           userId: session?.user?.id
         });
 
+        if (!mounted) return;
+
         if (event === 'SIGNED_OUT' || !session) {
           console.log("🔐 AUTH GUARD: User signed out, redirecting to login");
+          setAuthenticated(false);
           router.push("/login");
         } else if (event === 'SIGNED_IN' && session) {
           console.log("🔐 AUTH GUARD: User signed in");
           setAuthenticated(true);
           setLoading(false);
+          setChecked(true);
         }
       }
     );
 
     return () => {
+      mounted = false;
+      clearTimeout(timeoutId);
       authListener.subscription.unsubscribe();
     };
   }, [router]);
 
-  if (loading) {
+  if (loading && !checked) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
