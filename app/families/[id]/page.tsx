@@ -187,66 +187,6 @@ export default function FamilyDetailsPage() {
       setLoading(false);
     }
   };
-        setPayments([]);
-        setServices([]);
-        return;
-      }
-
-      const { data: familyData, error: familyError } = await supabase
-        .from("families")
-        .select("*")
-        .eq("id", id)
-        .eq("masjid_id", ctx.masjidId)
-        .single();
-      
-      if (familyError) throw familyError;
-      if (familyData) setFamily(familyData);
-
-      const { data: membersData, error: membersError } = await supabase
-        .from("members")
-        .select("*")
-        .eq("family_id", id)
-        .eq("masjid_id", ctx.masjidId);
-      
-      if (membersError) {
-        // Specifically check if the error is "Table not found"
-        if (membersError.code === 'PGRST116' || membersError.message.includes('Could not find the table')) {
-          setErrorMessage("உறுப்பினர்கள் அட்டவணை (members table) இன்னும் உருவாக்கப்படவில்லை. தயவுசெய்து SQL migration-ஐ இயக்கவும்.");
-          setMembers([]); // Set empty list as fallback
-        } else {
-          throw membersError;
-        }
-      } else if (membersData) {
-        setMembers(membersData);
-      }
-
-      // Fetch payment history (family-linked incomes; treat as subscription payments)
-      const { data: paymentData } = await supabase
-        .from("transactions")
-        .select("id, amount, date, description, type, category")
-        .eq("family_id", id)
-        .eq("masjid_id", ctx.masjidId)
-        .order("date", { ascending: false });
-      
-      if (paymentData) setPayments(paymentData);
-
-      // Fetch services (service_distributions linked to this family)
-      const { data: serviceData } = await supabase
-        .from("service_distributions")
-        .select("id, name, date, status")
-        .eq("family_id", id)
-        .eq("masjid_id", ctx.masjidId)
-        .order("date", { ascending: false });
-      
-      if (serviceData) setServices(serviceData);
-
-    } catch (error: any) {
-      console.error("Error fetching data:", error);
-      setErrorMessage(error.message || "தரவுகளைப் பெறுவதில் சிக்கல் ஏற்பட்டது.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
