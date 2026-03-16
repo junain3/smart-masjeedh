@@ -33,10 +33,10 @@ type Family = {
 
 export default function AccountsPage() {
   const router = useRouter();
-  const { user, loading: authLoading, isAuthenticated, signOut } = useAuthSession();
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [families, setFamilies] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [showReportOptions, setShowReportOptions] = useState(false);
@@ -104,15 +104,24 @@ export default function AccountsPage() {
   });
 
   useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) {
+        router.push("/login");
+        return;
+      }
+      setUser(user);
+      fetchData();
+      setLoading(false);
+    };
+
+    checkAuth();
+  }, [router]);
+
+  useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
   }, []);
-
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      fetchData();
-    }
-  }, [isAuthenticated, user]);
 
   async function fetchData() {
     if (!supabase) return;
@@ -318,7 +327,7 @@ export default function AccountsPage() {
   };
 
   const handleLogout = async () => {
-    await signOut();
+    await supabase.auth.signOut();
     router.push('/login');
   };
 
@@ -329,15 +338,8 @@ export default function AccountsPage() {
     setIsScannerOpen(false);
   };
 
-  if (authLoading || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">{t.loading || "Loading..."}</p>
-        </div>
-      </div>
-    );
+  if (loading) {
+    return <div>Loading...</div>;
   }
 
   return (

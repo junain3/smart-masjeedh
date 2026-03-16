@@ -61,14 +61,14 @@ type Service = {
 export default function FamilyDetailsPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { user, loading: authLoading, isAuthenticated } = useAuthSession();
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [lang, setLang] = useState<Language>("en");
   const [family, setFamily] = useState<Family | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"members" | "payments" | "services">("members");
@@ -87,8 +87,25 @@ export default function FamilyDetailsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const [allowed, setAllowed] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const t = translations[lang];
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) {
+        router.push("/login");
+        return;
+      }
+      setUser(user);
+      fetchData();
+      setLoading(false);
+    };
+
+    checkAuth();
+  }, [router, id]);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -112,11 +129,8 @@ export default function FamilyDetailsPage() {
   const fetchData = async () => {
     if (!supabase || !id || !user) return;
     setLoading(true);
-    setErrorMessage(""); 
     
     try {
-      console.log("🔐 FAMILY DETAILS: Fetching data for user:", user.id);
-
       // Fetch family data with user isolation
       const { data: familyData, error: familyError } = await supabase
         .from("families")
@@ -125,19 +139,14 @@ export default function FamilyDetailsPage() {
         .eq("user_id", user.id)
         .single();
 
-      if (familyError) {
-        console.error("🔐 FAMILY DETAILS: Family fetch error:", familyError);
-        throw familyError;
-      }
+      if (familyError) throw familyError;
 
       if (!familyData) {
-        console.log("🔐 FAMILY DETAILS: Family not found for user");
         router.push("/families");
         return;
       }
 
       setFamily(familyData);
-      setAllowed(true);
 
       // Fetch members for this family
       const { data: membersData, error: membersError } = await supabase
@@ -147,55 +156,21 @@ export default function FamilyDetailsPage() {
         .eq("user_id", user.id)
         .order("full_name");
 
-      if (membersError) {
-        console.error("🔐 FAMILY DETAILS: Members fetch error:", membersError);
-        throw membersError;
-      }
-
+      if (membersError) throw membersError;
       setMembers(membersData || []);
 
-      // Fetch payments for this family
-      const { data: paymentsData, error: paymentsError } = await supabase
-        .from("family_payments")
-        .select("*")
-        .eq("family_id", id)
-        .eq("user_id", user.id)
-        .order("payment_date", { ascending: false });
-
-      if (paymentsError) {
-        console.error("🔐 FAMILY DETAILS: Payments fetch error:", paymentsError);
-        // Don't throw error for payments, just set empty array
-        setPayments([]);
-      } else {
-        setPayments(paymentsData || []);
-      }
-
-      console.log("🔐 FAMILY DETAILS: Data fetched successfully", {
-        family: familyData,
-        membersCount: membersData?.length,
-        paymentsCount: paymentsData?.length
-      });
-
     } catch (err: any) {
-      console.error("🔐 FAMILY DETAILS: Error fetching data:", err);
-      setErrorMessage(err.message || "Failed to load family data");
+      console.error("Error fetching data:", err);
       setFamily(null);
       setMembers([]);
-      setPayments([]);
-      setServices([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      fetchData();
-    }
-  }, [isAuthenticated, user, id]);
+  if (loading) {
+    return <div>Loading...</div>;
+  }
 
   const addMember = async (e: React.FormEvent) => {
     e.preventDefault();
