@@ -199,17 +199,12 @@ export default function FamilyDetailsPage() {
 
   const addMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabase || !id) return;
+    if (!supabase || !id || !user) return;
     setSubmitting(true);
     setSuccessMessage("");
 
     try {
-      const ctx = await getTenantContext();
-      if (!ctx) throw new Error("லாகின் செய்யப்படவில்லை.");
-
-      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
-      const canMembers = isAdmin || ctx.permissions?.members !== false;
-      if (!canMembers) throw new Error("Access denied");
+      console.log("🔐 ADD MEMBER: Adding member for user:", user.id);
 
       if (editingMember) {
         const { error } = await supabase
@@ -225,7 +220,7 @@ export default function FamilyDetailsPage() {
             civil_status: civilStatus
           })
           .eq("id", editingMember.id)
-          .eq("masjid_id", ctx.masjidId);
+          .eq("user_id", user.id);
         if (error) throw error;
         setSuccessMessage("உறுப்பினர் விபரம் மாற்றப்பட்டது!");
       } else {
@@ -240,7 +235,7 @@ export default function FamilyDetailsPage() {
             nic,
             phone,
             civil_status: civilStatus,
-            masjid_id: ctx.masjidId
+            user_id: user.id
           }
         ]);
         if (error) throw error;
@@ -254,7 +249,8 @@ export default function FamilyDetailsPage() {
       // Auto-hide success message after 3 seconds
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (error: any) {
-      alert(`பிழை: ${error.message || "உறுப்பினரைச் சேர்க்க முடியவில்லை"}`);
+      console.error("🔐 ADD MEMBER: Error:", error);
+      alert(`பிழை: ${error.message || "உறுப்பினரைச் சேர்க்க முடியவில்ல"}`);
     } finally {
       setSubmitting(false);
     }
@@ -273,25 +269,21 @@ export default function FamilyDetailsPage() {
   };
 
   const deleteMember = async (memberId: string) => {
-    if (!supabase || !confirm(t.confirm_delete)) return;
+    if (!supabase || !user || !window.confirm(t.confirm_delete)) return;
     try {
-      const ctx = await getTenantContext();
-      if (!ctx) return;
+      console.log("🔐 DELETE MEMBER: Deleting member for user:", user.id);
 
-      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
-      const canMembers = isAdmin || ctx.permissions?.members !== false;
-      if (!canMembers) {
-        alert("Access denied");
-        return;
-      }
       const { error } = await supabase
         .from("members")
         .delete()
         .eq("id", memberId)
-        .eq("masjid_id", ctx.masjidId);
+        .eq("user_id", user.id);
       if (error) throw error;
+      
+      console.log("🔐 DELETE MEMBER: Member deleted successfully");
       fetchData();
     } catch (error: any) {
+      console.error("🔐 DELETE MEMBER: Error:", error);
       alert(error.message);
     }
   };
@@ -354,17 +346,10 @@ export default function FamilyDetailsPage() {
   const finalDue = Math.max(0, (openingBal + annualFee + prevYearArrears) - paidThisYear);
 
   const toggleServiceStatus = async (serviceId: string) => {
-    if (!supabase) return;
+    if (!supabase || !user) return;
     try {
-      const ctx = await getTenantContext();
-      if (!ctx) return;
+      console.log("🔐 TOGGLE SERVICE: Toggling service for user:", user.id);
 
-      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
-      const canMembers = isAdmin || ctx.permissions?.members !== false;
-      if (!canMembers) {
-        alert("Access denied");
-        return;
-      }
       const service = services.find(s => s.id === serviceId);
       if (!service) return;
 
@@ -373,11 +358,13 @@ export default function FamilyDetailsPage() {
         .from("service_distributions")
         .update({ status: newStatus })
         .eq("id", serviceId)
-        .eq("masjid_id", ctx.masjidId);
+        .eq("user_id", user.id);
       
       if (error) throw error;
+      console.log("🔐 TOGGLE SERVICE: Service status updated successfully");
       fetchData();
     } catch (error: any) {
+      console.error("🔐 TOGGLE SERVICE: Error:", error);
       alert(error.message);
     }
   };
