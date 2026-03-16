@@ -252,8 +252,10 @@ export default function FamilyDetailsPage() {
   const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
-    fetchData();
-  }, [id]);
+    if (isAuthenticated && user) {
+      fetchData();
+    }
+  }, [isAuthenticated, user, id]);
 
   const addMember = async (e: React.FormEvent) => {
     e.preventDefault();
