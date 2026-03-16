@@ -344,12 +344,8 @@ export default function FamilyDetailsPage() {
     }
   };
 
-  if (authLoading || loading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center text-masjid-900">
-        ஏற்றப்படுகிறது...
-      </div>
-    );
+  if (loading) {
+    return <div>Loading...</div>;
   }
 
   return (
