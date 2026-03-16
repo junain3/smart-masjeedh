@@ -7,7 +7,8 @@ import { ArrowLeft, UserPlus, Trash2, User, Edit2, Search, MoreVertical, QrCode,
 import { supabase } from "@/lib/supabase";
 import { QRCodeSVG } from "qrcode.react";
 import { translations, Language } from "@/lib/i18n/translations";
-import { getTenantContext } from "@/lib/tenant";
+import { useAuthSession } from "@/hooks/useAuthSession";
+import { AuthGuard } from "@/components/AuthGuard";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
@@ -60,6 +61,7 @@ type Service = {
 export default function FamilyDetailsPage() {
   const { id } = useParams();
   const router = useRouter();
+  const { user, loading: authLoading, isAuthenticated } = useAuthSession();
   const [lang, setLang] = useState<Language>("en");
   const [family, setFamily] = useState<Family | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -108,23 +110,83 @@ export default function FamilyDetailsPage() {
   }, [dob]);
 
   const fetchData = async () => {
-    if (!supabase || !id) return;
+    if (!supabase || !id || !user) return;
     setLoading(true);
     setErrorMessage(""); 
     
     try {
-      const ctx = await getTenantContext();
-      if (!ctx) {
-        router.push("/login");
+      console.log("🔐 FAMILY DETAILS: Fetching data for user:", user.id);
+
+      // Fetch family data with user isolation
+      const { data: familyData, error: familyError } = await supabase
+        .from("families")
+        .select("*")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .single();
+
+      if (familyError) {
+        console.error("🔐 FAMILY DETAILS: Family fetch error:", familyError);
+        throw familyError;
+      }
+
+      if (!familyData) {
+        console.log("🔐 FAMILY DETAILS: Family not found for user");
+        router.push("/families");
         return;
       }
 
-      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
-      const canMembers = isAdmin || ctx.permissions?.members !== false;
-      setAllowed(canMembers);
-      if (!canMembers) {
-        setFamily(null);
-        setMembers([]);
+      setFamily(familyData);
+      setAllowed(true);
+
+      // Fetch members for this family
+      const { data: membersData, error: membersError } = await supabase
+        .from("members")
+        .select("*")
+        .eq("family_id", id)
+        .eq("user_id", user.id)
+        .order("full_name");
+
+      if (membersError) {
+        console.error("🔐 FAMILY DETAILS: Members fetch error:", membersError);
+        throw membersError;
+      }
+
+      setMembers(membersData || []);
+
+      // Fetch payments for this family
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from("family_payments")
+        .select("*")
+        .eq("family_id", id)
+        .eq("user_id", user.id)
+        .order("payment_date", { ascending: false });
+
+      if (paymentsError) {
+        console.error("🔐 FAMILY DETAILS: Payments fetch error:", paymentsError);
+        // Don't throw error for payments, just set empty array
+        setPayments([]);
+      } else {
+        setPayments(paymentsData || []);
+      }
+
+      console.log("🔐 FAMILY DETAILS: Data fetched successfully", {
+        family: familyData,
+        membersCount: membersData?.length,
+        paymentsCount: paymentsData?.length
+      });
+
+    } catch (err: any) {
+      console.error("🔐 FAMILY DETAILS: Error fetching data:", err);
+      setErrorMessage(err.message || "Failed to load family data");
+      setFamily(null);
+      setMembers([]);
+      setPayments([]);
+      setServices([]);
+    } finally {
+      setLoading(false);
+    }
+  };
         setPayments([]);
         setServices([]);
         return;
