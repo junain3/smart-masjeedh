@@ -369,27 +369,7 @@ export default function FamilyDetailsPage() {
     }
   };
 
-  if (!allowed && !loading) {
-    return (
-      <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-6 font-sans">
-        <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/families" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-emerald-600">
-              <ArrowLeft className="h-6 w-6" />
-            </Link>
-            <h1 className="text-lg font-black">{t.family}</h1>
-          </div>
-        </header>
-        <main className="p-6 max-w-md mx-auto w-full">
-          <div className="app-card p-6 text-center text-[11px] font-bold text-slate-400">
-            Access denied.
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center text-masjid-900">
         ஏற்றப்படுகிறது...
@@ -398,7 +378,8 @@ export default function FamilyDetailsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-6 font-sans">
+    <AuthGuard>
+      <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-6 font-sans">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -824,5 +805,6 @@ export default function FamilyDetailsPage() {
         </div>
       )}
     </div>
+    </AuthGuard>
   );
 }
