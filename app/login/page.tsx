@@ -1,53 +1,80 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useMockAuth } from "@/components/MockAuthProvider";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { signIn } = useMockAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
 
-    // TEMP login (no auth check)
-    if (email && password) {
-      router.push("/dashboard");
+    try {
+      await signIn(email, password);
+
+      const next = new URLSearchParams(window.location.search).get("next");
+      router.push(next || "/dashboard");
+    } catch (error) {
+      console.error("Login error:", error);
+      alert("Login failed");
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
       <form
         onSubmit={handleLogin}
-        className="bg-white p-6 rounded-xl shadow-md w-80 space-y-4"
+        className="bg-white p-6 rounded-xl shadow-md w-full max-w-sm space-y-4"
       >
-        <h1 className="text-xl font-bold text-center">Login</h1>
+        <h1 className="text-2xl font-bold text-center">Login</h1>
 
-        <input
-          type="email"
-          placeholder="Email"
-          className="w-full border p-2 rounded"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <div>
+          <label className="block text-sm mb-1">Email</label>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full border p-3 rounded"
+            placeholder="Enter email"
+          />
+        </div>
 
-        <input
-          type="password"
-          placeholder="Password"
-          className="w-full border p-2 rounded"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div>
+          <label className="block text-sm mb-1">Password</label>
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full border p-3 rounded"
+            placeholder="Enter password"
+          />
+        </div>
 
         <button
           type="submit"
-          className="w-full bg-emerald-600 text-white py-2 rounded"
+          disabled={loading}
+          className="w-full bg-emerald-600 text-white py-3 rounded font-semibold disabled:opacity-50"
         >
-          Login
+          {loading ? "Logging in..." : "Login"}
         </button>
+
+        <Link
+          href="/signup"
+          className="block text-center text-sm text-emerald-700"
+        >
+          Create account
+        </Link>
       </form>
     </div>
   );
