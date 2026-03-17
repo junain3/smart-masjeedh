@@ -1,13 +1,11 @@
 import { NextResponse, NextRequest } from 'next/server'
-
-// TEMPORARY BYPASS - Middleware disabled to fix 500 errors
-// Will be re-enabled once Supabase environment issues are resolved
+import { updateSession } from './utils/supabase/middleware'
 
 export async function middleware(req: NextRequest) {
-  console.log('DEBUG: Middleware bypassed - allowing access')
+  console.log('DEBUG: Supabase SSR middleware active')
   
-  // Temporary bypass - allow all access
-  return NextResponse.next()
+  // Update session using Supabase SSR
+  return await updateSession(req)
 }
 
 export const config = {
