@@ -227,8 +227,7 @@ export default function FamilyDetailsPage() {
           .update({
             full_name: fullName,
             relationship,
-            age: parseInt(age),
-            gender,
+            age,
             dob,
             nic,
             phone,
@@ -244,13 +243,11 @@ export default function FamilyDetailsPage() {
             family_id: id,
             full_name: fullName,
             relationship,
-            age: parseInt(age),
-            gender,
+            age,
             dob,
             nic,
             phone,
             civil_status: civilStatus,
-            user_id: user.id,
           },
         ]);
 
