@@ -100,7 +100,7 @@ export default function FamilyDetailsPage() {
         return;
       }
       setUser(user);
-      fetchData();
+      await fetchData(user);
       setLoading(false);
     };
 
@@ -126,25 +126,33 @@ export default function FamilyDetailsPage() {
     }
   }, [dob]);
 
-  const fetchData = async () => {
-    if (!supabase || !id || !user) return;
-    setLoading(true);
-    
-    try {
-      // Fetch family data with user isolation
-      const { data: familyData, error: familyError } = await supabase
-        .from("families")
-        .select("*")
-        .eq("id", id)
-        .eq("user_id", user.id)
-        .single();
+  const fetchData = async (currentUser: any) => {
+  if (!supabase || !id || !currentUser) return;
 
-      if (familyError) throw familyError;
+  setLoading(true);
 
-      if (!familyData) {
-        setErrorMessage("Family not found or you don't have permission to access this family.");
-        return;
-      }
+  try {
+    const { data: familyData, error: familyError } = await supabase
+      .from("families")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", currentUser.id)
+      .single();
+
+    if (familyError || !familyData) {
+      console.log("Family fetch error:", familyError);
+      setFamily(null);
+      return;
+    }
+
+    setFamily(familyData);
+  } catch (err) {
+    console.log("Unexpected error:", err);
+    setFamily(null);
+  } finally {
+    setLoading(false);
+  }
+};
 
       setFamily(familyData);
 
