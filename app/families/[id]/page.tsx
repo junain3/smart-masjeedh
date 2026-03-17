@@ -139,7 +139,6 @@ export default function FamilyDetailsPage() {
         .from("families")
         .select("*")
         .eq("id", id)
-        .eq("user_id", currentUser.id)
         .single();
 
       if (familyError || !familyData) {
