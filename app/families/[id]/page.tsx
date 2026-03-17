@@ -127,7 +127,10 @@ export default function FamilyDetailsPage() {
   }, [dob]);
 
   const fetchData = async (currentUser: any) => {
-    if (!supabase || !id || !currentUser) return;
+    if (!supabase || !id || !currentUser) {
+  setLoading(false);
+  return;
+}
 
     setLoading(true);
 
@@ -168,8 +171,18 @@ export default function FamilyDetailsPage() {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
-  }
+  return <div>Loading...</div>;
+}
+
+if (!family) {
+  return <div>Family not found</div>;
+}
+
+return (
+  <div>
+    ...
+  </div>
+);
 
   const addMember = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -343,6 +356,7 @@ export default function FamilyDetailsPage() {
     }
   };
 
+  // Loading check - moved to end after all helper functions
   if (loading) {
     return <div>Loading...</div>;
   }
