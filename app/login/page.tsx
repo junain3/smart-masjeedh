@@ -15,11 +15,7 @@ export default function MasjidLoginPage() {
   const { user, signIn } = useMockAuth();
 
   // If user is already logged in, redirect to home
-  React.useEffect(() => {
-    if (user) {
-      router.push('/');
-    }
-  }, [user, router]);
+  
 
   const handleLogin = async (e: React.FormEvent) => { 
     e.preventDefault(); 
@@ -31,7 +27,8 @@ export default function MasjidLoginPage() {
       
       // Mock user always has masjid_id in development
       // In production, check user profile for masjid_id
-      router.push('/dashboard');
+     const next = new URLSearchParams(window.location.search).get("next");
+router.push(next || "/dashboard");
     } catch (error) {
       setLoading(false);
     }

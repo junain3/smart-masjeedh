@@ -94,17 +94,12 @@ export default function FamilyDetailsPage() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-
-      if (!sessionData.session) {
-        router.push("/login");
-        return;
-      }
+      
 
       const { data: userData, error } = await supabase.auth.getUser();
 
       if (error || !userData.user) {
-        router.push("/login");
+        router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`);
         return;
       }
       setUser(userData.user);
