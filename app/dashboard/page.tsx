@@ -111,8 +111,8 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-        {/* Sidebar */}
-        <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}>
+      {/* Sidebar */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}>
           <div className="flex items-center justify-between p-4 border-b">
             <h2 className="text-lg font-semibold text-gray-800">Smart Masjeedh</h2>
             <button
@@ -145,8 +145,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="lg:ml-64">
+      {/* Main Content */}
+      <div className="lg:ml-64">
           {/* Header */}
           <header className="bg-white shadow-sm border-b">
             <div className="px-4 sm:px-6 lg:px-8 py-4">
