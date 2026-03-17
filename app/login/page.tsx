@@ -1,38 +1,36 @@
 "use client";
 
-import React, { useState } from 'react'; 
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { useMockAuth } from '@/components/MockAuthProvider';
+import React, { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useMockAuth } from "@/components/MockAuthProvider";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-export default function MasjidLoginPage() { 
-  const [email, setEmail] = useState(''); 
-  const [password, setPassword] = useState(''); 
-  const [loading, setLoading] = useState(false); 
+export default function MasjidLoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const router = useRouter();
-  const { user, signIn } = useMockAuth();
+  const searchParams = useSearchParams();
+  const { signIn } = useMockAuth();
 
-  // If user is already logged in, redirect to home
-  
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
 
-  const handleLogin = async (e: React.FormEvent) => { 
-    e.preventDefault(); 
-    setLoading(true); 
-    
     try {
-      // Use MockAuth signIn function
       await signIn(email, password);
-      
-      // Mock user always has masjid_id in development
-      // In production, check user profile for masjid_id
-     const next = new URLSearchParams(window.location.search).get("next");
-router.push(next || "/dashboard");
+
+      const next = searchParams.get("next");
+      router.push(next || "/dashboard");
     } catch (error) {
+      console.error("Login error:", error);
+      alert("Sign in failed");
       setLoading(false);
     }
-  }; 
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -90,7 +88,7 @@ router.push(next || "/dashboard");
                 disabled={loading}
                 className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50"
               >
-                {loading ? 'Signing in...' : 'Sign in'}
+                {loading ? "Signing in..." : "Sign in"}
               </button>
             </div>
           </form>
