@@ -117,3 +117,11 @@ function LoginPageContent() {
     </div>
   );
 }
+
+export default function MasjidLoginPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
