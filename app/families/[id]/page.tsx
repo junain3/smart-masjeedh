@@ -142,7 +142,7 @@ export default function FamilyDetailsPage() {
       if (familyError) throw familyError;
 
       if (!familyData) {
-        router.push("/families");
+        setErrorMessage("Family not found or you don't have permission to access this family.");
         return;
       }
 

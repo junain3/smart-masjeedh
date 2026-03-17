@@ -204,6 +204,7 @@ export default function FamiliesPage() {
             subscription_amount: parseFloat(subscriptionAmount) || 0,
             opening_balance: parseFloat(openingBalance) || 0,
             is_widow_head: isWidowHead,
+            user_id: user.id, // Add user_id for multi-user isolation
             masjid_id: ctx.masjidId // Include masjid ID
           }
         ]);
