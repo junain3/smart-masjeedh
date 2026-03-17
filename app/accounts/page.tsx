@@ -105,12 +105,20 @@ export default function AccountsPage() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user) {
+      const { data: sessionData } = await supabase.auth.getSession();
+
+      if (!sessionData.session) {
         router.push("/login");
         return;
       }
-      setUser(user);
+
+      const { data: userData, error } = await supabase.auth.getUser();
+
+      if (error || !userData.user) {
+        router.push("/login");
+        return;
+      }
+      setUser(userData.user);
       fetchData();
       setLoading(false);
     };
