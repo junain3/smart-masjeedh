@@ -611,7 +611,7 @@ export default function FamiliesPage() {
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex items-center justify-around py-4 px-6 shadow-2xl z-50">
-        <Link href="/" className="flex flex-col items-center gap-1 group">
+        <Link href="/dashboard" className="flex flex-col items-center gap-1 group">
           <div className="p-3 bg-slate-50 rounded-2xl group-hover:bg-slate-100 transition-colors">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
           </div>

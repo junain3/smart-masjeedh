@@ -357,7 +357,7 @@ export default function AccountsPage() {
 
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-2">
-            <Link href="/" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+            <Link href="/dashboard" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
               <HomeIcon className="w-5 h-5" />
               <span>{t.dashboard}</span>
             </Link>
