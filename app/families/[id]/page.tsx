@@ -218,7 +218,7 @@ export default function FamilyDetailsPage() {
 
       setIsModalOpen(false);
       resetForm();
-      fetchData();
+      fetchData(user);
       
       // Auto-hide success message after 3 seconds
       setTimeout(() => setSuccessMessage(""), 3000);
@@ -255,7 +255,7 @@ export default function FamilyDetailsPage() {
       if (error) throw error;
       
       console.log("🔐 DELETE MEMBER: Member deleted successfully");
-      fetchData();
+      fetchData(user);
     } catch (error: any) {
       console.error("🔐 DELETE MEMBER: Error:", error);
       alert(error.message);
@@ -336,7 +336,7 @@ export default function FamilyDetailsPage() {
       
       if (error) throw error;
       console.log("🔐 TOGGLE SERVICE: Service status updated successfully");
-      fetchData();
+      fetchData(user);
     } catch (error: any) {
       console.error("🔐 TOGGLE SERVICE: Error:", error);
       alert(error.message);
