@@ -127,32 +127,23 @@ export default function FamilyDetailsPage() {
   }, [dob]);
 
   const fetchData = async (currentUser: any) => {
-  if (!supabase || !id || !currentUser) return;
+    if (!supabase || !id || !currentUser) return;
 
-  setLoading(true);
+    setLoading(true);
 
-  try {
-    const { data: familyData, error: familyError } = await supabase
-      .from("families")
-      .select("*")
-      .eq("id", id)
-      .eq("user_id", currentUser.id)
-      .single();
+    try {
+      const { data: familyData, error: familyError } = await supabase
+        .from("families")
+        .select("*")
+        .eq("id", id)
+        .eq("user_id", currentUser.id)
+        .single();
 
-    if (familyError || !familyData) {
-      console.log("Family fetch error:", familyError);
-      setFamily(null);
-      return;
-    }
-
-    setFamily(familyData);
-  } catch (err) {
-    console.log("Unexpected error:", err);
-    setFamily(null);
-  } finally {
-    setLoading(false);
-  }
-};
+      if (familyError || !familyData) {
+        console.log("Family fetch error:", familyError);
+        setFamily(null);
+        return;
+      }
 
       setFamily(familyData);
 
@@ -161,7 +152,7 @@ export default function FamilyDetailsPage() {
         .from("members")
         .select("*")
         .eq("family_id", id)
-        .eq("user_id", user.id)
+        .eq("user_id", currentUser.id)
         .order("full_name");
 
       if (membersError) throw membersError;
