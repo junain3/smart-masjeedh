@@ -25,10 +25,10 @@ import {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, loading: authLoading, isAuthenticated, signOut } = useAuthSession();
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [familyCount, setFamilyCount] = useState(0);
   const [memberCount, setMemberCount] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [lang, setLang] = useState<Language>("en");
@@ -36,13 +36,24 @@ export default function DashboardPage() {
   const t = translations[lang];
 
   useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) {
+        router.push("/login");
+        return;
+      }
+      setUser(user);
+      fetchData();
+      setLoading(false);
+    };
+
+    checkAuth();
+  }, [router]);
+
+  useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
-    
-    if (isAuthenticated && user) {
-      fetchData();
-    }
-  }, [isAuthenticated, user]);
+  }, []);
 
   const fetchData = async () => {
     if (!supabase || !user) return;
@@ -79,7 +90,7 @@ export default function DashboardPage() {
   };
 
   const handleLogout = async () => {
-    await signOut();
+    await supabase.auth.signOut();
     router.push('/login');
   };
 
@@ -94,20 +105,12 @@ export default function DashboardPage() {
     { icon: Settings, label: "Settings", href: "/settings" },
   ];
 
-  if (authLoading || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+  if (loading) {
+    return <div>Loading...</div>;
   }
 
   return (
-    <AuthGuard>
-      <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
         {/* Sidebar */}
         <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}>
           <div className="flex items-center justify-between p-4 border-b">
@@ -226,6 +229,6 @@ export default function DashboardPage() {
           </main>
         </div>
       </div>
-    </AuthGuard>
+    </div>
   );
 }
