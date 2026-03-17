@@ -170,20 +170,6 @@ export default function FamilyDetailsPage() {
     }
   };
 
-  if (loading) {
-  return <div>Loading...</div>;
-}
-
-if (!family) {
-  return <div>Family not found</div>;
-}
-
-return (
-  <div>
-    ...
-  </div>
-);
-
   const addMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supabase || !id || !user) return;
@@ -359,6 +345,10 @@ return (
   // Loading check - moved to end after all helper functions
   if (loading) {
     return <div>Loading...</div>;
+  }
+
+  if (!family) {
+    return <div>Family not found</div>;
   }
 
   return (
