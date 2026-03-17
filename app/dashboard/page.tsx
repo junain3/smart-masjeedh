@@ -5,26 +5,26 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
-import { useAuthSession } from "@/hooks/useAuthSession";
-import { AuthGuard } from "@/components/AuthGuard";
-import { 
-  Users, 
-  Calendar, 
-  CreditCard, 
-  Briefcase, 
-  QrCode, 
-  FileText, 
+import { useMockAuth } from "@/components/MockAuthProvider";
+import {
+  Users,
+  Calendar,
+  CreditCard,
+  Briefcase,
+  QrCode,
+  FileText,
   Search,
   Home,
   ArrowLeft,
   LogOut,
   Menu,
   Settings,
-  HelpCircle
 } from "lucide-react";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { user: authUser, signOut } = useMockAuth();
+
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [familyCount, setFamilyCount] = useState(0);
@@ -37,51 +37,50 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user) {
-        router.push("/login");
+      if (!authUser) {
+        router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`);
         return;
       }
-      setUser(user);
-      fetchData();
-      setLoading(false);
+
+      setUser(authUser);
+      await fetchData(authUser);
     };
 
     checkAuth();
-  }, [router]);
+  }, [router, authUser]);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
   }, []);
 
-  const fetchData = async () => {
-    if (!supabase || !user) return;
-    setLoading(true);
-    try {
-      console.log("📊 DASHBOARD: Fetching data for user:", user.id);
+  const fetchData = async (currentUser: any) => {
+    if (!supabase || !currentUser) {
+      setLoading(false);
+      return;
+    }
 
-      // Fetch family count
-      const { count: familyCount } = await supabase
+    setLoading(true);
+
+    try {
+      const { count: familiesTotal, error: familyError } = await supabase
         .from("families")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id);
+        .eq("user_id", currentUser.id);
 
-      // Fetch member count
-      const { count: memberCount } = await supabase
+      if (familyError) throw familyError;
+
+      const { count: membersTotal, error: memberError } = await supabase
         .from("members")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id);
+        .eq("user_id", currentUser.id);
 
-      setFamilyCount(familyCount || 0);
-      setMemberCount(memberCount || 0);
-      
-      console.log("📊 DASHBOARD: Data fetched successfully", {
-        familyCount,
-        memberCount
-      });
+      if (memberError) throw memberError;
+
+      setFamilyCount(familiesTotal || 0);
+      setMemberCount(membersTotal || 0);
     } catch (err) {
-      console.error("📊 DASHBOARD: Error fetching data:", err);
+      console.error("Dashboard fetch error:", err);
       setFamilyCount(0);
       setMemberCount(0);
     } finally {
@@ -90,8 +89,15 @@ export default function DashboardPage() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
+    try {
+      if (signOut) {
+        await signOut();
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      router.push("/login");
+    }
   };
 
   const menuItems = [
@@ -111,8 +117,11 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}>
+      <div
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}
+      >
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="text-lg font-semibold text-gray-800">Smart Masjeedh</h2>
           <button
@@ -122,6 +131,7 @@ export default function DashboardPage() {
             <ArrowLeft className="w-5 h-5" />
           </button>
         </div>
+
         <nav className="mt-8">
           {menuItems.map((item) => (
             <Link
@@ -134,6 +144,7 @@ export default function DashboardPage() {
             </Link>
           ))}
         </nav>
+
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t">
           <button
             onClick={handleLogout}
@@ -145,9 +156,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="lg:ml-64">
-        {/* Header */}
         <header className="bg-white shadow-sm border-b">
           <div className="px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between">
@@ -157,6 +166,7 @@ export default function DashboardPage() {
               >
                 <Menu className="w-5 h-5" />
               </button>
+
               <div className="flex-1 max-w-lg mx-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -173,9 +183,7 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {/* Dashboard Content */}
         <main className="p-4 sm:p-6 lg:p-8">
-          {/* Centered Logo and Title */}
           <div className="flex flex-col items-center mb-8">
             <div className="w-20 h-20 bg-emerald-600 rounded-full flex items-center justify-center mb-4">
               <Home className="w-10 h-10 text-white" />
@@ -184,21 +192,24 @@ export default function DashboardPage() {
             <p className="text-gray-600">Mubeen Jummah Masjid Management System</p>
           </div>
 
-          {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div className="bg-white border-2 border-emerald-200 rounded-2xl p-6 text-center">
               <Users className="w-12 h-12 text-emerald-600 mx-auto mb-4" />
-              <h3 className="text-lg font-bold text-emerald-700 uppercase tracking-wider mb-2">Total Members</h3>
-              <p className="text-3xl font-black text-gray-900">{memberCount}</p>
+              <h3 className="text-lg font-bold text-emerald-700 uppercase tracking-wider mb-2">
+                Total Families
+              </h3>
+              <p className="text-3xl font-black text-gray-900">{familyCount}</p>
             </div>
+
             <div className="bg-white border-2 border-emerald-200 rounded-2xl p-6 text-center">
               <Users className="w-12 h-12 text-emerald-600 mx-auto mb-4" />
-              <h3 className="text-lg font-bold text-emerald-700 uppercase tracking-wider mb-2">Total Members</h3>
+              <h3 className="text-lg font-bold text-emerald-700 uppercase tracking-wider mb-2">
+                Total Members
+              </h3>
               <p className="text-3xl font-black text-gray-900">{memberCount}</p>
             </div>
           </div>
 
-          {/* Menu Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {menuItems.slice(1).map((item) => (
               <Link
@@ -207,7 +218,9 @@ export default function DashboardPage() {
                 className="bg-white border-2 border-gray-200 rounded-2xl p-6 text-center hover:border-emerald-300 hover:bg-emerald-50 transition-all group"
               >
                 <item.icon className="w-8 h-8 text-emerald-600 mx-auto mb-3 group-hover:scale-110 transition-transform" />
-                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">{item.label}</h3>
+                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
+                  {item.label}
+                </h3>
               </Link>
             ))}
           </div>
