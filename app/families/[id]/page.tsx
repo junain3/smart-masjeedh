@@ -249,7 +249,6 @@ export default function FamilyDetailsPage() {
             phone,
             civil_status: civilStatus,
             user_id: user.id,
-            masjid_id: user.masjid_id,
           },
         ]);
 

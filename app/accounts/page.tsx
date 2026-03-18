@@ -198,7 +198,6 @@ export default function AccountsPage() {
             type: finalType,
             category: finalCategory,
             date,
-            masjid_id: user.masjid_id,
             family_id: type === "subscription" ? selectedFamilyId : null,
           })
           .eq("id", editingTransaction.id)
@@ -213,8 +212,6 @@ export default function AccountsPage() {
             type: finalType,
             category: finalCategory,
             date,
-            user_id: user.id,
-            masjid_id: user.masjid_id,
             family_id: type === "subscription" ? selectedFamilyId : null,
           },
         ]);
