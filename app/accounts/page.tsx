@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Wallet,
@@ -10,10 +9,7 @@ import {
   X,
   Edit,
   Trash2,
-  CheckCircle,
-  Clock,
   Search,
-  TrendingUp,
   Menu,
   LogOut,
   Settings,
@@ -23,7 +19,6 @@ import {
   Home as HomeIcon,
   Users,
   CreditCard,
-  UserPlus,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
@@ -40,8 +35,7 @@ type Transaction = {
   type: "income" | "expense" | "subscription";
   category: string;
   date: string;
-  masjid_id: string;
-  family_id?: string;
+  family_id?: string | null;
   user_id?: string;
 };
 
@@ -52,7 +46,6 @@ type Family = {
 };
 
 export default function AccountsPage() {
-  const router = useRouter();
   const { user: authUser, signOut } = useMockAuth();
   const { toast } = useAppToast();
 
@@ -62,6 +55,7 @@ export default function AccountsPage() {
   const [families, setFamilies] = useState<Family[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [showReportOptions, setShowReportOptions] = useState(false);
 
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
@@ -71,6 +65,7 @@ export default function AccountsPage() {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [submitting, setSubmitting] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [allowed, setAllowed] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -124,7 +119,7 @@ export default function AccountsPage() {
   useEffect(() => {
     const checkAuth = async () => {
       if (!authUser) {
-        router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
         return;
       }
 
@@ -133,7 +128,7 @@ export default function AccountsPage() {
     };
 
     checkAuth();
-  }, [router, authUser]);
+  }, [authUser]);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -154,7 +149,6 @@ export default function AccountsPage() {
         .from("transactions")
         .select("*")
         .eq("user_id", currentUser.id)
-        .eq("masjid_id", currentUser.masjid_id)
         .order("date", { ascending: false });
 
       if (transactionsError) throw transactionsError;
@@ -162,8 +156,7 @@ export default function AccountsPage() {
       const { data: familiesData, error: familiesError } = await supabase
         .from("families")
         .select("id, family_code, head_name")
-        .eq("user_id", currentUser.id)
-        .eq("masjid_id", currentUser.masjid_id);
+        .eq("user_id", currentUser.id);
 
       if (familiesError) throw familiesError;
 
@@ -183,17 +176,18 @@ export default function AccountsPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!supabase || !user) return;
+
     setSubmitting(true);
-    setErrorMessage("");
 
     try {
-      // Explicit ID Handling - CRITICAL
-      if (!user.id || !user.masjid_id) {
-        setErrorMessage("User ID or Masjid ID not found");
+      if (!user?.id) {
+        setErrorMessage("User ID not found");
+        setSubmitting(false);
         return;
       }
 
-      const finalDescription = type === "subscription" ? `Subscription: ${selectedFamilyId}` : description;
+      const finalDescription =
+        type === "subscription" ? `Subscription: ${description}` : description;
       const finalCategory = type === "subscription" ? "subscription" : category;
 
       if (editingTransaction) {
@@ -206,10 +200,10 @@ export default function AccountsPage() {
             category: finalCategory,
             date,
             user_id: user.id,
-            masjid_id: user.masjid_id,
             family_id: type === "subscription" ? selectedFamilyId : null,
           })
-          .eq("id", editingTransaction.id);
+          .eq("id", editingTransaction.id)
+          .eq("user_id", user.id);
 
         if (error) throw error;
       } else {
@@ -221,7 +215,6 @@ export default function AccountsPage() {
             category: finalCategory,
             date,
             user_id: user.id,
-            masjid_id: user.masjid_id,
             family_id: type === "subscription" ? selectedFamilyId : null,
           },
         ]);
@@ -232,10 +225,13 @@ export default function AccountsPage() {
       setIsModalOpen(false);
       resetForm();
       await fetchData(user);
-      toast({ kind: "success", title: "Success", message: "Transaction saved successfully" });
     } catch (err: any) {
       console.error("Transaction error:", err);
-      setErrorMessage(err.message || "Failed to save transaction");
+      toast({
+        kind: "error",
+        title: "Transaction Failed",
+        message: err.message || "Failed",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -262,13 +258,16 @@ export default function AccountsPage() {
         .from("transactions")
         .delete()
         .eq("id", id)
-        .eq("user_id", user.id)
-        .eq("masjid_id", user.masjid_id);
+        .eq("user_id", user.id);
 
       if (error) throw error;
       await fetchData(user);
     } catch (err: any) {
-      toast({ kind: "error", title: "Error", message: err.message || "Failed" });
+      toast({
+        kind: "error",
+        title: "Error",
+        message: err.message || "Failed",
+      });
     }
   }
 
@@ -292,7 +291,6 @@ export default function AccountsPage() {
               th { background-color: #047857; color: white; }
               .income { color: #059669; }
               .expense { color: #dc2626; }
-              .subscription { color: #7c3aed; }
               .header { text-align: center; margin-bottom: 30px; }
               .date { text-align: right; margin-bottom: 20px; }
             </style>
@@ -321,8 +319,8 @@ export default function AccountsPage() {
                     <td>${new Date(tx.date).toLocaleDateString()}</td>
                     <td>${tx.description}</td>
                     <td>${tx.category || "-"}</td>
-                    <td><span class="${tx.type}">${tx.type}</span></td>
-                    <td class="${tx.type}">${tx.type === "income" ? "+" : "-"}Rs. ${tx.amount}</td>
+                    <td>${tx.type}</td>
+                    <td>${tx.type === "expense" ? "-" : "+"}Rs. ${tx.amount}</td>
                   </tr>
                 `
                   )
@@ -350,7 +348,7 @@ export default function AccountsPage() {
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
-      router.push("/login");
+      window.location.href = "/login";
     }
   };
 
@@ -524,19 +522,19 @@ export default function AccountsPage() {
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest ml-1">{t.transactions}</h3>
+            <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest ml-1">
+              {t.transactions}
+            </h3>
 
             {filteredTransactions.length === 0 ? (
               <div className="bg-white rounded-3xl p-8 text-center border border-neutral-200">
                 <Wallet className="w-12 h-12 mx-auto mb-4 text-neutral-300" />
                 <h3 className="font-semibold text-neutral-900 mb-2">
-                  {searchQuery ? "No transactions found" : lang === "tm" ? "பரிவர்த்தனைகள் இல்லை" : "No transactions"}
+                  {searchQuery ? "No transactions found" : "No transactions"}
                 </h3>
                 <p className="text-sm text-neutral-600">
                   {searchQuery
                     ? "Try a different search term"
-                    : lang === "tm"
-                    ? "முதல் பரிவர்த்தனையைச் சேர்க்கவும்"
                     : "Add your first transaction to get started."}
                 </p>
               </div>
@@ -569,6 +567,7 @@ export default function AccountsPage() {
                       <p className="font-semibold text-neutral-900 mb-1">{tx.description}</p>
                       {tx.category && <p className="text-sm text-neutral-600">{tx.category}</p>}
                     </div>
+
                     <div className="text-right">
                       <p
                         className={`text-xl font-black ${
@@ -577,12 +576,15 @@ export default function AccountsPage() {
                       >
                         {kind === "income" ? "+" : "-"}Rs. {tx.amount.toLocaleString()}
                       </p>
+
                       <div className="flex gap-1 mt-2">
                         <button
                           onClick={() => {
                             setEditingTransaction(tx);
                             setAmount(tx.amount.toString());
-                            setDescription(tx.description.replace(/^(Subscription|Income|Expense):\s*/i, ""));
+                            setDescription(
+                              tx.description.replace(/^(Subscription|Income|Expense):\s*/i, "")
+                            );
                             setCategory(tx.category);
                             setDate(tx.date);
                             setType(tx.type);
@@ -593,6 +595,7 @@ export default function AccountsPage() {
                         >
                           <Edit className="w-4 h-4" />
                         </button>
+
                         <button
                           onClick={() => deleteTransaction(tx.id)}
                           className="p-1 text-neutral-400 hover:text-rose-600 transition-colors"
@@ -659,7 +662,9 @@ export default function AccountsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-2">{t.description}</label>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  {t.description}
+                </label>
                 <input
                   type="text"
                   required
@@ -672,7 +677,9 @@ export default function AccountsPage() {
 
               {type === "income" || type === "expense" ? (
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-2">{t.category}</label>
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    {t.category}
+                  </label>
                   <input
                     type="text"
                     value={category}
@@ -683,7 +690,9 @@ export default function AccountsPage() {
                 </div>
               ) : (
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-2">{t.family}</label>
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    {t.family}
+                  </label>
                   <select
                     value={selectedFamilyId}
                     onChange={(e) => setSelectedFamilyId(e.target.value)}
