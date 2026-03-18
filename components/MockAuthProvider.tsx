@@ -43,7 +43,27 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
     // Simulate login process
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Set mock user and tenant context
+    // Check if user has masjid_id (simulate first-time user check)
+    const hasMasjidId = email.includes("mohammedjunain@gmail.com"); // Existing user
+    
+    if (!hasMasjidId) {
+      // First-time user - no masjid_id
+      const mockUser = {
+        id: "a0d80f9e-11ba-436b-9825-1aca3830a7fc",
+        email: email,
+        created_at: new Date().toISOString(),
+        masjid_id: null // First-time user
+      };
+      
+      setUser(mockUser);
+      setTenantContext(null);
+      setRequiresOnboarding(true); // Show Setup Masjid form
+      setAuthError(null);
+      setLoading(false);
+      return;
+    }
+    
+    // Existing user with masjid_id
     const mockUser = {
       id: "a0d80f9e-11ba-436b-9825-1aca3830a7fc",
       email: email || "mohammedjunain@gmail.com",

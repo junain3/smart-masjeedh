@@ -7,7 +7,7 @@ import { useMockAuth } from "@/components/MockAuthProvider";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { signIn } = useMockAuth();
+  const { signIn, requiresOnboarding } = useMockAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,6 +19,12 @@ export default function LoginPage() {
 
     try {
       await signIn(email, password);
+
+      // Check if user needs onboarding (first-time user)
+      if (requiresOnboarding) {
+        router.push("/setup-masjid");
+        return;
+      }
 
       const next = new URLSearchParams(window.location.search).get("next");
       router.push(next || "/dashboard");

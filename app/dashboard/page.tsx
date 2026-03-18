@@ -184,14 +184,28 @@ export default function DashboardPage() {
         </header>
 
         <main className="p-4 sm:p-6 lg:p-8">
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-20 h-20 bg-emerald-600 rounded-full flex items-center justify-center mb-4">
+          {/* Green Gradient Header */}
+          <div className="bg-gradient-to-r from-emerald-600 to-green-600 rounded-3xl p-8 text-white text-center mb-8 shadow-xl">
+            <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm border-4 border-white/30">
               <Home className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-3xl font-black text-gray-900 mb-2">Smart Masjeedh</h1>
-            <p className="text-gray-600">Mubeen Jummah Masjid Management System</p>
+            <h1 className="text-3xl font-black text-white mb-2">MUBEEN JUMMAH MASJID</h1>
+            <p className="text-emerald-100 font-medium">Smart Masjid Management System</p>
           </div>
 
+          {/* Search Bar */}
+          <div className="mb-6">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search families, members, transactions..."
+                className="w-full pl-12 pr-4 py-4 bg-white border-2 border-gray-200 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
+          {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div className="bg-white border-2 border-emerald-200 rounded-2xl p-6 text-center">
               <Users className="w-12 h-12 text-emerald-600 mx-auto mb-4" />
@@ -210,6 +224,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Menu Grid - 4 Columns */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {menuItems.slice(1).map((item) => (
               <Link
