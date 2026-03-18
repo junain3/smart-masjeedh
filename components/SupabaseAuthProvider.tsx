@@ -136,6 +136,10 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
           setRequiresOnboarding(false);
         }
         setLoading(false);
+      } catch (error) {
+        console.error("Error initializing auth:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
