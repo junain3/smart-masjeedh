@@ -14,26 +14,26 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      await signIn(email, password);
+  try {
+    console.log("LOGIN STEP 1: submit started");
 
-      // Check if user needs onboarding (first-time user)
-      if (requiresOnboarding) {
-        router.push("/setup-masjid");
-        return;
-      }
+    await signIn(email, password);
 
-      const next = new URLSearchParams(window.location.search).get("next");
-      router.push(next || "/dashboard");
-    } catch (error) {
-      console.error("Login error:", error);
-      alert("Login failed");
-      setLoading(false);
-    }
-  };
+    console.log("LOGIN STEP 2: signIn finished");
+
+    const next = new URLSearchParams(window.location.search).get("next");
+    console.log("LOGIN STEP 3: redirecting to", next || "/dashboard");
+
+    router.push(next || "/dashboard");
+  } catch (error: any) {
+    console.error("LOGIN STEP ERROR:", error);
+    alert(error?.message || "Login failed");
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
