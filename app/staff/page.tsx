@@ -79,7 +79,8 @@ export default function StaffPage() {
           basic_salary: 50000,
           status: "active",
           created_at: new Date().toISOString(),
-          masjid_id: ctx.masjidId
+          masjid_id: ctx.masjidId,
+          user_id: ctx.userId
         },
         {
           id: "2",
@@ -90,7 +91,8 @@ export default function StaffPage() {
           basic_salary: 35000,
           status: "active",
           created_at: new Date().toISOString(),
-          masjid_id: ctx.masjidId
+          masjid_id: ctx.masjidId,
+          user_id: ctx.userId
         },
         {
           id: "3",
@@ -101,7 +103,8 @@ export default function StaffPage() {
           basic_salary: 30000,
           status: "active",
           created_at: new Date().toISOString(),
-          masjid_id: ctx.masjidId
+          masjid_id: ctx.masjidId,
+          user_id: ctx.userId
         },
         {
           id: "4",
@@ -112,7 +115,8 @@ export default function StaffPage() {
           basic_salary: 25000,
           status: "inactive",
           created_at: new Date().toISOString(),
-          masjid_id: ctx.masjidId
+          masjid_id: ctx.masjidId,
+          user_id: ctx.userId
         }
       ];
       
