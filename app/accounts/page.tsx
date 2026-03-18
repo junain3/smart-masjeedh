@@ -153,13 +153,17 @@ export default function AccountsPage() {
       const { data: transactionsData, error: transactionsError } = await supabase
         .from("transactions")
         .select("*")
+        .eq("user_id", currentUser.id)
+        .eq("masjid_id", currentUser.masjid_id)
         .order("date", { ascending: false });
 
       if (transactionsError) throw transactionsError;
 
       const { data: familiesData, error: familiesError } = await supabase
         .from("families")
-        .select("id, family_code, head_name");
+        .select("id, family_code, head_name")
+        .eq("user_id", currentUser.id)
+        .eq("masjid_id", currentUser.masjid_id);
 
       if (familiesError) throw familiesError;
 
@@ -196,6 +200,8 @@ export default function AccountsPage() {
             type: finalType,
             category: finalCategory,
             date,
+            user_id: user.id,
+            masjid_id: user.masjid_id,
             family_id: type === "subscription" ? selectedFamilyId : null,
           })
           .eq("id", editingTransaction.id);
@@ -209,6 +215,8 @@ export default function AccountsPage() {
             type: finalType,
             category: finalCategory,
             date,
+            user_id: user.id,
+            masjid_id: user.masjid_id,
             family_id: type === "subscription" ? selectedFamilyId : null,
           },
         ]);
@@ -251,7 +259,9 @@ export default function AccountsPage() {
       const { error } = await supabase
         .from("transactions")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .eq("masjid_id", user.masjid_id);
 
       if (error) throw error;
       await fetchData(user);

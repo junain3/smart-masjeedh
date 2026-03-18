@@ -22,6 +22,7 @@ type Staff = {
   status: "active" | "inactive";
   created_at: string;
   masjid_id: string;
+  user_id: string;
 };
 
 export default function StaffPage() {
@@ -159,7 +160,8 @@ export default function StaffPage() {
           basic_salary: parseFloat(basicSalary),
           status,
           created_at: new Date().toISOString(),
-          masjid_id: ctx.masjidId
+          masjid_id: ctx.masjidId,
+          user_id: ctx.userId
         };
         setStaff(prev => [...prev, newStaff]);
       }
