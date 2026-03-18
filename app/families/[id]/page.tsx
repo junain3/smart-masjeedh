@@ -221,6 +221,12 @@ export default function FamilyDetailsPage() {
     setSuccessMessage("");
 
     try {
+      // Explicit ID Handling - CRITICAL
+      if (!user.id || !user.masjid_id) {
+        alert("User ID or Masjid ID not found");
+        return;
+      }
+
       if (editingMember) {
         const { error } = await supabase
           .from("members")

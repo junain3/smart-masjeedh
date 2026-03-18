@@ -183,12 +183,17 @@ export default function AccountsPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!supabase || !user) return;
-
     setSubmitting(true);
+    setErrorMessage("");
 
     try {
-      const finalDescription = type === "subscription" ? `Subscription: ${description}` : description;
-      const finalType = type === "subscription" ? "income" : type;
+      // Explicit ID Handling - CRITICAL
+      if (!user.id || !user.masjid_id) {
+        setErrorMessage("User ID or Masjid ID not found");
+        return;
+      }
+
+      const finalDescription = type === "subscription" ? `Subscription: ${selectedFamilyId}` : description;
       const finalCategory = type === "subscription" ? "subscription" : category;
 
       if (editingTransaction) {
@@ -197,7 +202,7 @@ export default function AccountsPage() {
           .update({
             amount: parseFloat(amount),
             description: finalDescription,
-            type: finalType,
+            type: type === "subscription" ? "income" : type,
             category: finalCategory,
             date,
             user_id: user.id,
@@ -212,7 +217,7 @@ export default function AccountsPage() {
           {
             amount: parseFloat(amount),
             description: finalDescription,
-            type: finalType,
+            type: type === "subscription" ? "income" : type,
             category: finalCategory,
             date,
             user_id: user.id,
@@ -227,13 +232,10 @@ export default function AccountsPage() {
       setIsModalOpen(false);
       resetForm();
       await fetchData(user);
+      toast({ kind: "success", title: "Success", message: "Transaction saved successfully" });
     } catch (err: any) {
       console.error("Transaction error:", err);
-      toast({
-        kind: "error",
-        title: "Transaction Failed",
-        message: err.message || "Failed to save transaction.",
-      });
+      setErrorMessage(err.message || "Failed to save transaction");
     } finally {
       setSubmitting(false);
     }
