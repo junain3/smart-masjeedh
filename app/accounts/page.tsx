@@ -153,15 +153,13 @@ export default function AccountsPage() {
       const { data: transactionsData, error: transactionsError } = await supabase
         .from("transactions")
         .select("*")
-        .eq("user_id", currentUser.id)
         .order("date", { ascending: false });
 
       if (transactionsError) throw transactionsError;
 
       const { data: familiesData, error: familiesError } = await supabase
         .from("families")
-        .select("id, family_code, head_name")
-        .eq("user_id", currentUser.id);
+        .select("id, family_code, head_name");
 
       if (familiesError) throw familiesError;
 
@@ -200,8 +198,7 @@ export default function AccountsPage() {
             date,
             family_id: type === "subscription" ? selectedFamilyId : null,
           })
-          .eq("id", editingTransaction.id)
-          .eq("user_id", user.id);
+          .eq("id", editingTransaction.id);
 
         if (error) throw error;
       } else {
@@ -254,8 +251,7 @@ export default function AccountsPage() {
       const { error } = await supabase
         .from("transactions")
         .delete()
-        .eq("id", id)
-        .eq("user_id", user.id);
+        .eq("id", id);
 
       if (error) throw error;
       await fetchData(user);
