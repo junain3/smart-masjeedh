@@ -469,17 +469,41 @@ export default function AccountsPage() {
             <div className="absolute top-0 right-0 p-8 opacity-10">
               <Wallet className="w-24 h-24" />
             </div>
-            <div className="relative z-10 space-y-1">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">{t.balance}</p>
-              <h2 className="text-4xl font-black">
-                Rs.{" "}
-                {financialTransactions
-                  .reduce(
-                    (sum, tx) => sum + (getFinancialKind(tx) === "income" ? tx.amount : -tx.amount),
-                    0
-                  )
-                  .toLocaleString()}
-              </h2>
+            <div className="relative z-10 space-y-4">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="space-y-1">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">Total Income</p>
+                  <h3 className="text-2xl font-black text-emerald-400">
+                    Rs.{" "}
+                    {financialTransactions
+                      .filter((tx) => getFinancialKind(tx) === "income")
+                      .reduce((sum, tx) => sum + tx.amount, 0)
+                      .toLocaleString()}
+                  </h3>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">Total Expense</p>
+                  <h3 className="text-2xl font-black text-rose-400">
+                    Rs.{" "}
+                    {financialTransactions
+                      .filter((tx) => getFinancialKind(tx) === "expense")
+                      .reduce((sum, tx) => sum + tx.amount, 0)
+                      .toLocaleString()}
+                  </h3>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">{t.balance}</p>
+                  <h2 className="text-2xl font-black">
+                    Rs.{" "}
+                    {financialTransactions
+                      .reduce(
+                        (sum, tx) => sum + (getFinancialKind(tx) === "income" ? tx.amount : -tx.amount),
+                        0
+                      )
+                      .toLocaleString()}
+                  </h2>
+                </div>
+              </div>
             </div>
           </div>
 
