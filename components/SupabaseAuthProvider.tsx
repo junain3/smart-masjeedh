@@ -103,9 +103,9 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
       }
 
       if (data.user) {
-  setUser(data.user);
-  void loadTenantContext(data.user.id);
-}
+        setUser(data.user);
+        void loadTenantContext(data.user.id);
+      }
 
       setLoading(false);
     } catch (error: any) {
@@ -128,14 +128,14 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
         }
 
         if (session?.user) {
-  setUser(session.user);
-  void loadTenantContext(session.user.id);
-} else {
-  setUser(null);
-  setTenantContext(null);
-  setRequiresOnboarding(false);
-}
-setLoading(false);
+          setUser(session.user);
+          void loadTenantContext(session.user.id);
+        } else {
+          setUser(null);
+          setTenantContext(null);
+          setRequiresOnboarding(false);
+        }
+        setLoading(false);
       }
     };
 
@@ -144,13 +144,15 @@ setLoading(false);
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (session?.user) {
-  setUser(session.user);
-  void loadTenantContext(session.user.id);
-} else {
-  setUser(null);
-  setTenantContext(null);
-  setRequiresOnboarding(false);
-}
+          setUser(session.user);
+          void loadTenantContext(session.user.id);
+        } else {
+          setUser(null);
+          setTenantContext(null);
+          setRequiresOnboarding(false);
+        }
+        setLoading(false);
+      }
     );
 
     return () => subscription.unsubscribe();
