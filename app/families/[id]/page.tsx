@@ -71,9 +71,11 @@ type Service = {
 };
 
 export default function FamilyDetailsPage() {
-  const { user: authUser } = useMockAuth();
-  const { id } = useParams();
   const router = useRouter();
+  const params = useParams();
+  const familyId = Array.isArray(params?.id) ? params.id[0] : params?.id;
+
+  const { user: authUser, tenantContext } = useMockAuth();
 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -105,20 +107,6 @@ export default function FamilyDetailsPage() {
   const t = translations[lang];
 
   useEffect(() => {
-    const checkAuth = async () => {
-      if (!authUser) {
-        router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`);
-        return;
-      }
-
-      setUser(authUser);
-      await fetchData(authUser);
-    };
-
-    checkAuth();
-  }, [router, id, authUser]);
-
-  useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
   }, []);
@@ -138,19 +126,47 @@ export default function FamilyDetailsPage() {
     }
   }, [dob]);
 
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (!authUser) {
+        router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
+
+      if (!tenantContext?.masjidId) {
+        setLoading(false);
+        setErrorMessage("Masjid context not found.");
+        return;
+      }
+
+      if (!familyId) {
+        setLoading(false);
+        setErrorMessage("Family ID not found.");
+        return;
+      }
+
+      setUser(authUser);
+      await fetchData(authUser);
+    };
+
+    void checkAuth();
+  }, [authUser, tenantContext, familyId, router]);
+
   const fetchData = async (currentUser: any) => {
-    if (!supabase || !id || !currentUser) {
+    if (!supabase || !familyId || !currentUser || !tenantContext?.masjidId) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
+    setErrorMessage("");
 
     try {
       const { data: familyData, error: familyError } = await supabase
         .from("families")
         .select("*")
-        .eq("id", id)
+        .eq("id", familyId)
+        .eq("masjid_id", tenantContext.masjidId)
         .single();
 
       if (familyError || !familyData) {
@@ -164,7 +180,8 @@ export default function FamilyDetailsPage() {
       const { data: membersData, error: membersError } = await supabase
         .from("members")
         .select("*")
-        .eq("family_id", id)
+        .eq("family_id", familyId)
+        .eq("masjid_id", tenantContext.masjidId)
         .order("full_name");
 
       if (membersError) throw membersError;
@@ -173,7 +190,8 @@ export default function FamilyDetailsPage() {
       const { data: paymentsData, error: paymentsError } = await supabase
         .from("transactions")
         .select("id, amount, date, description")
-        .eq("family_id", id)
+        .eq("family_id", familyId)
+        .eq("masjid_id", tenantContext.masjidId)
         .order("date", { ascending: false });
 
       if (paymentsError) {
@@ -186,7 +204,8 @@ export default function FamilyDetailsPage() {
       const { data: servicesData, error: servicesError } = await supabase
         .from("service_distributions")
         .select("id, status, date, service_name")
-        .eq("family_id", id)
+        .eq("family_id", familyId)
+        .eq("masjid_id", tenantContext.masjidId)
         .order("date", { ascending: false });
 
       if (servicesError) {
@@ -204,6 +223,7 @@ export default function FamilyDetailsPage() {
       }
     } catch (err: any) {
       console.error("Error fetching data:", err);
+      setErrorMessage(err?.message || "Failed to load family details.");
       setFamily(null);
       setMembers([]);
       setPayments([]);
@@ -213,17 +233,42 @@ export default function FamilyDetailsPage() {
     }
   };
 
+  const resetForm = () => {
+    setFullName("");
+    setRelationship("மகன்");
+    setDob("");
+    setAge("");
+    setGender("Male");
+    setNic("");
+    setPhone("");
+    setCivilStatus("Single");
+    setEditingMember(null);
+  };
+
+  const openEditMember = (member: Member) => {
+    setEditingMember(member);
+    setFullName(member.full_name || "");
+    setRelationship(member.relationship || "மகன்");
+    setDob(member.dob || "");
+    setAge(member.age ? String(member.age) : "");
+    setGender(member.gender || "Male");
+    setNic(member.nic || "");
+    setPhone(member.phone || "");
+    setCivilStatus(member.civil_status || "Single");
+    setIsModalOpen(true);
+  };
+
   const addMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabase || !id || !user) return;
+
+    if (!supabase || !familyId || !user || !tenantContext?.masjidId) return;
 
     setSubmitting(true);
     setSuccessMessage("");
 
     try {
-      // Explicit ID Handling - CRITICAL
-      if (!user.id || !user.masjid_id) {
-        alert("User ID or Masjid ID not found");
+      if (!user.id) {
+        alert("User ID not found");
         return;
       }
 
@@ -233,29 +278,32 @@ export default function FamilyDetailsPage() {
           .update({
             full_name: fullName,
             relationship,
-            age,
+            age: age ? parseInt(age, 10) : null,
+            gender,
             dob,
             nic,
             phone,
             civil_status: civilStatus,
           })
-          .eq("id", editingMember.id);
+          .eq("id", editingMember.id)
+          .eq("masjid_id", tenantContext.masjidId);
 
         if (error) throw error;
         setSuccessMessage("உறுப்பினர் விபரம் மாற்றப்பட்டது!");
       } else {
         const { error } = await supabase.from("members").insert([
           {
-            family_id: id,
+            family_id: familyId,
             full_name: fullName,
             relationship,
-            age,
+            age: age ? parseInt(age, 10) : null,
+            gender,
             dob,
             nic,
             phone,
             civil_status: civilStatus,
             user_id: user.id,
-            masjid_id: user.masjid_id,
+            masjid_id: tenantContext.masjidId,
           },
         ]);
 
@@ -275,31 +323,43 @@ export default function FamilyDetailsPage() {
     }
   };
 
-  const resetForm = () => {
-    setFullName("");
-    setRelationship("மகன்");
-    setDob("");
-    setAge("");
-    setGender("Male");
-    setNic("");
-    setPhone("");
-    setCivilStatus("Single");
-    setEditingMember(null);
-  };
-
   const deleteMember = async (memberId: string) => {
-    if (!supabase || !window.confirm(t.confirm_delete)) return;
+    if (!supabase || !tenantContext?.masjidId || !window.confirm(t.confirm_delete)) return;
 
     try {
       const { error } = await supabase
         .from("members")
         .delete()
-        .eq("id", memberId);
+        .eq("id", memberId)
+        .eq("masjid_id", tenantContext.masjidId);
 
       if (error) throw error;
       await fetchData(user);
     } catch (error: any) {
       console.error("DELETE MEMBER Error:", error);
+      alert(error.message);
+    }
+  };
+
+  const toggleServiceStatus = async (serviceId: string) => {
+    if (!supabase || !tenantContext?.masjidId) return;
+
+    try {
+      const service = services.find((s) => s.id === serviceId);
+      if (!service) return;
+
+      const newStatus = service.status === "Received" ? "Pending" : "Received";
+
+      const { error } = await supabase
+        .from("service_distributions")
+        .update({ status: newStatus })
+        .eq("id", serviceId)
+        .eq("masjid_id", tenantContext.masjidId);
+
+      if (error) throw error;
+      await fetchData(user);
+    } catch (error: any) {
+      console.error("TOGGLE SERVICE Error:", error);
       alert(error.message);
     }
   };
@@ -359,28 +419,6 @@ export default function FamilyDetailsPage() {
   const prevYearArrears = Math.max(0, annualFee - paidPrevYear);
   const finalDue = Math.max(0, openingBal + annualFee + prevYearArrears - paidThisYear);
 
-  const toggleServiceStatus = async (serviceId: string) => {
-    if (!supabase) return;
-
-    try {
-      const service = services.find((s) => s.id === serviceId);
-      if (!service) return;
-
-      const newStatus = service.status === "Received" ? "Pending" : "Received";
-
-      const { error } = await supabase
-        .from("service_distributions")
-        .update({ status: newStatus })
-        .eq("id", serviceId);
-
-      if (error) throw error;
-      await fetchData(user);
-    } catch (error: any) {
-      console.error("TOGGLE SERVICE Error:", error);
-      alert(error.message);
-    }
-  };
-
   if (loading) {
     return <div>Loading...</div>;
   }
@@ -425,9 +463,7 @@ export default function FamilyDetailsPage() {
             <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
               <CheckCircle className="w-5 h-5 text-emerald-600" />
             </div>
-            <p className="text-xs font-bold text-emerald-900">
-              {successMessage}
-            </p>
+            <p className="text-xs font-bold text-emerald-900">{successMessage}</p>
           </div>
         </div>
       )}
@@ -483,9 +519,7 @@ export default function FamilyDetailsPage() {
             </div>
           </div>
           <p className="text-sm font-black text-slate-900">Rs. {finalDue.toLocaleString()}</p>
-          <p className="text-[9px] font-black text-rose-600/60 uppercase tracking-tighter">
-            Due for {selectedYear}
-          </p>
+          <p className="text-[9px] font-black text-rose-600/60 uppercase tracking-tighter">Due for {selectedYear}</p>
         </div>
       </div>
 
@@ -629,7 +663,7 @@ export default function FamilyDetailsPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => setEditingMember(member)}
+                      onClick={() => openEditMember(member)}
                       className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
                     >
                       <Edit2 className="h-4 w-4" />
@@ -723,12 +757,7 @@ export default function FamilyDetailsPage() {
             </p>
 
             <div className="bg-slate-50 p-8 rounded-[2.5rem] border-4 border-emerald-500/10 mb-8 shadow-inner">
-              <QRCodeSVG
-                value={`smart-masjeedh:family:${family?.id}`}
-                size={200}
-                level="H"
-                includeMargin={false}
-              />
+              <QRCodeSVG value={`smart-masjeedh:family:${family?.id}`} size={200} level="H" includeMargin={false} />
             </div>
 
             <button
@@ -748,9 +777,7 @@ export default function FamilyDetailsPage() {
 
             <form onSubmit={addMember} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                  {t.full_name}
-                </label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.full_name}</label>
                 <input
                   required
                   type="text"
@@ -795,11 +822,7 @@ export default function FamilyDetailsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">வயது</label>
-                  <input
-                    readOnly
-                    value={age}
-                    className="w-full bg-slate-100 border-none rounded-2xl p-4 text-sm text-slate-500"
-                  />
+                  <input readOnly value={age} className="w-full bg-slate-100 border-none rounded-2xl p-4 text-sm text-slate-500" />
                 </div>
 
                 <div className="space-y-1">
@@ -814,9 +837,7 @@ export default function FamilyDetailsPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                  {t.phone}
-                </label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.phone}</label>
                 <input
                   type="tel"
                   className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-900 outline-none focus:ring-2 ring-emerald-500/10"
