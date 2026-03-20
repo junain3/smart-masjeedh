@@ -199,11 +199,15 @@ export default function AccountsPage() {
         return;
       }
 
-      if (!user?.id) {
-        setErrorMessage("User ID not found");
+      // Get the authenticated user ID from auth, not from state
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        setErrorMessage("Not authenticated");
         setSubmitting(false);
         return;
       }
+
+      const authUserId = session.user.id;
 
       const finalDescription =
         type === "subscription" ? `Subscription: ${description}` : description;
@@ -219,7 +223,7 @@ export default function AccountsPage() {
             category: finalCategory,
             date,
             masjid_id: ctx.masjidId,
-            user_id: user.id,
+            user_id: authUserId,
             family_id: type === "subscription" ? selectedFamilyId : null,
           })
           .eq("id", editingTransaction.id)
@@ -235,7 +239,7 @@ export default function AccountsPage() {
             category: finalCategory,
             date,
             masjid_id: ctx.masjidId,
-            user_id: user.id,
+            user_id: authUserId,
             family_id: type === "subscription" ? selectedFamilyId : null,
           },
         ]);

@@ -88,6 +88,12 @@ export default function CollectionsPage() {
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
 
+      // Get the authenticated user ID from auth, not from state
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      const authUserId = session.user.id;
+
       // Load all data in parallel for better performance
       const [
         familiesResponse,
@@ -111,12 +117,12 @@ export default function CollectionsPage() {
             family:families(id, family_code, head_name, address)
           `)
           .eq("masjid_id", ctx.masjidId)
-          .eq("collected_by_user_id", user?.id)
+          .eq("collected_by_user_id", authUserId)
           .order("created_at", { ascending: false }),
         
         // Load my waiting balance
         supabase
-          .rpc("get_collector_waiting_balance", { p_collector_user_id: user?.id }),
+          .rpc("get_collector_waiting_balance", { p_collector_user_id: authUserId }),
         
         // Load family subscription statuses
         supabase
@@ -129,7 +135,7 @@ export default function CollectionsPage() {
           .from("subscription_collector_profiles")
           .select("default_commission_percent")
           .eq("masjid_id", ctx.masjidId)
-          .eq("user_id", user?.id)
+          .eq("user_id", authUserId)
           .single()
       ]);
 
@@ -352,6 +358,12 @@ export default function CollectionsPage() {
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) throw new Error("Tenant context not found");
 
+      // Get the authenticated user ID from auth, not from state
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error("Not authenticated");
+
+      const authUserId = session.user.id;
+
       const amountNum = parseFloat(amount);
       const commissionAmount = (amountNum * commissionRate) / 100;
 
@@ -364,7 +376,7 @@ export default function CollectionsPage() {
           commission_percent: commissionRate,
           commission_amount: commissionAmount,
           notes: notes || null,
-          collected_by_user_id: user?.id,
+          collected_by_user_id: authUserId,
           date: new Date().toISOString().split('T')[0]
         })
         .select()
