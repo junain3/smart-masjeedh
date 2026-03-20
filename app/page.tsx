@@ -107,7 +107,7 @@ export default function DashboardPage() {
 
   // Fetch data effect
   useEffect(() => {
-    if (!user) return;
+    if (!user || !tenantContext?.masjidId) return;
     
     async function fetchData() {
       try {
@@ -116,9 +116,11 @@ export default function DashboardPage() {
         // Get tenant context - don't fail if it doesn't exist yet
         const ctx = tenantContext || await getTenantContext();
         
-        if (!ctx) {
-          // Don't redirect - just show empty state
-          setLoading(false);
+        if (!ctx || !ctx.masjidId) {
+          // Show loading state instead of wrong data
+          setLoading(true);
+          setFamilyCount(null);
+          setMemberCount(null);
           return;
         }
 
@@ -206,7 +208,7 @@ export default function DashboardPage() {
       }
     }
     fetchData();
-  }, [user, router]);
+  }, [user, tenantContext?.masjidId, router]);
 
   if (authLoading) {
     return (

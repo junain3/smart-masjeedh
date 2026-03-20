@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { QrCode, Plus, Users, Wallet, Calendar, X, Check, AlertCircle, Search, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+import { getTenantContext } from "@/lib/tenant";
+import { useMockAuth } from "@/components/MockAuthProvider";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { AppShell } from "@/components/AppShell";
 
@@ -44,6 +46,7 @@ type FamilySubscriptionStatus = {
 
 export default function CollectionsPage() {
   const router = useRouter();
+  const { user, tenantContext } = useMockAuth();
   const [lang, setLang] = useState<Language>("en");
   const [collections, setCollections] = useState<Collection[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
@@ -82,8 +85,8 @@ export default function CollectionsPage() {
 
   const loadData = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const ctx = tenantContext || await getTenantContext();
+      if (!ctx) return;
 
       // Load all data in parallel for better performance
       const [
@@ -97,7 +100,7 @@ export default function CollectionsPage() {
         supabase
           .from("families")
           .select("id, family_code, head_name, address, phone")
-          .eq("masjid_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
           .order("family_code"),
         
         // Load my collections
@@ -107,26 +110,26 @@ export default function CollectionsPage() {
             *,
             family:families(id, family_code, head_name, address)
           `)
-          .eq("masjid_id", session.user.id)
-          .eq("collected_by_user_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
+          .eq("collected_by_user_id", user?.id)
           .order("created_at", { ascending: false }),
         
         // Load my waiting balance
         supabase
-          .rpc("get_collector_waiting_balance", { p_collector_user_id: session.user.id }),
+          .rpc("get_collector_waiting_balance", { p_collector_user_id: user?.id }),
         
         // Load family subscription statuses
         supabase
           .from("family_subscription_payments")
           .select("family_id, amount, status, payment_date")
-          .eq("masjid_id", session.user.id),
+          .eq("masjid_id", ctx.masjidId),
         
         // Load my commission rate
         supabase
           .from("subscription_collector_profiles")
           .select("default_commission_percent")
-          .eq("masjid_id", session.user.id)
-          .eq("user_id", session.user.id)
+          .eq("masjid_id", ctx.masjidId)
+          .eq("user_id", user?.id)
           .single()
       ]);
 
@@ -346,8 +349,8 @@ export default function CollectionsPage() {
     setSuccess("");
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
+      const ctx = tenantContext || await getTenantContext();
+      if (!ctx) throw new Error("Tenant context not found");
 
       const amountNum = parseFloat(amount);
       const commissionAmount = (amountNum * commissionRate) / 100;
@@ -355,13 +358,13 @@ export default function CollectionsPage() {
       const { data, error: insertError } = await supabase
         .from("subscription_collections")
         .insert({
-          masjid_id: session.user.id,
+          masjid_id: ctx.masjidId,
           family_id: selectedFamilyId,
           amount: amountNum,
           commission_percent: commissionRate,
           commission_amount: commissionAmount,
           notes: notes || null,
-          collected_by_user_id: session.user.id,
+          collected_by_user_id: user?.id,
           date: new Date().toISOString().split('T')[0]
         })
         .select()

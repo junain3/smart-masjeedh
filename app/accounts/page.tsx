@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
+import { getTenantContext } from "@/lib/tenant";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useAppToast } from "@/components/ToastProvider";
 import { useMockAuth } from "@/components/MockAuthProvider";
@@ -46,9 +47,9 @@ type Family = {
 };
 
 export default function AccountsPage() {
-  const { user: authUser, signOut } = useMockAuth();
-  const { toast } = useAppToast();
+  const { user: authUser, signOut, tenantContext } = useMockAuth();
 
+  const { toast } = useAppToast();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -124,11 +125,14 @@ export default function AccountsPage() {
       }
 
       setUser(authUser);
-      await fetchData(authUser);
+      // Only fetch data when tenantContext is available
+      if (tenantContext?.masjidId) {
+        await fetchData(authUser);
+      }
     };
 
     checkAuth();
-  }, [authUser]);
+  }, [authUser, tenantContext?.masjidId]);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -145,10 +149,17 @@ export default function AccountsPage() {
     setErrorMessage("");
 
     try {
+      const ctx = tenantContext || await getTenantContext();
+      if (!ctx || !ctx.masjidId) {
+        console.log("No tenant context or masjidId available");
+        setLoading(false);
+        return;
+      }
+
       const { data: transactionsData, error: transactionsError } = await supabase
         .from("transactions")
         .select("*")
-        .eq("user_id", currentUser.id)
+        .eq("masjid_id", ctx.masjidId)
         .order("date", { ascending: false });
 
       if (transactionsError) throw transactionsError;
@@ -156,7 +167,7 @@ export default function AccountsPage() {
       const { data: familiesData, error: familiesError } = await supabase
         .from("families")
         .select("id, family_code, head_name")
-        .eq("user_id", currentUser.id);
+        .eq("masjid_id", ctx.masjidId);
 
       if (familiesError) throw familiesError;
 
@@ -180,6 +191,14 @@ export default function AccountsPage() {
     setSubmitting(true);
 
     try {
+      // Use tenantContext from useMockAuth instead of getTenantContext
+      const ctx = tenantContext || await getTenantContext();
+      if (!ctx) {
+        setErrorMessage("Tenant context not found");
+        setSubmitting(false);
+        return;
+      }
+
       if (!user?.id) {
         setErrorMessage("User ID not found");
         setSubmitting(false);
@@ -199,11 +218,12 @@ export default function AccountsPage() {
             type: type === "subscription" ? "income" : type,
             category: finalCategory,
             date,
+            masjid_id: ctx.masjidId,
             user_id: user.id,
             family_id: type === "subscription" ? selectedFamilyId : null,
           })
           .eq("id", editingTransaction.id)
-          .eq("user_id", user.id);
+          .eq("masjid_id", ctx.masjidId);
 
         if (error) throw error;
       } else {
@@ -214,6 +234,7 @@ export default function AccountsPage() {
             type: type === "subscription" ? "income" : type,
             category: finalCategory,
             date,
+            masjid_id: ctx.masjidId,
             user_id: user.id,
             family_id: type === "subscription" ? selectedFamilyId : null,
           },
@@ -254,11 +275,15 @@ export default function AccountsPage() {
     if (!ok) return;
 
     try {
+      // Use tenantContext from useMockAuth instead of getTenantContext
+      const ctx = tenantContext || await getTenantContext();
+      if (!ctx) return;
+
       const { error } = await supabase
         .from("transactions")
         .delete()
         .eq("id", id)
-        .eq("user_id", user.id);
+        .eq("masjid_id", ctx.masjidId);
 
       if (error) throw error;
       await fetchData(user);
