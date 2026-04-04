@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
-import { useMockAuth } from "@/components/MockAuthProvider";
+import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import {
   Users,
   Calendar,
@@ -23,8 +23,10 @@ import {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user: authUser, signOut } = useMockAuth();
-
+  const { user: authUser, tenantContext, signOut, loading: authLoading } = useSupabaseAuth();
+  
+  // RBAC Permission Guard
+ 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [familyCount, setFamilyCount] = useState(0);
@@ -36,26 +38,27 @@ export default function DashboardPage() {
   const t = translations[lang];
 
   useEffect(() => {
-    const checkAuth = async () => {
-      if (!authUser) {
-        router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`);
-        return;
-      }
+  if (authLoading) return;
 
-      setUser(authUser);
-      await fetchData(authUser);
-    };
+  if (!authUser) {
+    router.push(`/login?next=${encodeURIComponent("/dashboard")}`);
+    return;
+  }
 
-    checkAuth();
-  }, [router, authUser]);
+  // 🔥 Fix: tenantContext wait
+  if (!tenantContext?.masjidId) {
+    console.log("Waiting for tenantContext...");
+    return;
+  }
 
-  useEffect(() => {
-    const savedLang = localStorage.getItem("app_lang") as Language;
-    if (savedLang) setLang(savedLang);
-  }, []);
+  console.log("Tenant loaded:", tenantContext);
 
-  const fetchData = async (currentUser: any) => {
-    if (!supabase || !currentUser) {
+  setUser(authUser);
+  fetchData(tenantContext.masjidId);
+
+}, [authUser, tenantContext, authLoading, router]);
+  const fetchData = async (masjidId: string) => {
+    if (!supabase || !masjidId) {
       setLoading(false);
       return;
     }
@@ -66,14 +69,14 @@ export default function DashboardPage() {
       const { count: familiesTotal, error: familyError } = await supabase
         .from("families")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", currentUser.id);
+        .eq("masjid_id", masjidId);
 
       if (familyError) throw familyError;
 
       const { count: membersTotal, error: memberError } = await supabase
         .from("members")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", currentUser.id);
+        .eq("masjid_id", masjidId);
 
       if (memberError) throw memberError;
 
@@ -101,21 +104,30 @@ export default function DashboardPage() {
   };
 
   const menuItems = [
-    { icon: Home, label: "Home", href: "/dashboard" },
-    { icon: Users, label: "Families", href: "/families" },
-    { icon: Calendar, label: "Events", href: "/events" },
-    { icon: CreditCard, label: "Accounts", href: "/accounts" },
-    { icon: Briefcase, label: "Staff", href: "/staff" },
-    { icon: QrCode, label: "QR Scanner", href: "/scanner" },
-    { icon: FileText, label: "Reports", href: "/reports" },
-    { icon: Settings, label: "Settings", href: "/settings" },
-  ];
+    { icon: Home, label: "Home", href: "/dashboard", alwaysVisible: true },
+    { icon: Users, label: "Families", href: "/families", permission: "members" },
+    { icon: Calendar, label: "Events", href: "/events", alwaysVisible: true },
+    { icon: CreditCard, label: "Accounts", href: "/accounts", permission: ["accounts", "subscriptions_collect", "subscriptions_approve"] },
+    { icon: Briefcase, label: "Staff", href: "/staff", permission: "staff_management" },
+    { icon: QrCode, label: "QR Scanner", href: "/scanner", alwaysVisible: true },
+    { icon: FileText, label: "Reports", href: "/reports", permission: "reports" },
+    { icon: Settings, label: "Settings", href: "/settings", permission: "settings" },
+  ].filter(item => {
+    if (item.alwaysVisible) return true;
+    if (!item.permission) return true;
+    if (!tenantContext?.permissions) return false;
+    
+    if (Array.isArray(item.permission)) {
+      return item.permission.some(perm => tenantContext.permissions[perm]);
+    }
+    
+    return tenantContext.permissions[item.permission];
+  });
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
-  return (
+  if (authLoading || !tenantContext?.masjidId) {
+  return <div>Loading...</div>;
+}
+return (
     <div className="min-h-screen bg-gray-50">
       <div
         className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform ${
@@ -184,7 +196,6 @@ export default function DashboardPage() {
         </header>
 
         <main className="p-4 sm:p-6 lg:p-8">
-          {/* Green Gradient Header */}
           <div className="bg-gradient-to-r from-emerald-600 to-green-600 rounded-3xl p-8 text-white text-center mb-8 shadow-xl">
             <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm border-4 border-white/30">
               <Home className="w-10 h-10 text-white" />
@@ -193,7 +204,6 @@ export default function DashboardPage() {
             <p className="text-emerald-100 font-medium">Smart Masjid Management System</p>
           </div>
 
-          {/* Search Bar */}
           <div className="mb-6">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -205,7 +215,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div className="bg-white border-2 border-emerald-200 rounded-2xl p-6 text-center">
               <Users className="w-12 h-12 text-emerald-600 mx-auto mb-4" />
@@ -224,7 +233,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Menu Grid - 4 Columns */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {menuItems.slice(1).map((item) => (
               <Link

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import {
   Wallet,
   Calendar,
@@ -26,6 +28,7 @@ import { getTenantContext } from "@/lib/tenant";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useAppToast } from "@/components/ToastProvider";
 import { useMockAuth } from "@/components/MockAuthProvider";
+import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +50,31 @@ type Family = {
 };
 
 export default function AccountsPage() {
-  const { user: authUser, signOut, tenantContext } = useMockAuth();
+  const router = useRouter();
+  const { user: authUser, signOut, tenantContext, loading: authLoading } = useSupabaseAuth();
+  
+  // Parse permissions and check access
+  const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const hasAccountsAccess = hasModulePermission(parsedPermissions, 'accounts');
+  
+  // Login redirect effect
+  useEffect(() => {
+    if (!authLoading && !authUser) {
+      router.push('/login');
+    }
+  }, [authLoading, authUser, router]);
+  
+  // Page-level access control
+  if (authLoading) return <div>Loading...</div>;
+  if (!authUser) {
+    router.push('/login');
+    return null;
+  }
+  
+  if (!hasAccountsAccess && !userIsSuperAdmin) {
+    return <div>No access to Accounts module</div>;
+  }
 
   const { toast } = useAppToast();
   const [user, setUser] = useState<any>(null);
@@ -57,7 +84,6 @@ export default function AccountsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [showReportOptions, setShowReportOptions] = useState(false);
-
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState<"income" | "expense" | "subscription">("income");
@@ -231,18 +257,23 @@ export default function AccountsPage() {
 
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("transactions").insert([
-          {
-            amount: parseFloat(amount),
-            description: finalDescription,
-            type: type === "subscription" ? "income" : type,
-            category: finalCategory,
-            date,
-            masjid_id: ctx.masjidId,
-            user_id: authUserId,
-            family_id: type === "subscription" ? selectedFamilyId : null,
-          },
-        ]);
+        console.log("TRANSACTION INSERT MASJID ID:", ctx?.masjidId);
+console.log("SELECTED FAMILY ID:", selectedFamilyId);
+console.log("AUTH USER ID:", authUserId);
+const { error } = await supabase
+  .from("transactions")
+  .insert([
+    {
+      amount: parseFloat(amount),
+      description: finalDescription,
+      type: type === "subscription" ? "income" : type,
+      category: finalCategory,
+      date,
+      masjid_id: ctx.masjidId,
+      user_id: authUserId,
+      family_id: type === "subscription" ? selectedFamilyId : null,
+    },
+  ]);
 
         if (error) throw error;
       }

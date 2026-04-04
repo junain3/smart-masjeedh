@@ -1,16 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Edit2, Trash2, X, Users, DollarSign, Calendar, Mail, Phone, Briefcase, Shield, Home as HomeIcon, CreditCard, Menu, LogOut, Settings, HelpCircle } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, X, Users, DollarSign, Calendar, Mail, Phone, Briefcase, Shield, Home as HomeIcon, CreditCard, Menu, LogOut, Settings, HelpCircle, Check, AlertCircle, Wallet } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { useAppToast } from "@/components/ToastProvider";
 import { useMockAuth } from "@/components/MockAuthProvider";
+import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
+import StaffProfile from "@/components/StaffProfile";
+import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
 
 export const dynamic = 'force-dynamic';
+
+type Permissions = {
+  accounts: boolean;
+  members: boolean;
+  subscriptions_collect: boolean;
+  subscriptions_approve: boolean;
+  staff_management: boolean;
+  reports: boolean;
+  settings: boolean;
+  events: boolean;
+};
 
 type Staff = {
   id: string;
@@ -23,12 +37,32 @@ type Staff = {
   created_at: string;
   masjid_id: string;
   user_id: string;
+  permissions?: Permissions;
+  commission_rate?: number;
+  enable_collection?: boolean;
 };
 
 export default function StaffPage() {
   const router = useRouter();
   const { toast, confirm } = useAppToast();
-  const { user, loading: authLoading, tenantContext, signOut } = useMockAuth();
+  const { user, loading: authLoading, tenantContext, signOut } = useSupabaseAuth();
+
+  // Page-level access control
+  if (authLoading) return <div>Loading...</div>;
+  if (!user) {
+    router.push('/login');
+    return null;
+  }
+  
+  // Parse permissions and check access
+  const parsedPermissions = parsePermissions(tenantContext?.permissions || null);
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const hasStaffAccess = hasModulePermission(parsedPermissions, 'staff_management');
+  
+  if (!hasStaffAccess && !userIsSuperAdmin) {
+    return <div>No access</div>;
+  }
+  
   const [lang, setLang] = useState<Language>("en");
   const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +70,7 @@ export default function StaffPage() {
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeView, setActiveView] = useState<'all' | 'staff' | 'admins'>('all');
 
   // Form states
   const [name, setName] = useState("");
@@ -46,7 +81,56 @@ export default function StaffPage() {
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [submitting, setSubmitting] = useState(false);
 
+  // Payout Modal states
+  const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [selectedCollector, setSelectedCollector] = useState<string | null>(null);
+  const [payoutAmount, setPayoutAmount] = useState("");
+  const [payoutNote, setPayoutNote] = useState("");
+  const [collectorBalance, setCollectorBalance] = useState(0);
+  const [payoutSubmitting, setPayoutSubmitting] = useState(false);
+  const [staffBalances, setStaffBalances] = useState<{[key: string]: number}>({});
+
+  // Staff Profile View states (simplified)
+  const [showProfileView, setShowProfileView] = useState(false);
+  const [selectedStaffProfile, setSelectedStaffProfile] = useState<Staff | null>(null);
+
+  // User Access Management states
+  const [userRoles, setUserRoles] = useState<any[]>([]);
+  const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState(false);
+  const [editingUserRole, setEditingUserRole] = useState<any>(null);
+  const [editingRole, setEditingRole] = useState('staff');
+  const [permissions, setPermissions] = useState({
+    accounts: false,
+    members: false,
+    subscriptions_collect: false,
+    subscriptions_approve: false,
+    staff_management: false,
+    reports: false,
+    settings: false,
+    events: false
+  });
+
+  // Invite User states
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('staff');
+  const [inviteCommissionPercent, setInviteCommissionPercent] = useState('10');
+  const [invitePermissions, setInvitePermissions] = useState<Permissions>({
+    accounts: false,
+    members: false,
+    subscriptions_collect: false,
+    subscriptions_approve: false,
+    staff_management: false,
+    reports: false,
+    settings: false,
+    events: false
+  });
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [inviteError, setInviteError] = useState('');
+
   const t = translations[lang];
+
+  const canManageAccess = tenantContext?.role === "super_admin" || tenantContext?.role === "co_admin";
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -56,7 +140,31 @@ export default function StaffPage() {
   useEffect(() => {
     if (!user) return;
     fetchStaff();
+    fetchUserRoles();
   }, [user]);
+
+  useEffect(() => {
+    if (tenantContext?.masjidId) {
+      fetchUserRoles();
+    }
+  }, [tenantContext?.masjidId]);
+
+  async function fetchUserRoles() {
+    if (!supabase || !tenantContext?.masjidId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("id, email, role, permissions, user_id")
+        .eq("masjid_id", tenantContext.masjidId);
+
+      if (error) throw error;
+      setUserRoles(data || []);
+    } catch (err: any) {
+      console.error("Fetch user roles error:", err);
+      toast({ kind: "error", title: "Error", message: "Failed to fetch user roles" });
+    }
+  }
 
   async function fetchStaff() {
     if (!supabase) return;
@@ -68,59 +176,38 @@ export default function StaffPage() {
         return;
       }
 
-      // Mock staff data for now
-      const mockStaff: Staff[] = [
+      // Auto-add current user as Super Admin if no staff exists
+      const mockStaff: Staff[] = staff.length === 0 ? [
         {
-          id: "1",
-          name: "Ahmed Mohamed",
-          email: "ahmed@mjm.com",
-          phone: "+94 77 123 4567",
-          role: "co_admin",
-          basic_salary: 50000,
+          id: ctx.userId || "current_user",
+          name: user?.name || user?.email || "Super Admin",
+          email: user?.email || "admin@mjm.com",
+          phone: user?.phone || "+919876543210",
+          role: "super_admin",
+          basic_salary: 0,
           status: "active",
           created_at: new Date().toISOString(),
           masjid_id: ctx.masjidId,
-          user_id: ctx.userId
-        },
-        {
-          id: "2",
-          name: "Fatima Rahman",
-          email: "fatima@mjm.com",
-          phone: "+94 76 234 5678",
-          role: "staff",
-          basic_salary: 35000,
-          status: "active",
-          created_at: new Date().toISOString(),
-          masjid_id: ctx.masjidId,
-          user_id: ctx.userId
-        },
-        {
-          id: "3",
-          name: "Mohammed Ali",
-          email: "mohammed@mjm.com",
-          phone: "+94 71 345 6789",
-          role: "staff",
-          basic_salary: 30000,
-          status: "active",
-          created_at: new Date().toISOString(),
-          masjid_id: ctx.masjidId,
-          user_id: ctx.userId
-        },
-        {
-          id: "4",
-          name: "Aisha Khan",
-          email: "aisha@mjm.com",
-          phone: "+94 77 456 7890",
-          role: "editor",
-          basic_salary: 25000,
-          status: "inactive",
-          created_at: new Date().toISOString(),
-          masjid_id: ctx.masjidId,
-          user_id: ctx.userId
+          user_id: ctx.userId,
+          permissions: {
+            accounts: true,
+            members: true,
+            subscriptions_collect: true,
+            subscriptions_approve: true,
+            staff_management: true,
+            reports: true,
+            settings: true,
+            events: true
+          },
+          commission_rate: 0,
+          enable_collection: false
         }
-      ];
+      ] : [];
       
       setStaff(mockStaff);
+      
+      // Fetch staff balances after staff data is loaded
+      fetchStaffBalances();
     } catch (err: any) {
       console.error("Fetch error:", err);
       toast({ kind: "error", title: "Error", message: err.message || "Failed to fetch staff" });
@@ -139,7 +226,7 @@ export default function StaffPage() {
       if (!ctx) return;
 
       if (editingStaff) {
-        // Mock update
+        // Update staff (mock - replace with real DB update)
         setStaff(prev => prev.map(s => 
           s.id === editingStaff.id 
             ? { 
@@ -154,7 +241,7 @@ export default function StaffPage() {
             : s
         ));
       } else {
-        // Mock create
+        // Create new staff (mock - replace with real DB insert)
         const newStaff: Staff = {
           id: Date.now().toString(),
           name,
@@ -165,7 +252,10 @@ export default function StaffPage() {
           status,
           created_at: new Date().toISOString(),
           masjid_id: ctx.masjidId,
-          user_id: ctx.userId
+          user_id: ctx.userId,
+          permissions,
+          commission_rate: 10, // Default commission rate
+          enable_collection: permissions?.subscriptions_collect || false
         };
         setStaff(prev => [...prev, newStaff]);
       }
@@ -206,18 +296,558 @@ export default function StaffPage() {
     setBasicSalary("");
     setStatus("active");
     setEditingStaff(null);
+    setPermissions({
+      accounts: false,
+      members: false,
+      subscriptions_collect: false,
+      subscriptions_approve: false,
+      staff_management: false,
+      reports: false,
+      settings: false,
+      events: false
+    });
   };
 
-  const filteredStaff = staff.filter((s) => {
-    const q = searchQuery.trim().toLowerCase();
-    if (q === "") return true;
-    return (
-      s.name.toLowerCase().includes(q) ||
-      s.email.toLowerCase().includes(q) ||
-      s.phone.toLowerCase().includes(q) ||
-      s.role.toLowerCase().includes(q)
+  // User Access Management functions
+  const openPermissionsModal = (userRole: any) => {
+    setEditingUserRole(userRole);
+    setEditingRole(userRole.role || 'staff');
+    setPermissions(userRole.permissions || {
+      accounts: false,
+      members: false,
+      subscriptions_collect: false,
+      subscriptions_approve: false,
+      staff_management: false,
+      reports: false,
+      settings: false,
+      events: false
+    });
+    setIsPermissionsModalOpen(true);
+  };
+
+  const handleRoleChange = (newRole: string) => {
+    setEditingRole(newRole);
+    
+    // Auto-set permissions based on role
+    if (newRole === 'super_admin') {
+      setPermissions({
+        accounts: true,
+        members: true,
+        subscriptions_collect: true,
+        subscriptions_approve: true,
+        staff_management: true,
+        reports: true,
+        settings: true,
+        events: true
+      });
+    } else if (newRole === 'co_admin') {
+      setPermissions({
+        accounts: true,
+        members: true,
+        subscriptions_collect: true,
+        subscriptions_approve: true,
+        staff_management: false,
+        reports: true,
+        settings: true,
+        events: true
+      });
+    } else {
+      // For staff and editor, keep current permissions or set defaults
+      setPermissions(prev => ({
+        accounts: false,
+        members: false,
+        subscriptions_collect: newRole === 'staff',
+        subscriptions_approve: false,
+        staff_management: false,
+        reports: false,
+        settings: false,
+        events: false,
+        ...prev // Keep any manually set permissions
+      }));
+    }
+  };
+
+  const handleActivateStaff = async (staffId: string) => {
+    if (!supabase) return;
+    
+    try {
+      const { error } = await supabase
+        .from("user_roles")
+        .update({ status: 'active' })
+        .eq("user_id", staffId)
+        .eq("masjid_id", tenantContext?.masjidId);
+
+      if (error) throw error;
+
+      // Update local state
+      setUserRoles(prev => prev.map(ur => 
+        ur.user_id === staffId 
+          ? { ...ur, status: 'active' }
+          : ur
+      ));
+
+      toast({ kind: "success", title: "Success", message: "Staff member activated successfully" });
+    } catch (err: any) {
+      toast({ kind: "error", title: "Error", message: err.message || "Failed to activate staff member" });
+    }
+  };
+
+  const handleDeactivateStaff = async (staffId: string) => {
+    if (!supabase) return;
+    
+    try {
+      const { error } = await supabase
+        .from("user_roles")
+        .update({ status: 'inactive' })
+        .eq("user_id", staffId)
+        .eq("masjid_id", tenantContext?.masjidId);
+
+      if (error) throw error;
+
+      // Update local state
+      setUserRoles(prev => prev.map(ur => 
+        ur.user_id === staffId 
+          ? { ...ur, status: 'inactive' }
+          : ur
+      ));
+
+      toast({ kind: "success", title: "Success", message: "Staff member deactivated successfully" });
+    } catch (err: any) {
+      toast({ kind: "error", title: "Error", message: err.message || "Failed to deactivate staff member" });
+    }
+  };
+
+  const handlePayoutCommission = async (collectorUserId: string, payoutAmount: number) => {
+    try {
+      const { error } = await supabase
+        .from('collector_commission_payments')
+        .insert({
+          masjid_id: tenantContext.masjidId,
+          collector_user_id: collectorUserId,
+          amount: payoutAmount,
+          paid_at: new Date().toISOString(),
+          paid_by_user_id: user.id,
+          note: 'Commission payout'
+        });
+
+      if (error) throw error;
+
+      alert(`Paid Rs. ${payoutAmount}`);
+    } catch (err: any) {
+      console.error(err);
+      alert("Payment failed");
+    }
+  };
+
+  const openPayoutModal = async (collectorId: string) => {
+    setSelectedCollector(collectorId);
+    setPayoutAmount("");
+    setPayoutNote("");
+    
+    // Fetch collector's current balance
+    try {
+      const { data: collections } = await supabase
+        .from('subscription_collections')
+        .select('commission_amount')
+        .eq('collected_by_user_id', collectorId)
+        .eq('masjid_id', tenantContext?.masjidId)
+        .eq('status', 'accepted');
+
+      const { data: payments } = await supabase
+        .from('collector_commission_payments')
+        .select('amount')
+        .eq('collector_user_id', collectorId)
+        .eq('masjid_id', tenantContext?.masjidId);
+
+      const earned = collections?.reduce((sum, item) => sum + (item.commission_amount || 0), 0) || 0;
+      const paid = payments?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+      
+      setCollectorBalance(earned - paid);
+      setShowPayoutModal(true);
+    } catch (err) {
+      console.error('Failed to fetch collector balance:', err);
+      alert('Failed to fetch collector balance');
+    }
+  };
+
+  const handlePayoutSubmit = async () => {
+    if (!selectedCollector || !payoutAmount || Number(payoutAmount) <= 0) {
+      alert('Please enter a valid amount');
+      return;
+    }
+
+    setPayoutSubmitting(true);
+    try {
+      // Insert payment record
+      const { error: paymentError } = await supabase
+        .from('collector_commission_payments')
+        .insert({
+          masjid_id: tenantContext?.masjidId,
+          collector_user_id: selectedCollector,
+          amount: Number(payoutAmount),
+          paid_at: new Date().toISOString(),
+          paid_by_user_id: user?.id,
+          note: payoutNote || 'Commission payout'
+        });
+
+      if (paymentError) throw paymentError;
+
+      // Update collector balance in profile (if needed)
+      // Note: Balance is calculated dynamically, so no direct update needed
+
+      // Refresh staff data
+      await fetchStaff();
+      
+      // Close modal and reset
+      setShowPayoutModal(false);
+      setSelectedCollector(null);
+      setPayoutAmount("");
+      setPayoutNote("");
+      
+      alert(`Payment of Rs. ${Number(payoutAmount).toLocaleString()} successful!`);
+    } catch (err: any) {
+      console.error('Payment failed:', err);
+      alert('Payment failed: ' + err.message);
+    } finally {
+      setPayoutSubmitting(false);
+    }
+  };
+
+  const handlePermissionChange = (permission: string, value: boolean) => {
+    setPermissions(prev => ({
+      ...prev,
+      [permission]: value
+    }));
+  };
+
+  const savePermissions = async () => {
+    if (!editingUserRole || !supabase) return;
+
+    try {
+      const { error } = await supabase
+        .from("user_roles")
+        .update({ 
+          permissions,
+          role: editingRole
+        })
+        .eq("user_id", editingUserRole.user_id)
+        .eq("masjid_id", tenantContext?.masjidId);
+
+      if (error) throw error;
+
+      // Update local state
+      setUserRoles(prev => prev.map(ur => 
+        ur.user_id === editingUserRole.user_id 
+          ? { ...ur, permissions, role: editingRole }
+          : ur
+      ));
+
+      setIsPermissionsModalOpen(false);
+      setEditingUserRole(null);
+      toast({ kind: "success", title: "Success", message: "Permissions and role updated successfully" });
+    } catch (err: any) {
+      toast({ kind: "error", title: "Error", message: err.message || "Failed to update permissions" });
+    }
+  };
+
+  const fetchStaffBalances = async () => {
+    if (!tenantContext?.masjidId || !staff.length) return;
+
+    try {
+      const balances: {[key: string]: number} = {};
+      
+      for (const staffMember of staff) {
+        if (staffMember.user_id) {
+          // Fetch earned from accepted collections
+          const { data: collections } = await supabase
+            .from('subscription_collections')
+            .select('commission_amount')
+            .eq('collected_by_user_id', staffMember.user_id)
+            .eq('masjid_id', tenantContext.masjidId)
+            .eq('status', 'accepted');
+
+          // Fetch paid from commission payments
+          const { data: payments } = await supabase
+            .from('collector_commission_payments')
+            .select('amount')
+            .eq('collector_user_id', staffMember.user_id)
+            .eq('masjid_id', tenantContext.masjidId);
+
+          const earned = collections?.reduce((sum, item) => sum + (item.commission_amount || 0), 0) || 0;
+          const paid = payments?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+          
+          balances[staffMember.user_id] = earned - paid;
+        }
+      }
+      
+      setStaffBalances(balances);
+    } catch (err) {
+      console.error('Failed to fetch staff balances:', err);
+    }
+  };
+
+  const openStaffProfile = (staffMember: Staff) => {
+    console.log("DEBUG: Opening staff profile for:", staffMember.name);
+    setSelectedStaffProfile(staffMember);
+    setShowProfileView(true);
+    console.log("DEBUG: showProfileView set to true");
+  };
+
+  const closeStaffProfile = () => {
+    setShowProfileView(false);
+    setSelectedStaffProfile(null);
+  };
+
+  const handleProfileSave = (updatedStaff: Staff) => {
+    // Update staff member safely
+    const updatedStaffList = staff.map(s => 
+      s.id === updatedStaff.id ? updatedStaff : s
     );
-  });
+    setStaff(updatedStaffList);
+    
+    toast({ 
+      kind: "success", 
+      title: "Success", 
+      message: "Staff profile updated successfully" 
+    });
+    
+    closeStaffProfile();
+  };
+
+  const handleDeleteStaff = async (staffMember: Staff) => {
+    // CRITICAL: Only current Super Admin can manage other Super Admins
+    const currentUserIsSuperAdmin = tenantContext?.role === 'super_admin' || user?.role === 'super_admin';
+    const isTargetSuperAdmin = staffMember.role === 'super_admin';
+    const isCurrentUser = staffMember.user_id === user?.id || staffMember.user_id === tenantContext?.userId;
+
+    // RULES:
+    // 1. Cannot delete yourself
+    // 2. Only Super Admin can delete others
+    // 3. Super Admin cannot delete other Super Admins
+    if (isCurrentUser) {
+      toast({ 
+        kind: "error", 
+        title: "ACCESS DENIED", 
+        message: "You cannot delete your own account!" 
+      });
+      return;
+    }
+
+    if (!currentUserIsSuperAdmin) {
+      toast({ 
+        kind: "error", 
+        title: "ACCESS DENIED", 
+        message: "Only Super Admin can delete staff members!" 
+      });
+      return;
+    }
+
+    if (isTargetSuperAdmin) {
+      toast({ 
+        kind: "error", 
+        title: "ACCESS DENIED", 
+        message: "Super Admin accounts cannot be deleted!" 
+      });
+      return;
+    }
+
+    // Additional safety check
+    if (staffMember.name.toLowerCase().includes('admin') || staffMember.email.includes('admin')) {
+      toast({ 
+        kind: "error", 
+        title: "ACCESS DENIED", 
+        message: "Admin accounts cannot be deleted!" 
+      });
+      return;
+    }
+
+    const ok = await confirm({
+      title: "Delete Staff Member",
+      message: `Are you sure you want to delete ${staffMember.name}? This action cannot be undone.`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+    });
+
+    if (!ok) return;
+
+    try {
+      // Remove from staff list
+      const updatedStaff = staff.filter(s => s.id !== staffMember.id);
+      setStaff(updatedStaff);
+      
+      // Remove from balances
+      const newBalances = { ...staffBalances };
+      delete newBalances[staffMember.user_id || ''];
+      setStaffBalances(newBalances);
+      
+      toast({ 
+        kind: "success", 
+        title: "Success", 
+        message: `${staffMember.name} has been deleted successfully` 
+      });
+    } catch (err: any) {
+      toast({ 
+        kind: "error", 
+        title: "Error", 
+        message: err.message || "Failed to delete staff member" 
+      });
+    }
+  };
+
+  const removeUserAccess = async (userRole: any) => {
+    const ok = await confirm({
+      title: "Remove Access",
+      message: `Are you sure you want to remove access for ${userRole.email}?`,
+      confirmText: "Remove",
+      cancelText: "Cancel",
+    });
+    if (!ok) return;
+
+    try {
+      const { error } = await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userRole.user_id)
+        .eq("masjid_id", tenantContext?.masjidId);
+
+      if (error) throw error;
+
+      setUserRoles(prev => prev.filter(ur => ur.user_id !== userRole.user_id));
+      toast({ kind: "success", title: "Success", message: "Access removed successfully" });
+    } catch (err: any) {
+      toast({ kind: "error", title: "Error", message: err.message || "Failed to remove access" });
+    }
+  };
+
+  const handleInviteSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setInviteSubmitting(true);
+  setInviteError('');
+  setInviteMessage('');
+
+  if (!tenantContext?.masjidId) {
+    setInviteError("Masjid not loaded yet");
+    setInviteSubmitting(false);
+    return;
+  }
+
+  try {
+    const response = await fetch('/admin/api/invite-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: inviteEmail,
+        role: inviteRole,
+        permissions: invitePermissions,
+        commission_percent: parseFloat(inviteCommissionPercent),
+        masjid_id: tenantContext?.masjidId
+      }),
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      // Handle the new token-based invitation system
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      const inviteLink = data.invite_link || '';
+      const invitationToken = data.invitationToken || '';
+      const fullRegistrationLink = data.registrationLink || `${baseUrl}${inviteLink}`;
+      const emailSent = data.emailSent || false;
+      const warning = data.warning || null;
+      const debugInfo = data.debugInfo || {};
+      
+      console.log('DEBUG: Invitation Response:', {
+        inviteLink,
+        invitationToken,
+        emailSent,
+        warning,
+        debugInfo
+      });
+      
+      if (emailSent) {
+        setInviteMessage(`
+          ✅ Invitation email sent successfully to ${inviteEmail}!<br/>
+          📧 The user should receive the email shortly with the registration link.<br/>
+          🔗 Registration Link: <a href="${fullRegistrationLink}" target="_blank" style="color: #059669; text-decoration: underline;">Click here to register</a><br/>
+          💡 If they don't receive the email, they can use this link: <code style="background: #f3f4f6; padding: 2px 4px; border-radius: 4px; font-size: 12px;">${fullRegistrationLink}</code><br/>
+          📋 Invitation Token: ${invitationToken}<br/>
+          📋 Resend Response: ${JSON.stringify(debugInfo.resendResponse || {})}
+        `);
+      } else {
+        setInviteMessage(`
+          ⚠️ ${warning || 'Email service not configured'}<br/>
+          📧 Invitation created for ${inviteEmail}!<br/>
+          � Registration Link: <a href="${fullRegistrationLink}" target="_blank" style="color: #059669; text-decoration: underline;">Click here to register</a><br/>
+          💡 Copy this link: <code style="background: #f3f4f6; padding: 2px 4px; border-radius: 4px; font-size: 12px;">${fullRegistrationLink}</code><br/>
+          🎫 Invitation Token: ${invitationToken}<br/>
+          🔍 Debug Info: <br/>
+          • API Key exists: ${debugInfo.envHasKey ? '✅' : '❌'}<br/>
+          • API Key length: ${debugInfo.envKeyLength || 0}<br/>
+          • Invite Link: ${inviteLink}<br/>
+          📋 To enable email sending: <br/>
+          1. Get API key from https://resend.com<br/>
+          2. Create .env.local file<br/>
+          3. Add: RESEND_API_KEY=your_key_here<br/>
+          4. Restart development server
+        `);
+      }
+      
+      setInviteEmail('');
+      setInviteRole('staff');
+      setInviteCommissionPercent('10');
+      setInvitePermissions({
+        accounts: false,
+        members: false,
+        subscriptions_collect: false,
+        subscriptions_approve: false,
+        staff_management: false,
+        reports: false,
+        settings: false,
+        events: false
+      });
+    } else {
+      setInviteError(data.error || 'Failed to send invitation');
+    }
+  } catch (err) {
+    console.error('Invitation error:', err);
+    setInviteError('Failed to send invitation. Please try again.');
+  } finally {
+    setInviteSubmitting(false);
+  }
+};
+
+  const getPermissionLabel = (key: string) => {
+    const labels: Record<string, string> = {
+      accounts: "Accounts",
+      members: "Members", 
+      subscriptions_collect: "Collect Subscriptions",
+      subscriptions_approve: "Approve Subscriptions",
+      staff_management: "Staff Management",
+      reports: "Reports",
+      settings: "Settings"
+    };
+    return labels[key] || key;
+  };
+
+  const filteredStaff = useMemo(() => {
+    let filtered = staff.filter(staffMember => {
+      const matchesSearch = staffMember.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           staffMember.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           staffMember.phone.includes(searchQuery);
+      return matchesSearch;
+    });
+
+    // Filter by view type
+    if (activeView === 'staff') {
+      filtered = filtered.filter(s => s.role === 'staff' || s.role === 'editor');
+    } else if (activeView === 'admins') {
+      filtered = filtered.filter(s => s.role === 'super_admin' || s.role === 'co_admin');
+    }
+
+    return filtered;
+  }, [staff, searchQuery, activeView]);
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -238,6 +868,7 @@ export default function StaffPage() {
     router.push('/login');
   };
 
+  // Early returns - moved to end after all hooks
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -251,6 +882,10 @@ export default function StaffPage() {
 
   if (!user) {
     return null;
+  }
+
+  if (!tenantContext?.permissions?.staff_management) {
+    return <div>Access Denied</div>;
   }
 
   return (
@@ -272,26 +907,34 @@ export default function StaffPage() {
               <HomeIcon className="w-5 h-5" />
               <span>{t.dashboard}</span>
             </Link>
-            <Link href="/families" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
-              <Users className="w-5 h-5" />
-              <span>{t.families}</span>
-            </Link>
-            <Link href="/accounts" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
-              <CreditCard className="w-5 h-5" />
-              <span>{t.accounts}</span>
-            </Link>
+            {hasModulePermission(parsedPermissions, 'families') && (
+              <Link href="/families" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+                <Users className="w-5 h-5" />
+                <span>{t.families}</span>
+              </Link>
+            )}
+            {hasModulePermission(parsedPermissions, 'accounts') && (
+              <Link href="/accounts" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+                <CreditCard className="w-5 h-5" />
+                <span>{t.accounts}</span>
+              </Link>
+            )}
             <Link href="/staff" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 bg-emerald-50 text-emerald-700 rounded-3xl font-bold transition-all border-2 border-emerald-200">
               <Briefcase className="w-5 h-5" />
               <span>{t.staff_management || "Staff Management"}</span>
             </Link>
-            <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
-              <Settings className="w-5 h-5" />
-              <span>{t.settings}</span>
-            </Link>
-            <Link href="/events" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
-              <Calendar className="w-5 h-5 text-amber-500" />
-              <span>{t.events || "Events"}</span>
-            </Link>
+            {hasModulePermission(parsedPermissions, 'settings') && (
+              <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+                <Settings className="w-5 h-5" />
+                <span>{t.settings}</span>
+              </Link>
+            )}
+            {hasModulePermission(parsedPermissions, 'events') && (
+              <Link href="/events" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+                <Calendar className="w-5 h-5 text-amber-500" />
+                <span>{t.events || "Events"}</span>
+              </Link>
+            )}
             <div className="flex items-center gap-4 p-4 opacity-40 text-neutral-600 rounded-3xl font-bold cursor-not-allowed">
               <HelpCircle className="w-5 h-5" />
               <span>Help & Support</span>
@@ -319,8 +962,43 @@ export default function StaffPage() {
             <Menu className="w-6 h-6" />
           </button>
           <h1 className="text-xl font-black text-neutral-900">{t.staff_management || "Staff Management"}</h1>
-          <div className="w-10"></div>
         </header>
+
+        {/* View Toggle */}
+        <div className="px-4 lg:px-6">
+          <div className="flex space-x-2 bg-neutral-100 rounded-2xl p-1">
+            <button 
+              onClick={() => setActiveView('all')}
+              className={`flex-1 py-2 px-4 rounded-xl font-medium transition-colors ${
+                activeView === 'all' 
+                  ? 'bg-emerald-600 text-white' 
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              All Staff ({staff.length})
+            </button>
+            <button 
+              onClick={() => setActiveView('staff')}
+              className={`flex-1 py-2 px-4 rounded-xl font-medium transition-colors ${
+                activeView === 'staff' 
+                  ? 'bg-emerald-600 text-white' 
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              Staff ({staff.filter(s => s.role === 'staff' || s.role === 'editor').length})
+            </button>
+            <button 
+              onClick={() => setActiveView('admins')}
+              className={`flex-1 py-2 px-4 rounded-xl font-medium transition-colors ${
+                activeView === 'admins' 
+                  ? 'bg-emerald-600 text-white' 
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              Admins ({staff.filter(s => s.role === 'super_admin' || s.role === 'co_admin').length})
+            </button>
+          </div>
+        </div>
 
         {/* Page Content */}
         <main className="flex-1 p-4 lg:p-6 space-y-6">
@@ -412,13 +1090,31 @@ export default function StaffPage() {
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Contact</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Role</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Basic Salary</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Pending Balance</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Status</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200">
-                    {filteredStaff.map((staffMember) => (
-                      <tr key={staffMember.id} className="hover:bg-neutral-50">
+                    {filteredStaff.map((staffMember) => {
+                      console.log("DEBUG STAFF:", {
+                        name: staffMember.name,
+                        email: staffMember.email,
+                        role: staffMember.role,
+                        user_id: staffMember.user_id
+                      });
+                      
+                      return (
+                      <tr 
+                        key={staffMember.id} 
+                        className="hover:bg-neutral-50 cursor-pointer"
+                        onClick={(e) => {
+                          console.log("DEBUG: Table row clicked for:", staffMember.name);
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openStaffProfile(staffMember);
+                        }}
+                      >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
@@ -443,6 +1139,21 @@ export default function StaffPage() {
                           Rs. {staffMember.basic_salary.toLocaleString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center mr-3">
+                              <Wallet className="w-4 h-4 text-emerald-600" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-emerald-700">
+                                Rs. {(staffBalances[staffMember.user_id || ''] || 0).toLocaleString()}
+                              </div>
+                              <div className="text-xs text-neutral-500">
+                                Available Commission
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(staffMember.status)}`}>
                             {staffMember.status}
                           </span>
@@ -450,7 +1161,8 @@ export default function StaffPage() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <div className="flex gap-2">
                             <button
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setEditingStaff(staffMember);
                                 setName(staffMember.name);
                                 setEmail(staffMember.email);
@@ -464,8 +1176,109 @@ export default function StaffPage() {
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
+                            {staffMember.status === 'active' ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeactivateStaff(staffMember.user_id);
+                                }}
+                                className="text-amber-600 hover:text-amber-900"
+                                title="Deactivate Staff Member"
+                              >
+                                <AlertCircle className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleActivateStaff(staffMember.user_id);
+                                }}
+                                className="text-green-600 hover:text-green-900"
+                                title="Activate Staff Member"
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                            )}
+                            {(() => {
+                              console.log("DEBUG: User role:", user?.role, "Tenant role:", tenantContext?.role);
+                              return (tenantContext?.role === 'super_admin' || user?.role === 'super_admin') && staffMember.role !== 'super_admin';
+                            })() && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteStaff(staffMember);
+                                }}
+                                className="text-red-600 hover:text-red-900"
+                                title="Delete Staff Member"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+         {/* User Access Management */}
+{canManageAccess && (
+  <div className="bg-white rounded-3xl border border-neutral-200 overflow-hidden mt-8">
+            <div className="p-6 border-b border-neutral-200">
+              <h2 className="text-lg font-black text-neutral-900">User Access Management</h2>
+            </div>
+            
+            {userRoles.length === 0 ? (
+              <div className="p-12 text-center">
+                <Shield className="w-16 h-16 mx-auto mb-4 text-neutral-300" />
+                <h3 className="text-lg font-semibold text-neutral-900 mb-2">No user access found</h3>
+                <p className="text-sm text-neutral-600">Users with access will appear here</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-neutral-50 border-b border-neutral-200">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Email</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Role</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Permissions</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-200">
+                    {userRoles.map((userRole) => (
+                      <tr key={userRole.user_id} className="hover:bg-neutral-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-900">
+                          {userRole.email}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(userRole.role)}`}>
+                            {userRole.role.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-900">
+                          <div className="flex flex-wrap gap-1">
+                            {Object.entries(userRole.permissions || {}).filter(([_, value]) => value).map(([key]) => (
+                              <span key={key} className="inline-flex px-2 py-1 text-xs bg-emerald-100 text-emerald-800 rounded-full">
+                                {getPermissionLabel(key)}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex items-center space-x-2">
                             <button
-                              onClick={() => deleteStaff(staffMember.id)}
+                              onClick={() => openPermissionsModal(userRole)}
+                              className="text-emerald-600 hover:text-emerald-900"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => removeUserAccess(userRole)}
                               className="text-red-600 hover:text-red-900"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -479,6 +1292,116 @@ export default function StaffPage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Invite User */}
+        {canManageAccess && (
+          <div className="bg-white rounded-3xl border border-neutral-200 overflow-hidden mt-8">
+            <div className="p-6 border-b border-neutral-200">
+              <h2 className="text-lg font-black text-neutral-900">Invite User</h2>
+            </div>
+            
+            {inviteMessage && (
+              <div className="p-4 m-6 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-start">
+                  <Check className="w-5 h-5 text-green-600 mr-2 mt-1 flex-shrink-0" />
+                  <div className="text-green-800 text-sm" dangerouslySetInnerHTML={{ __html: inviteMessage }} />
+                </div>
+              </div>
+            )}
+            
+            {inviteError && (
+              <div className="p-4 m-6 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center">
+                  <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+                  <span className="text-red-800">{inviteError}</span>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleInviteSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="user@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  Role
+                </label>
+                <select
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value)}
+                  className="w-full px-3 py-2 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="staff">Staff</option>
+                  <option value="editor">Editor</option>
+                  <option value="co_admin">Co Admin</option>
+                  <option value="super_admin">Super Admin</option>
+                </select>
+              </div>
+
+              {inviteRole === 'staff' && (
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Commission Percent
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={inviteCommissionPercent}
+                    onChange={(e) => setInviteCommissionPercent(e.target.value)}
+                    className="w-full px-3 py-2 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="10"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  Permissions
+                </label>
+                <div className="space-y-2">
+                  {Object.entries(invitePermissions).map(([key, value]) => (
+                    <label key={key} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={value}
+                        onChange={(e) => setInvitePermissions(prev => ({
+                          ...prev,
+                          [key]: e.target.checked
+                        }))}
+                        className="w-4 h-4 text-emerald-600 border-neutral-300 rounded focus:ring-emerald-500 mr-2"
+                      />
+                      <span className="text-sm text-neutral-700 capitalize">
+                        {key.replace('_', ' ')}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={inviteSubmitting}
+                className="w-full py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-50 transition-all"
+              >
+                {inviteSubmitting ? 'Sending...' : 'Send Invitation'}
+              </button>
+            </form>
+          </div>
+        )}
         </main>
       </div>
 
@@ -517,7 +1440,7 @@ export default function StaffPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="Enter staff name"
+                  placeholder="Enter full name"
                 />
               </div>
 
@@ -561,7 +1484,10 @@ export default function StaffPage() {
                   <option value="staff">Staff</option>
                   <option value="editor">Editor</option>
                   <option value="co_admin">Co Admin</option>
-                  <option value="super_admin">Super Admin</option>
+                  {/* Only Super Admin can create Super Admin */}
+                  {(tenantContext?.role === 'super_admin' || user?.role === 'super_admin') && (
+                    <option value="super_admin">Super Admin</option>
+                  )}
                 </select>
               </div>
 
@@ -594,6 +1520,38 @@ export default function StaffPage() {
                 </select>
               </div>
 
+              {/* Permissions Section */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-3">
+                  Permissions
+                </label>
+                <div className="space-y-2">
+                  {[
+                    'accounts',
+                    'members', 
+                    'subscriptions_collect',
+                    'subscriptions_approve',
+                    'staff_management',
+                    'reports',
+                    'settings',
+                    'events'
+                  ].map((key) => (
+                    <label key={key} className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={permissions[key as keyof typeof permissions]}
+                        onChange={(e) => handlePermissionChange(key, e.target.checked)}
+                        className="w-4 h-4 text-emerald-600 border-neutral-300 rounded focus:ring-emerald-500"
+                        disabled={role === 'super_admin'}
+                      />
+                      <span className="text-sm font-medium text-neutral-700">
+                        {getPermissionLabel(key)}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               <button
                 type="submit"
                 disabled={submitting}
@@ -604,6 +1562,189 @@ export default function StaffPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Permissions Modal */}
+      {isPermissionsModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-black text-neutral-900">
+                Edit Permissions - {editingUserRole?.email}
+              </h2>
+              <button 
+                onClick={() => setIsPermissionsModalOpen(false)}
+                className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors"
+              >
+                <X className="w-5 h-5 text-neutral-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Role Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  Role
+                </label>
+                <select
+                  value={editingRole}
+                  onChange={(e) => handleRoleChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="super_admin">Super Admin</option>
+                  <option value="co_admin">Co Admin</option>
+                  <option value="staff">Staff</option>
+                  <option value="editor">Editor</option>
+                </select>
+              </div>
+
+              {/* Permission Checkboxes */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-3">
+                  Permissions
+                </label>
+                <div className="space-y-3">
+                  {[
+                    'accounts',
+                    'members', 
+                    'subscriptions_collect',
+                    'subscriptions_approve',
+                    'staff_management',
+                    'reports',
+                    'settings',
+                    'events'
+                  ].map((key) => (
+                    <label key={key} className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={permissions[key as keyof typeof permissions]}
+                        onChange={(e) => handlePermissionChange(key, e.target.checked)}
+                        className="w-4 h-4 text-emerald-600 border-neutral-300 rounded focus:ring-emerald-500"
+                        disabled={editingRole === 'super_admin'}
+                      />
+                      <span className="text-sm font-medium text-neutral-700">
+                        {getPermissionLabel(key)}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setIsPermissionsModalOpen(false)}
+                className="flex-1 py-3 bg-neutral-100 text-neutral-700 rounded-3xl font-medium hover:bg-neutral-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={savePermissions}
+                className="flex-1 py-3 bg-emerald-600 text-white rounded-3xl font-medium hover:bg-emerald-700 transition-colors"
+              >
+                Save Permissions
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payout Modal */}
+      {showPayoutModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-3xl p-8 w-full max-w-md mx-4">
+            {/* Modal Header with Green Gradient */}
+            <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 -mx-8 -mt-8 px-8 pt-8 pb-6 rounded-t-3xl mb-6">
+              <div className="flex items-center justify-between">
+                <div className="text-white">
+                  <h2 className="text-xl font-bold">Pay Commission</h2>
+                  <p className="text-emerald-100 text-sm">Process commission payment</p>
+                </div>
+                <button 
+                  onClick={() => setShowPayoutModal(false)}
+                  className="text-white hover:bg-emerald-500 p-2 rounded-xl transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Current Balance Display */}
+            <div className="bg-emerald-50 rounded-2xl p-4 mb-6 border border-emerald-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-emerald-600 mb-1">Current Pending Balance</p>
+                  <p className="text-2xl font-black text-emerald-700">Rs. {collectorBalance.toLocaleString()}</p>
+                </div>
+                <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                  <Wallet className="w-6 h-6 text-emerald-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Form */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  Amount to Pay
+                </label>
+                <input
+                  type="number"
+                  placeholder="Enter amount"
+                  value={payoutAmount}
+                  onChange={(e) => setPayoutAmount(e.target.value)}
+                  className="w-full px-4 py-3 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  disabled={payoutSubmitting}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  Notes (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Feb 2026 Commission"
+                  value={payoutNote}
+                  onChange={(e) => setPayoutNote(e.target.value)}
+                  className="w-full px-4 py-3 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  disabled={payoutSubmitting}
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowPayoutModal(false)}
+                className="flex-1 py-3 border border-neutral-200 rounded-2xl font-medium hover:bg-neutral-50 transition-colors"
+                disabled={payoutSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePayoutSubmit}
+                className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-2xl font-medium hover:from-emerald-700 hover:to-emerald-800 transition-all"
+                disabled={payoutSubmitting}
+              >
+                {payoutSubmitting ? 'Processing...' : 'Pay Commission'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Profile View - Modular Component */}
+      {console.log("DEBUG: Rendering modal - showProfileView:", showProfileView, "selectedStaffProfile:", selectedStaffProfile?.name)}
+      {showProfileView && selectedStaffProfile && (
+        <StaffProfile
+          staff={selectedStaffProfile}
+          staffBalances={staffBalances}
+          onClose={closeStaffProfile}
+          onSave={handleProfileSave}
+          getStatusColor={getStatusColor}
+          getPermissionLabel={getPermissionLabel}
+        />
       )}
     </div>
   );

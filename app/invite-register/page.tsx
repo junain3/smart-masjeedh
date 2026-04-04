@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -11,18 +11,21 @@ function InviteRegisterContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   
-  const [step, setStep] = useState<'verify' | 'register'>('verify');
+  const [step, setStep] = useState<'verify' | 'register'>('register');
   const [loading, setLoading] = useState(false);
   const [invitation, setInvitation] = useState<any>(null);
   const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const [fullName, setFullName] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // Prevent duplicate invitation fetches
+  const hasFetchedInvitation = useRef(false);
 
   useEffect(() => {
-    if (token) {
+    if (token && !hasFetchedInvitation.current) {
+      hasFetchedInvitation.current = true;
       verifyInvitation();
     }
   }, [token]);
@@ -41,130 +44,157 @@ function InviteRegisterContent() {
       console.log('DEBUG: Invitation query result:', { data, error: error?.message });
 
       if (error) {
+        console.error("INVITE FETCH ERROR:", error);
         setError('அழைப்பு காலாவடியாக உள்ளது அல்லது காலாவடியாகிவிட்டது');
         return;
       }
 
-      if (data) {
-        setInvitation(data);
-        setEmail(data.email);
+      if (!data) {
+        console.error("INVITE FETCH ERROR: No data returned");
+        setError('சரியான அழைப்பு இல்லை');
+        return;
       }
-    } catch (error) {
-      setError('அழைப்பு சரிபார்ப்பு பிழை');
+
+      setInvitation(data);
+      setEmail(data.email);
+      
+    } catch (err) {
+      console.error("INVITE FETCH EXCEPTION:", err);
+      setError('ஏதோ தவறு ஏற்பட்டது');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const requestOTP = async () => {
-    if (!invitation) return;
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Prevent double submit
+    if (loading) return;
     
     setLoading(true);
     setError('');
+    setSuccess('');
 
-    console.log('DEBUG: Sending OTP to email:', email);
-
-    try {
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email: email,
-        options: {
-          shouldCreateUser: false
-        }
-      });
-
-      console.log('DEBUG: OTP send result:', { error: otpError?.message });
-
-      if (otpError) {
-        setError('OTP அனுப்பம் தோல்வி: ' + otpError.message);
-        setLoading(false);
-        return;
-      }
-
-      console.log('DEBUG: OTP sent successfully');
-      setStep('register');
+    if (password !== confirmPassword) {
+      setError('கடவுச்சொற்கள் பொருந்தவில்லை');
       setLoading(false);
-    } catch (error: any) {
-      console.error('DEBUG: OTP send error:', error);
-      setError('OTP அனுப்பம் பிழை: ' + error.message);
-      setLoading(false);
+      return;
     }
-  };
 
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    console.log('DEBUG: Verifying OTP for email:', email, 'OTP:', otp);
+    if (password.length < 6) {
+      setError('கடவுச்சொல் குறைந்தது 6 எழுத்துகளாக இருக்க வேண்டும்');
+      setLoading(false);
+      return;
+    }
 
     try {
-      const { data, error: otpError } = await supabase.auth.verifyOtp({
+      console.log('DEBUG: Creating user for email:', email);
+
+      // Step 1: Create auth user
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email: email,
-        token: otp,
-        type: 'signup'
+        password: password,
       });
 
-      console.log('DEBUG: OTP verification result:', { data, error: otpError?.message });
+      console.log('DEBUG: Sign up result:', { data, error: signUpError?.message });
 
-      if (otpError) {
-        setError('OTP தவறானது: ' + otpError.message);
+      if (signUpError) {
+        setError('பதிவு தோல்வி: ' + signUpError.message);
         setLoading(false);
         return;
       }
 
-      if (data.user && invitation) {
-        console.log('DEBUG: Creating user role for masjid:', invitation.masjid_id);
-        
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .insert([
-            {
-              masjid_id: invitation.masjid_id,
-              user_id: data.user.id,
-              auth_user_id: data.user.id,
-              email: email,
-              role: invitation.role,
-              permissions: invitation.role === 'co_admin' ? {
-                accounts: true,
-                events: true,
-                members: true,
-                subscriptions_collect: true,
-                subscriptions_approve: true,
-                staff_management: true,
-                reports: true,
-                settings: false
-              } : {
-                accounts: false,
-                events: true,
-                members: true,
-                subscriptions_collect: true,
-                subscriptions_approve: false,
-                staff_management: false,
-                reports: true,
-                settings: false
-              }
-            }
-          ]);
-
-        console.log('DEBUG: User role creation result:', { error: roleError?.message });
-
-        if (roleError) {
-          setError('பங்கு உருவாக்கம் தோல்வி: ' + roleError.message);
-          setLoading(false);
-          return;
-        }
-
-        await supabase
-          .from('invitations')
-          .update({ status: 'accepted' })
-          .eq('id', invitation.id);
-
-        console.log('DEBUG: Invitation accepted successfully');
-        
-        alert('பதிவு வெற்றி! இப்போது உள்நுழையலாம்.');
-        router.push('/login');
+      // Strict check: Ensure auth user was created
+      if (!data.user) {
+        setError('பயனர் உருவாக்கம் தோல்வி: ஆதாரப்பூர்வமான பயனர் உருவாக்கப்படவில்லை');
+        setLoading(false);
+        return;
       }
+
+      if (!invitation) {
+        setError('அழைப்பு தகவல் கிடைக்கவில்லை');
+        setLoading(false);
+        return;
+      }
+
+      console.log('DEBUG: Creating user role for masjid:', invitation.masjid_id);
+      
+      // Step 2: Insert into user_roles (critical step)
+      const roleMap: { [key: string]: string } = {
+        'co admin': 'co_admin',
+        'co_admin': 'co_admin',
+        'super admin': 'super_admin',
+        'super_admin': 'super_admin',
+        'staff': 'staff',
+        'editor': 'editor'
+      };
+      
+      const normalizedRole = roleMap[invitation.role.toLowerCase().trim()] || invitation.role;
+      
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .insert([
+          {
+            masjid_id: invitation.masjid_id,
+            user_id: data.user.id,
+            auth_user_id: data.user.id,
+            email: email,
+            role: normalizedRole,
+            permissions: invitation.permissions || {}
+          }
+        ]);
+
+      console.log('DEBUG: User role creation result:', { error: roleError?.message });
+
+      // Critical: If user_roles insert fails, stop immediately
+      if (roleError) {
+        setError('பங்கு உருவாக்கம் தோல்வி: ' + roleError.message);
+        console.error('CRITICAL: User role creation failed, auth user exists but role not assigned:', roleError);
+        setLoading(false);
+        return;
+      }
+
+      // Step 3: Create collector profile (always runs)
+      const { error: profileError } = await supabase
+        .from('subscription_collector_profiles')
+        .upsert({
+          masjid_id: invitation.masjid_id,
+          user_id: data.user.id,
+          default_commission_percent: invitation.commission_percent || 10
+        }, {
+          onConflict: 'masjid_id,user_id'
+        });
+
+      if (profileError) {
+        console.error('Failed to create collector profile:', profileError);
+        // Don't fail registration, just log the error
+      }
+
+      // Step 4: Update invitation status to accepted
+      const { error: updateError } = await supabase
+        .from('invitations')
+        .update({ status: 'accepted' })
+        .eq('id', invitation.id);
+
+      if (updateError) {
+        console.error('WARNING: Invitation status update failed:', updateError);
+        // Don't fail the whole process, but log the error
+      }
+
+      // Step 4: Only after ALL succeed, show success and redirect
+      console.log('DEBUG: Registration completed successfully - all steps passed');
+      
+      setSuccess('பதிவு வெற்றி! இப்போது உள்நுழையலாம்.');
+      
+      setTimeout(() => {
+        router.push('/login');
+      }, 2000);
+      
     } catch (error: any) {
-      console.error('DEBUG: OTP verification error:', error);
-      setError('OTP சரிபார்ப்பு பிழை: ' + error.message);
+      console.error('DEBUG: Registration error:', error);
+      setError('பதிவு பிழை: ' + error.message);
+    } finally {
       setLoading(false);
     }
   };
@@ -210,54 +240,72 @@ function InviteRegisterContent() {
           <p className="text-gray-600">{invitation.email}</p>
         </div>
 
-        {step === 'verify' ? (
-          <div className="space-y-4">
+        {invitation && (
+          <form onSubmit={handleRegister} className="space-y-4">
             <div className="bg-emerald-50 p-4 rounded-lg">
               <h3 className="font-semibold text-emerald-800 mb-2">அழைப்பு விவரங்கள்</h3>
+              <p className="text-sm text-emerald-700">
+                <strong>மின்னஞ்சல்:</strong> {invitation.email}
+              </p>
               <p className="text-sm text-emerald-700">
                 <strong>பங்கு:</strong> {invitation.role === 'co_admin' ? 'இணை நிர்வாகி' : 'ஊழியர்'}
               </p>
             </div>
-            
-            <button
-              onClick={requestOTP}
-              disabled={loading}
-              className="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
-            >
-              {loading ? 'OTP அனுப்புகிறது...' : 'OTP பெறு'}
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleVerifyOTP} className="space-y-4">
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                OTP குறியீடு
+                கடவுச்சொல்
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
-                  type="text"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  placeholder="OTP உள்ளிடுவும்"
+                  placeholder="கடவுச்சொல் உள்ளிடுவும்"
                   required
+                  minLength={6}
                 />
               </div>
             </div>
-            
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                கடவுச்சொல் உறுதிப்படுத்தல்
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  placeholder="கடவுச்சொல் மீண்டும் உள்ளிடுவும்"
+                  required
+                  minLength={6}
+                />
+              </div>
+            </div>
+
             <div className="bg-blue-50 p-3 rounded-lg">
               <p className="text-sm text-blue-800">
-                உங்கள் மின்னஞ்சலுக்கு OTP அனுப்பப்பட்டுள்ளது. அதை உள்ளிட்டு சரிபார்க்கவும்.
+                கடவுச்சொல் குறைந்தது 6 எழுத்துகளாக இருக்க வேண்டும்.
               </p>
             </div>
+
+            {success && (
+              <div className="bg-green-50 p-3 rounded-lg">
+                <p className="text-sm text-green-800">{success}</p>
+              </div>
+            )}
             
             <button
               type="submit"
               disabled={loading}
               className="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
             >
-              {loading ? 'சரிபார்க்கிறது...' : 'OTP சரிபார்க்கு'}
+              {loading ? 'பதிவு செய்கிறது...' : 'பதிவு செய்ய'}
             </button>
           </form>
         )}

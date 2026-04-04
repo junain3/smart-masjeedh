@@ -9,6 +9,9 @@ import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useMockAuth } from "@/components/MockAuthProvider";
+import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
+import RouteGuard from "@/components/RouteGuard";
+import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
 
 type Family = {
   id: string;
@@ -40,7 +43,24 @@ const dummyFamilies: Family[] = [
 
 export default function FamiliesPage() {
   const router = useRouter();
-  const { user, tenantContext } = useMockAuth();
+  const { user, tenantContext, loading: authLoading } = useSupabaseAuth();
+  
+  // Parse permissions and check access
+  const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const hasFamiliesAccess = hasModulePermission(parsedPermissions, 'families');
+  
+  // Page-level access control
+  if (authLoading) return <div>Loading...</div>;
+  if (!user) {
+    router.push('/login');
+    return null;
+  }
+  
+  if (!hasFamiliesAccess && !userIsSuperAdmin) {
+    return <div>No access to Families module</div>;
+  }
+
   const [isOpen, setIsOpen] = useState(false);
   const [headName, setHeadName] = useState("");
   const [address, setAddress] = useState("");
@@ -171,6 +191,12 @@ export default function FamiliesPage() {
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) throw new Error("லாகின் செய்யப்படவில்லை.");
 
+      // Get the authenticated user ID from auth, not from state
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error("லாகின் செய்யப்படவில்லை.");
+
+      const authUserId = session.user.id;
+
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
       const canMembers = isAdmin || ctx.permissions?.members !== false;
       if (!canMembers) throw new Error("Access denied");
@@ -195,22 +221,59 @@ export default function FamiliesPage() {
         setSuccessMessage("குடும்ப விபரம் திருத்தப்பட்டது.");
       } else {
         // Insert new
-        const { error } = await supabase.from("families").insert([
-          {
-            family_code: familyCode,
-            head_name: headName,
-            address,
-            phone,
-            subscription_amount: parseFloat(subscriptionAmount) || 0,
-            opening_balance: parseFloat(openingBalance) || 0,
-            is_widow_head: isWidowHead,
-            user_id: user.id, // Add user_id for multi-user isolation
-            masjid_id: ctx.masjidId // Include masjid ID
+        const { data, error } = await supabase
+          .from("families")
+          .insert([
+            {
+              family_code: familyCode,
+              head_name: headName,
+              address,
+              phone,
+              subscription_amount: parseFloat(subscriptionAmount) || 0,
+              opening_balance: parseFloat(openingBalance) || 0,
+              is_widow_head: isWidowHead,
+              user_id: authUserId, // Use authenticated user ID
+              masjid_id: ctx.masjidId // Include masjid ID
+            }
+          ])
+          .select()
+          .single();
+
+        if (!error && data) {
+          const newFamilyId = data.id;
+          
+          // Check if head member already exists (safe pattern)
+          const { data: existingHead } = await supabase
+            .from("members")
+            .select("id")
+            .eq("family_id", newFamilyId)
+            .eq("relationship", "Head")
+            .maybeSingle();
+
+          if (!existingHead) {
+            // Create head member only if doesn't exist
+            const { error: memberInsertError } = await supabase.from("members").insert([{
+              family_id: newFamilyId,
+              name: headName,              // Keep for future compatibility
+              full_name: headName,        // Add for database NOT NULL constraint
+              relationship: "Head",
+              civil_status: "",
+              user_id: authUserId,
+              masjid_id: ctx.masjidId
+            }]);
+            
+            if (memberInsertError) {
+              console.error("Head member creation failed:", memberInsertError);
+              throw new Error(`Failed to create family head member: ${memberInsertError.message}`);
+            }
           }
-        ]);
+        }
 
         if (error) throw error;
         setSuccessMessage("குடும்பம் வெற்றிகரமாகச் சேமிக்கப்பட்டது.");
+        if (data) {
+          router.push(`/families/${data.id}`);  // Redirect to family details
+        }
       }
 
       setIsOpen(false);

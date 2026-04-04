@@ -43,10 +43,15 @@ export async function getTenantContext(): Promise<TenantContext | null> {
     const { data: roleData, error: roleError } = await supabase
       .from("user_roles")
       .select("masjid_id, role, permissions")
-      .eq("auth_user_id", userId)
+      .eq("user_id", userId)
       .maybeSingle();
 
-    console.log("DEBUG getTenantContext - user_roles query:", { data: roleData, error: roleError });
+    console.log("DEBUG getTenantContext - user_roles query:", { 
+      data: roleData, 
+      error: roleError,
+      userId: userId,
+      userIdType: typeof userId
+    });
 
     if (roleData?.masjid_id) {
       console.log("DEBUG getTenantContext - Found user role:", roleData.role);

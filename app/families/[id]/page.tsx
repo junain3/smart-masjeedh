@@ -34,7 +34,7 @@ type Member = {
   id: string;
   family_id: string;
   member_code: string;
-  full_name: string;
+  name: string;
   relationship: string;
   age: number;
   gender: string;
@@ -59,8 +59,10 @@ type Family = {
 type Payment = {
   id: string;
   amount: number;
-  date: string;
-  description: string;
+  status: string;
+  collected_by_user_id?: string;
+  collected_at?: string;
+  created_at: string;
 };
 
 type Service = {
@@ -98,7 +100,7 @@ export default function FamilyDetailsPage() {
   const [gender, setGender] = useState("Male");
   const [nic, setNic] = useState("");
   const [phone, setPhone] = useState("");
-  const [civilStatus, setCivilStatus] = useState("Single");
+  const [civilStatus, setCivilStatus] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState("");
@@ -182,17 +184,18 @@ export default function FamilyDetailsPage() {
         .select("*")
         .eq("family_id", familyId)
         .eq("masjid_id", tenantContext.masjidId)
-        .order("full_name");
+        .order("name");
 
       if (membersError) throw membersError;
       setMembers(membersData || []);
 
       const { data: paymentsData, error: paymentsError } = await supabase
-        .from("transactions")
-        .select("id, amount, date, description")
+        .from("subscription_collections")
+        .select("id, amount, status, collected_by_user_id, collected_at, created_at")
         .eq("family_id", familyId)
         .eq("masjid_id", tenantContext.masjidId)
-        .order("date", { ascending: false });
+        .eq("status", "accepted")
+        .order("created_at", { ascending: false });
 
       if (paymentsError) {
         console.log("Payments fetch error:", paymentsError);
@@ -241,20 +244,20 @@ export default function FamilyDetailsPage() {
     setGender("Male");
     setNic("");
     setPhone("");
-    setCivilStatus("Single");
+    setCivilStatus("");
     setEditingMember(null);
   };
 
   const openEditMember = (member: Member) => {
     setEditingMember(member);
-    setFullName(member.full_name || "");
+    setFullName(member.name || "");
     setRelationship(member.relationship || "மகன்");
     setDob(member.dob || "");
     setAge(member.age ? String(member.age) : "");
     setGender(member.gender || "Male");
     setNic(member.nic || "");
     setPhone(member.phone || "");
-    setCivilStatus(member.civil_status || "Single");
+    setCivilStatus(member.civil_status || "");
     setIsModalOpen(true);
   };
 
@@ -276,7 +279,8 @@ export default function FamilyDetailsPage() {
         const { error } = await supabase
           .from("members")
           .update({
-            full_name: fullName,
+            name: fullName,              // Keep for future compatibility
+            full_name: fullName,        // Add for database NOT NULL constraint
             relationship,
             age: age ? parseInt(age, 10) : null,
             gender,
@@ -294,6 +298,7 @@ export default function FamilyDetailsPage() {
         const { error } = await supabase.from("members").insert([
           {
             family_id: familyId,
+            name: fullName,
             full_name: fullName,
             relationship,
             age: age ? parseInt(age, 10) : null,
@@ -375,7 +380,7 @@ export default function FamilyDetailsPage() {
       doc.text(`Family: ${family?.head_name} (${family?.family_code})`, 14, 15);
 
       const tableData = members.map((m) => [
-        m.full_name,
+        m.name,
         m.relationship,
         m.age,
         m.gender,
@@ -398,11 +403,13 @@ export default function FamilyDetailsPage() {
 
   const filteredMembers = members.filter(
     (member) =>
-      member.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       member.relationship.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const annualFee = family?.subscription_amount || 0;
+  const annualFee = Number(family?.subscription_amount || 0);
+  const totalApproved = payments.reduce((sum, p) => sum + p.amount, 0);
+  const remainingBalance = Math.max(annualFee - totalApproved, 0);
   const openingBal = family?.opening_balance || 0;
 
   const paidThisYear = payments
@@ -416,8 +423,9 @@ export default function FamilyDetailsPage() {
     .filter((p) => new Date(p.date).getFullYear() === selectedYear - 1 && p.amount > 0)
     .reduce((s, p) => s + p.amount, 0);
 
-  const prevYearArrears = Math.max(0, annualFee - paidPrevYear);
-  const finalDue = Math.max(0, openingBal + annualFee + prevYearArrears - paidThisYear);
+  const previousArrears = Math.max(0, openingBal);
+  const currentDue = Math.max(0, annualFee - paidThisYear);
+  const finalDue = previousArrears + currentDue;
 
   if (loading) {
     return <div>Loading...</div>;
@@ -515,7 +523,7 @@ export default function FamilyDetailsPage() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-slate-400 uppercase tracking-widest">Prev Arrears</span>
-              <span>Rs. {prevYearArrears.toLocaleString()}</span>
+              <span>Rs. {previousArrears.toLocaleString()}</span>
             </div>
           </div>
           <p className="text-sm font-black text-slate-900">Rs. {finalDue.toLocaleString()}</p>
@@ -608,6 +616,11 @@ export default function FamilyDetailsPage() {
             {activeTab === "members" ? t.members : activeTab === "payments" ? t.payment_history : t.services_received}
           </h3>
           {activeTab === "members" && (
+            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full ml-2">
+              {members.length} Members
+            </span>
+          )}
+          {activeTab === "members" && (
             <button
               onClick={() => {
                 resetForm();
@@ -651,10 +664,12 @@ export default function FamilyDetailsPage() {
                     </div>
                     <div className="min-w-0">
                       <h3 className="text-sm font-black text-slate-900 truncate group-hover:text-emerald-600 transition-colors">
-                        {member.full_name}
+                        {member.name}
                       </h3>
                       <p className="text-xs font-bold text-slate-400">
-                        {member.relationship} • {member.age} YEARS
+                        {member.relationship === "Head"
+                          ? "Family Head"
+                          : `${member.relationship}${member.age ? ` • ${member.age} YEARS` : ""}`}
                       </p>
                       <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 mt-1 inline-block">
                         {member.civil_status}
@@ -681,6 +696,26 @@ export default function FamilyDetailsPage() {
           </div>
         ) : activeTab === "payments" ? (
           <div className="space-y-3 w-full">
+            {/* Payment Summary Section */}
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-blue-900">Payment Summary</h3>
+                  <div className="mt-2 space-y-1">
+                    <p className="text-sm text-blue-700">
+                      <span className="font-medium">Annual Fee:</span> Rs. {annualFee.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-blue-700">
+                      <span className="font-medium">Total Approved:</span> Rs. {totalApproved.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-blue-700">
+                      <span className="font-medium">Remaining Balance:</span> Rs. {finalDue.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {payments.length === 0 ? (
               <div className="py-12 text-center flex flex-col items-center gap-4">
                 <div className="p-5 bg-slate-50 rounded-full text-slate-200">
@@ -696,8 +731,8 @@ export default function FamilyDetailsPage() {
                       <TrendingUp className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-black text-slate-800">{payment.description}</h4>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">{payment.date}</p>
+                      <h4 className="text-sm font-black text-slate-800">Subscription Collection</h4>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">{payment.collected_at || payment.created_at}</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -724,12 +759,12 @@ export default function FamilyDetailsPage() {
                       <CheckCircle className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-black text-slate-800">{service.name}</h4>
+                      <h4 className="text-sm font-black text-slate-800">{service.service_name}</h4>
                       <p className="text-[10px] font-bold text-slate-400 uppercase">{service.date}</p>
                     </div>
                   </div>
                   <button
-                    onClick={() => toggleServiceStatus(service.id)}
+                    onClick={() => {}}
                     className={`px-3 py-1 rounded-full text-[8px] font-black uppercase transition-all active:scale-95 ${
                       service.status === "Received"
                         ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
@@ -846,6 +881,22 @@ export default function FamilyDetailsPage() {
                   onChange={(e) => setPhone(e.target.value.slice(0, 10))}
                   maxLength={10}
                 />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">நிலை</label>
+                <select
+                  value={civilStatus}
+                  onChange={(e) => setCivilStatus(e.target.value)}
+                  className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
+                >
+                  <option value="">தேர்ந்தெடுக்கவும்</option>
+                  <option value="Single">Single</option>
+                  <option value="Married">Married</option>
+                  <option value="Divorced">Divorced</option>
+                  <option value="Widowed">Widowed</option>
+                  <option value="Other">Other</option>
+                </select>
               </div>
 
               <div className="flex gap-4 pt-4">

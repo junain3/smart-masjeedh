@@ -1,11 +1,34 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 
 export const dynamic = 'force-dynamic';
 
 export default function SettingsPage() {
+  const router = useRouter();
+  const { user, tenantContext, loading: authLoading } = useSupabaseAuth();
+  
+  // Login redirect effect
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [authLoading, user, router]);
+
+  // Return null if redirecting
+  if (!authLoading && !user) return null;
+
+  // Page-level access control (after all hooks)
+  if (authLoading) return <div>Loading...</div>;
+  if (!tenantContext?.permissions?.settings && tenantContext?.role !== 'super_admin') {
+    return <div>No access</div>;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}

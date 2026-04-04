@@ -7,10 +7,11 @@ import { ArrowLeft, Users, CheckCircle, Clock, QrCode, FileText, Search } from "
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
+import { useMockAuth } from "@/components/MockAuthProvider";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useAppToast } from "@/components/ToastProvider";
 
-type Ev = { id: string; name: string; date: string };
+type Ev = { id: string; title: string; event_date: string };
 type Att = {
   id: string;
   status?: "Pending" | "Received";
@@ -34,6 +35,8 @@ export default function EventDetailPage() {
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [allowed, setAllowed] = useState(true);
+  const [confirmUnmark, setConfirmUnmark] = useState<{familyId: string, familyCode: string} | null>(null);
+  const { tenantContext } = useMockAuth();
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -45,7 +48,8 @@ export default function EventDetailPage() {
     if (!supabase) return;
     setLoading(true);
     try {
-      const ctx = await getTenantContext();
+      // Use tenantContext from auth provider instead of getTenantContext
+      const ctx = tenantContext || await getTenantContext();
       if (!ctx) {
         router.push("/login");
         return;
@@ -61,7 +65,7 @@ export default function EventDetailPage() {
       }
       const { data: e } = await supabase
         .from("events")
-        .select("id,name,date")
+        .select("id,title,event_date")
         .eq("id", eventId)
         .eq("masjid_id", ctx.masjidId)
         .single();
@@ -70,7 +74,7 @@ export default function EventDetailPage() {
       const [{ data: famData, error: famErr }, { data: a, error: attErr }] = await Promise.all([
         supabase
           .from("families")
-          .select("id")
+          .select("id,family_code,head_name,phone,address")
           .eq("masjid_id", ctx.masjidId),
         supabase
           .from("event_attendance")
@@ -79,7 +83,10 @@ export default function EventDetailPage() {
           .eq("masjid_id", ctx.masjidId)
           .order("created_at", { ascending: true }),
       ]);
-      if (famErr) throw famErr;
+      if (famErr) {
+        console.log('EVENT DETAIL famData error:', famErr);
+        throw famErr;
+      }
       if (attErr) throw attErr;
 
       const existing = new Set(((a as any) || []).map((r: any) => r.family_id));
@@ -138,8 +145,17 @@ export default function EventDetailPage() {
     familyCode?: string | false
   ) {
     if (!supabase) return;
+    
+    // If trying to unmark (turn OFF), show confirmation
+    if (!toReceived) {
+      setConfirmUnmark({ familyId, familyCode: familyCode || "" });
+      return;
+    }
+    
+    // If marking as received (turn ON), proceed immediately
     try {
-      const ctx = await getTenantContext();
+      // Use tenantContext from auth provider instead of getTenantContext
+      const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
 
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
@@ -162,12 +178,42 @@ export default function EventDetailPage() {
           masjid_id: ctx.masjidId,
           family_id: familyId,
           amount: 0,
-          description: `Event: ${ev.name} (${familyCode === false ? "" : (familyCode || "")})`,
+          description: `Event: ${ev.title} (${familyCode === false ? "" : (familyCode || "")})`,
           type: "income",
-          category: `Event: ${ev.name}`,
-          date: ev.date || new Date().toISOString().split("T")[0]
+          category: `Event: ${ev.title}`,
+          date: ev.event_date || new Date().toISOString().split("T")[0]
         }]);
       }
+    } catch (e: any) {
+      toast({ kind: "error", title: "Error", message: e.message || "Failed" });
+    }
+  }
+
+  async function confirmUnmarkFamily() {
+    if (!confirmUnmark || !supabase) return;
+    
+    try {
+      const ctx = tenantContext || await getTenantContext();
+      if (!ctx) return;
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canEvents = isAdmin || ctx.permissions?.events !== false;
+      if (!canEvents) {
+        toast({ kind: "error", title: "Access denied", message: "" });
+        return;
+      }
+      
+      const { error } = await supabase
+        .from("event_attendance")
+        .update({ status: "Pending" })
+        .eq("event_id", eventId)
+        .eq("family_id", confirmUnmark.familyId)
+        .eq("masjid_id", ctx.masjidId);
+      if (error) throw error;
+      
+      setRows(prev => prev.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: "Pending" } : r));
+      setConfirmUnmark(null);
+      toast({ kind: "success", title: "Success", message: "Marked as not received" });
     } catch (e: any) {
       toast({ kind: "error", title: "Error", message: e.message || "Failed" });
     }
@@ -235,7 +281,7 @@ export default function EventDetailPage() {
         </head>
         <body>
           <h1>Event Attendance Report</h1>
-          <h2>${ev?.name || ''} (${ev?.date || ''})</h2>
+          <h2>${ev?.title || ''} (${ev?.event_date || ''})</h2>
           <table>
             <thead>
               <tr>
@@ -316,8 +362,8 @@ export default function EventDetailPage() {
             <ArrowLeft className="w-6 h-6 text-emerald-600" />
           </Link>
           <div>
-            <h1 className="text-xl font-black">{ev?.name}</h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{ev?.date}</p>
+            <h1 className="text-xl font-black">{ev?.title}</h1>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{ev?.event_date}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -424,21 +470,15 @@ export default function EventDetailPage() {
                   <p className="text-[10px] font-bold text-slate-400 uppercase">{r.families.family_code} • {r.families.phone || ""}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {r.status !== "Received" ? (
-                    <button
-                      onClick={() => markStatus(r.family_id, true, false)}
-                      className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest"
-                    >
-                      {t.mark_received}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => markStatus(r.family_id, false, false)}
-                      className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest"
-                    >
-                      {t.unmark_received}
-                    </button>
-                  )}
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={r.status === "Received"}
+                      onChange={() => markStatus(r.family_id, r.status !== "Received", false)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                  </label>
                 </div>
               </div>
             </div>
@@ -461,16 +501,15 @@ export default function EventDetailPage() {
                     <h4 className="text-sm font-black text-slate-800">{r.families.head_name}</h4>
                     <p className="text-[10px] font-bold text-slate-400 uppercase">{r.families.family_code} • {r.families.phone || ""}</p>
                   </div>
-                  <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${r.status === "Received" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
-                    {r.status === "Received" ? t.received : t.pending}
-                  </div>
-                </div>
-                <div className="mt-3 flex justify-end">
-                  {r.status !== "Received" ? (
-                    <button onClick={() => markStatus(r.family_id, true, r.families.family_code)} className="px-3 py-2 rounded-xl bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest">{t.mark_received}</button>
-                  ) : (
-                    <button onClick={() => markStatus(r.family_id, false, r.families.family_code)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest">{t.unmark_received}</button>
-                  )}
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={r.status === "Received"}
+                      onChange={() => markStatus(r.family_id, r.status !== "Received", r.families.family_code)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                  </label>
                 </div>
               </div>
             ))
@@ -486,6 +525,32 @@ export default function EventDetailPage() {
         onDecodedText={handleScan}
         helperText={t.attendance}
       />
+
+      {/* Confirmation Dialog */}
+      {confirmUnmark && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-sm mx-4 border border-slate-200">
+            <h3 className="text-lg font-black mb-4">Confirm Unmark Family</h3>
+            <p className="text-sm text-slate-600 mb-6">
+              Are you sure you want to mark {confirmUnmark.familyCode} as not received?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmUnmark(null)}
+                className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmUnmarkFamily}
+                className="px-4 py-2 bg-rose-500 text-white rounded-xl text-sm font-medium"
+              >
+                Confirm Unmark
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

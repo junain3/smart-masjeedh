@@ -226,8 +226,7 @@ export default function EmployeeProfilePage() {
         toast({
           kind: "error",
           title: "Database setup",
-          message:
-            "Missing column: transactions.employee_id. Run this SQL in Supabase: ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS employee_id uuid;",
+          message: "Missing column: transactions.employee_id. Please contact administrator.",
         });
       } else {
         toast({ kind: "error", title: "Error", message: formatSupabaseError(e) || "Failed to add payment" });

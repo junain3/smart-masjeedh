@@ -3,14 +3,15 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search, Briefcase, MoreHorizontal, FileText } from "lucide-react";
+import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search, Briefcase, MoreHorizontal, FileText, Wallet, Shield } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
-import { useMockAuth } from "@/components/MockAuthProvider";
+import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 
 import { getTenantContext } from "@/lib/tenant";
 import { useAppToast } from "@/components/ToastProvider";
 import { QrScannerModal } from "@/components/QrScannerModal";
+import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
 
 type MasjidProfile = {
   name: string;
@@ -20,7 +21,7 @@ type MasjidProfile = {
 
 export default function DashboardPage() {
   const { toast } = useAppToast();
-  const { user, loading: authLoading, tenantContext, signOut } = useMockAuth();
+  const { user, loading: authLoading, tenantContext, signOut } = useSupabaseAuth();
   const router = useRouter();
 
   const [time, setTime] = useState(new Date());
@@ -47,6 +48,11 @@ export default function DashboardPage() {
   const [familyResults, setFamilyResults] = useState<any[]>([]);
   const [resultType, setResultType] = useState<"none" | "members" | "families" | "mixed">("none");
   const searchRequestSeq = useRef(0);
+
+  // Permission variables
+  const parsedPermissions = parsePermissions(tenantContext?.permissions || null);
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const perms = tenantContext?.permissions || {};
 
   // Auth guard effect
   useEffect(() => {
@@ -482,8 +488,13 @@ export default function DashboardPage() {
   };
 
   const handleLogout = async () => {
-    await signOut();
-    router.push('/login');
+    try {
+      await supabase.auth.signOut();
+      router.push('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+      router.push('/login'); // Still redirect even if sign out fails
+    }
   };
 
   // Format date: "25 February 2026 at 6:43"
@@ -518,44 +529,76 @@ export default function DashboardPage() {
               <HomeIcon className="w-5 h-5" />
               <span>{t.dashboard}</span>
             </Link>
-            <Link href="/families" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
-              <Users className="w-5 h-5" />
-              <span>{t.families}</span>
-            </Link>
-            <Link href="/accounts" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
-              <CreditCard className="w-5 h-5" />
-              <span>{t.accounts}</span>
-            </Link>
-            <Link href="/staff" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
-              <Briefcase className="w-5 h-5 text-emerald-600" />
-              <span>{t.staff_management || t.staff}</span>
-            </Link>
-          <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
-            <Settings className="w-5 h-5" />
-            <span>{t.settings}</span>
-          </Link>
-          <Link 
-            href="/events"
-            onClick={() => setIsSidebarOpen(false)}
-            className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
-          >
-            <Calendar className="w-5 h-5 text-amber-500" />
-            <span>{t.events || "Events"}</span>
-          </Link>
-          <div className="flex items-center gap-4 p-4 opacity-40 text-neutral-600 rounded-3xl font-bold cursor-not-allowed">
+            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'families')) && (
+              <Link href="/families" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+                <Users className="w-5 h-5" />
+                <span>{t.families}</span>
+              </Link>
+            )}
+            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'accounts')) && (
+              <Link href="/accounts" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+                <CreditCard className="w-5 h-5" />
+                <span>{t.accounts}</span>
+              </Link>
+            )}
+            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'staff_management')) && (
+              <Link href="/staff" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+                <Briefcase className="w-5 h-5 text-emerald-600" />
+                <span>{t.staff_management || t.staff}</span>
+              </Link>
+            )}
+            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'settings')) && (
+              <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
+                <Settings className="w-5 h-5" />
+                <span>{t.settings}</span>
+              </Link>
+            )}
+            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'events')) && (
+              <Link 
+                href="/events"
+                onClick={() => setIsSidebarOpen(false)}
+                className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
+              >
+                <Calendar className="w-5 h-5 text-amber-500" />
+                <span>{t.events || "Events"}</span>
+              </Link>
+            )}
+            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'subscriptions_collect')) && (
+              <Link
+                href="/collections"
+                onClick={() => setIsSidebarOpen(false)}
+                className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
+              >
+                <Wallet className="w-5 h-5 text-emerald-600" />
+                <span>Collections</span>
+              </Link>
+            )}
+            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'subscriptions_approve')) && (
+              <Link
+                href="/subscriptions/pending"
+                onClick={() => setIsSidebarOpen(false)}
+                className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
+              >
+                <Shield className="w-5 h-5 text-orange-500" />
+                <span>Pending Collections</span>
+              </Link>
+            )}
+            <div className="flex items-center gap-4 p-4 opacity-40 text-neutral-600 rounded-3xl font-bold cursor-not-allowed">
               <HelpCircle className="w-5 h-5" />
               <span>Help & Support</span>
             </div>
           </div>
 
+          <div className="mt-auto pt-4 border-t border-neutral-200">
           <button 
             onClick={handleLogout}
-            className="mt-auto flex items-center gap-4 p-4 text-red-600 hover:bg-red-50 rounded-3xl font-bold transition-all"
+            className="w-full flex items-center gap-4 p-4 text-red-600 hover:bg-red-50 rounded-3xl font-bold transition-all"
           >
             <LogOut className="w-5 h-5" />
             <span>{t.logout}</span>
           </button>
         </div>
+      </div>
       </aside>
 
       {/* Header */}

@@ -97,7 +97,7 @@ export function AppShell(props: {
       base.push({ href: "/collections", label: "Collections", icon: <Wallet className="w-5 h-5" /> });
     }
     if (canSubApprove) {
-      base.push({ href: "/collections/pending", label: "Pending Approval", icon: <Shield className="w-5 h-5" /> });
+      base.push({ href: "/subscriptions/pending", label: "Pending Collections", icon: <Shield className="w-5 h-5" /> });
     }
 
     // Staff & admin only for masjid admins
@@ -134,6 +134,20 @@ export function AppShell(props: {
         ? "app-bottom-nav-item app-bottom-nav-item-active"
         : "app-bottom-nav-item hover:bg-white/60"
     }`;
+  };
+
+  const handleLogout = async () => {
+    console.log("APP_SHELL_LOGOUT_CLICKED");
+    try {
+      console.log("APP_SHELL_BEFORE_SIGNOUT");
+      await supabase.auth.signOut();
+      console.log("APP_SHELL_AFTER_SIGNOUT");
+      router.push('/login');
+    } catch (error) {
+      console.log("APP_SHELL_CATCH_ERROR", error);
+      console.error('Logout error:', error);
+      router.push('/login'); // Still redirect even if sign out fails
+    }
   };
 
   return (
@@ -179,12 +193,15 @@ export function AppShell(props: {
             ))}
           </nav>
 
-          <button
-            onClick={() => router.push("/")}
-            className="mt-6 w-full px-4 py-3 rounded-3xl bg-neutral-50 text-neutral-900 font-black text-xs uppercase tracking-widest hover:bg-neutral-100 transition-all"
-          >
-            Home
-          </button>
+          {/* Logout button - always at bottom */}
+          <div className="mt-auto pt-4 border-t border-neutral-200">
+            <button
+              onClick={handleLogout}
+              className="w-full px-4 py-3 rounded-3xl bg-red-50 text-red-700 font-black text-xs uppercase tracking-widest hover:bg-red-100 transition-all"
+            >
+              Log out
+            </button>
+          </div>
         </div>
       </aside>
 

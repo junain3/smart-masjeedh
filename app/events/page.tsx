@@ -13,7 +13,7 @@ import { AppShell } from "@/components/AppShell";
 export const dynamic = 'force-dynamic';
 import { useAppToast } from "@/components/ToastProvider";
 
-type EventRow = { id: string; name: string; date: string };
+type EventRow = { id: string; title: string; event_date: string };
 type Family = { id: string; family_code: string; head_name: string };
 
 export default function EventsPage() {
@@ -52,7 +52,7 @@ export default function EventsPage() {
         .from("events")
         .select("*")
         .eq("masjid_id", ctx.masjidId)
-        .order("date", { ascending: false });
+        .order("event_date", { ascending: false });
 
       if (error) throw error;
       setEvents(data || []);
@@ -75,20 +75,22 @@ export default function EventsPage() {
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
 
+      const insertPayload = {
+        name: name,
+        title: name,
+        date: date,
+        event_date: date,
+        masjid_id: ctx.masjidId,
+      };
+
       if (editingId) {
         const { error } = await supabase
           .from("events")
-          .update({ name, date })
+          .update({ name: name, title: name, date: date, event_date: date })
           .eq("id", editingId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("events").insert([
-          {
-            name,
-            date,
-            masjid_id: ctx.masjidId,
-          }
-        ]);
+        const { error } = await supabase.from("events").insert([insertPayload]);
         if (error) throw error;
       }
 
@@ -131,8 +133,8 @@ export default function EventsPage() {
 
   function editEvent(event: EventRow) {
     setEditingId(event.id);
-    setName(event.name);
-    setDate(event.date);
+    setName(event.title);
+    setDate(event.event_date);
     setIsEditOpen(true);
   }
 
@@ -192,15 +194,28 @@ export default function EventsPage() {
                     <Calendar className="w-6 h-6" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-black text-neutral-900">{event.name}</h4>
+                    <Link 
+                      href={`/events/${event.id}`}
+                      className="text-sm font-black text-neutral-900 hover:text-blue-600 transition-colors"
+                      title="View Event Details"
+                    >
+                      {event.title}
+                    </Link>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-[10px] font-bold text-neutral-600 uppercase">
-                        {new Date(event.date).toLocaleDateString()}
+                        {new Date(event.event_date).toLocaleDateString()}
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => router.push(`/events/${event.id}`)}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-3xl transition-all"
+                    title="View Event Details"
+                  >
+                    <FileText className="w-4 h-4" />
+                  </button>
                   <button
                     onClick={() => editEvent(event)}
                     className="p-2 text-neutral-600 hover:bg-neutral-50 rounded-3xl transition-all"
