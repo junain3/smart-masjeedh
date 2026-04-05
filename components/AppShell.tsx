@@ -206,7 +206,7 @@ export function AppShell(props: {
       </aside>
 
       {/* Main area */}
-      <div className="md:pl-72">
+      <div className="pl-0 md:pl-72">
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-neutral-200">
           <div className="px-4 py-4 md:px-8 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
@@ -234,11 +234,11 @@ export function AppShell(props: {
         </header>
 
         <main className="p-4 md:p-8 pb-28 md:pb-8">
-          <div className="w-full max-w-md md:max-w-6xl mx-auto">{children}</div>
+          <div className="w-full max-w-none sm:max-w-md lg:max-w-6xl mx-auto">{children}</div>
         </main>
 
         {/* Floating bottom navigation (mobile) */}
-        <nav className="md:hidden app-bottom-nav">
+        <nav className="md:hidden app-bottom-nav z-20">
           <div className="flex items-center gap-2">
             {items
               .filter((it) => it.href !== "/admin")

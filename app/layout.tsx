@@ -31,6 +31,27 @@ async function getUserData() {
   }
 }
 
+export const metadata = {
+  title: 'Smart Masjeedh',
+  description: 'Masjid Management System',
+  manifest: '/manifest.json',
+  themeColor: '#047857',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Smart Masjeedh',
+  },
+  icons: {
+    icon: [
+      { url: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml' },
+      { url: '/icon-512.svg', sizes: '512x512', type: 'image/svg+xml' },
+    ],
+    apple: [
+      { url: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml' },
+    ],
+  },
+};
+
 export default async function RootLayout(props: { children: React.ReactNode }) {
   const userData = await getUserData();
 

@@ -189,42 +189,37 @@ export default function EventsPage() {
                 key={event.id}
                 className={`app-glass-card ${idx % 2 === 0 ? "bg-white/65" : "bg-emerald-50/20"} p-5 flex items-center justify-between group hover:border-emerald-200 transition-all`}
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-3xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center">
-                    <Calendar className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <Link 
-                      href={`/events/${event.id}`}
-                      className="text-sm font-black text-neutral-900 hover:text-blue-600 transition-colors"
+                <div 
+                      className="flex items-center gap-4 cursor-pointer"
+                      onClick={() => router.push(`/events/${event.id}`)}
                       title="View Event Details"
                     >
-                      {event.title}
-                    </Link>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] font-bold text-neutral-600 uppercase">
-                        {new Date(event.event_date).toLocaleDateString()}
-                      </span>
+                      <div className="w-12 h-12 rounded-3xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center">
+                        <Calendar className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-black text-neutral-900 hover:text-blue-600 transition-colors">
+                          {event.title}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] font-bold text-neutral-600 uppercase">
+                            {new Date(event.event_date).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={() => router.push(`/events/${event.id}`)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-3xl transition-all"
-                    title="View Event Details"
-                  >
-                    <FileText className="w-4 h-4" />
-                  </button>
-                  <button
                     onClick={() => editEvent(event)}
-                    className="p-2 text-neutral-600 hover:bg-neutral-50 rounded-3xl transition-all"
+                    className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-3xl transition-all"
+                    title="Edit Event"
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => deleteEvent(event.id)}
                     className="p-2 text-rose-700 hover:bg-rose-50 rounded-3xl transition-all"
+                    title="Delete Event"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

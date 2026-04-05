@@ -1,0 +1,7 @@
+<!-- Placeholder 192x192 icon - replace with actual icon -->
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="192" height="192" rx="48" fill="#047857"/>
+  <path d="M96 48L64 72v48h64V72L96 48z" fill="white"/>
+  <path d="M96 96v48M64 120h64M80 144h32" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="96" cy="72" r="8" fill="white"/>
+</svg>

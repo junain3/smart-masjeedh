@@ -57,18 +57,24 @@ export default function SettingsPage() {
           </p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="font-semibold text-gray-900 mb-2">General Settings</h3>
-              <p className="text-sm text-gray-600">Basic masjid information and configuration</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="font-semibold text-gray-900 mb-2">User Settings</h3>
-              <p className="text-sm text-gray-600">Manage user permissions and roles</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="font-semibold text-gray-900 mb-2">Notification Settings</h3>
-              <p className="text-sm text-gray-600">Configure notifications and alerts</p>
-            </div>
+            <Link href="/settings/general" className="block">
+              <div className="bg-gray-50 rounded-lg p-6 hover:bg-gray-100 transition-colors">
+                <h3 className="font-semibold text-gray-900 mb-2">General Settings</h3>
+                <p className="text-sm text-gray-600">Configure your masjid settings and preferences.</p>
+              </div>
+            </Link>
+            <Link href="/settings/users" className="block">
+              <div className="bg-gray-50 rounded-lg p-6 hover:bg-gray-100 transition-colors">
+                <h3 className="font-semibold text-gray-900 mb-2">User Settings</h3>
+                <p className="text-sm text-gray-600">Manage user permissions and roles</p>
+              </div>
+            </Link>
+            <Link href="/settings/notifications" className="block">
+              <div className="bg-gray-50 rounded-lg p-6 hover:bg-gray-100 transition-colors">
+                <h3 className="font-semibold text-gray-900 mb-2">Notification Settings</h3>
+                <p className="text-sm text-gray-600">Configure notifications and alerts</p>
+              </div>
+            </Link>
           </div>
         </div>
       </div>

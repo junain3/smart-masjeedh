@@ -1,311 +1,320 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Home as HomeIcon, Users, Edit, User, CreditCard, Menu, LogOut, X, Settings, HelpCircle, Calendar, QrCode, Search, Briefcase, MoreHorizontal, FileText, Wallet, Shield } from "lucide-react";
+import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download, HomeIcon, User, Calendar, Briefcase, Settings, LogOut, MoreHorizontal, Shield, Wallet, HelpCircle, Menu } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, Language } from "@/lib/i18n/translations";
-import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
-
 import { getTenantContext } from "@/lib/tenant";
-import { useAppToast } from "@/components/ToastProvider";
 import { QrScannerModal } from "@/components/QrScannerModal";
+import { useMockAuth } from "@/components/MockAuthProvider";
+import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
+import RouteGuard from "@/components/RouteGuard";
 import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
+import { toast } from "@/components/ToastProvider";
 
-type MasjidProfile = {
-  name: string;
-  logo_url: string;
-  tagline: string;
+type Member = {
+  id: string;
+  family_id: string;
+  full_name: string;
+  age?: number;
+  gender?: string;
+  phone?: string;
+  nic?: string;
+  member_code?: string;
 };
 
-export default function DashboardPage() {
-  const { toast } = useAppToast();
-  const { user, loading: authLoading, tenantContext, signOut } = useSupabaseAuth();
-  const router = useRouter();
+type Family = {
+  id: string;
+  family_code: string;
+  head_name: string;
+  is_widow_head?: boolean;
+};
 
-  const [time, setTime] = useState(new Date());
-  const [familyCount, setFamilyCount] = useState<number | null>(null);
-  const [memberCount, setMemberCount] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [masjid, setMasjid] = useState<MasjidProfile | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+const dummyMembers: Member[] = [
+  {
+    id: "1",
+    family_id: "1",
+    full_name: "உதாரண உறுப்புர் 1",
+    age: 35,
+    gender: "Male"
+  },
+  {
+    id: "2",
+    family_id: "1",
+    full_name: "உதாரண உறுப்புர் 2",
+    age: 32,
+    gender: "Female"
+  }
+];
+
+const dummyFamilies: Family[] = [
+  {
+    id: "1",
+    family_code: "FAM-001",
+    head_name: "உதாரண குடும்பம் 1",
+    is_widow_head: false
+  },
+  {
+    id: "2",
+    family_code: "FAM-002",
+    head_name: "உதாரண குடும்பம் 2",
+    is_widow_head: true
+  }
+];
+
+export default function HomePage() {
+  const router = useRouter();
+  const { user, tenantContext, loading: authLoading } = useSupabaseAuth();
+  
+  // Parse permissions and check access
+  const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  
   const [lang, setLang] = useState<Language>("en");
-  const t = translations[lang];
-  const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
-  const [activeServiceTab, setActiveServiceTab] = useState<"create" | "scan">("create");
-  const [serviceName, setServiceName] = useState("");
-  const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
-  const [submittingService, setSubmittingService] = useState(false);
-  const [activeServices, setActiveServices] = useState<{name: string}[]>([]);
-  const [selectedScanService, setSelectedScanService] = useState("");
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scanStatus, setScanStatus] = useState<{type: 'success' | 'error' | 'idle', message: string}>({type: 'idle', message: ''});
+  const [time, setTime] = useState(new Date());
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
-  const [memberResults, setMemberResults] = useState<any[]>([]);
-  const [familyResults, setFamilyResults] = useState<any[]>([]);
-  const [resultType, setResultType] = useState<"none" | "members" | "families" | "mixed">("none");
+  const [memberResults, setMemberResults] = useState<Member[]>([]);
+  const [familyResults, setFamilyResults] = useState<Family[]>([]);
+  const [resultType, setResultType] = useState<"members" | "families" | "mixed">("members");
+  const [isLive, setIsLive] = useState(false);
+  const [familyCount, setFamilyCount] = useState<number | null>(null);
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+  const [masjid, setMasjid] = useState<{ name: string; logo_url: string; tagline: string } | null>(null);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [selectedScanService, setSelectedScanService] = useState("");
+  const [scanStatus, setScanStatus] = useState<{ type: 'idle' | 'success' | 'error', message: string }>({ type: 'idle', message: '' });
+  const [activeServices, setActiveServices] = useState<{ name: string }[]>([]);
+  const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
+  const [serviceName, setServiceName] = useState("");
+  const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [submittingService, setSubmittingService] = useState(false);
   const searchRequestSeq = useRef(0);
 
-  // Permission variables
-  const parsedPermissions = parsePermissions(tenantContext?.permissions || null);
-  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
-  const perms = tenantContext?.permissions || {};
+  const t = translations[lang];
 
-  // Auth guard effect
+  // Load language preference on mount
   useEffect(() => {
-    console.log("DEBUG Dashboard - Auth guard:", { authLoading, user: user?.email, tenantContext: !!tenantContext });
-    
-    // Only redirect if auth is complete and no user exists
-    if (!authLoading && !user) {
-      console.log("DEBUG Dashboard - Redirecting to login (no user)");
-      router.push('/login');
-      return;
+    const savedLang = (typeof window !== "undefined" && localStorage.getItem("preferred_language")) as Language;
+    if (savedLang && ["en", "ta", "si"].includes(savedLang)) {
+      setLang(savedLang);
     }
-    
-    // DO NOT redirect if user exists but tenant context is loading
-    // Let the tenant context load naturally
-    if (!authLoading && user && !tenantContext) {
-      console.log("DEBUG Dashboard - User exists, waiting for tenant context...");
-      // Don't redirect - let tenant context load
-      return;
-    }
-  }, [user, authLoading, tenantContext, router]);
+  }, []);
 
-  // Real-time clock update
+  // Update time every second
   useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
+    const timer = setInterval(() => {
+      setTime(new Date());
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Load language from localStorage
+  // Fetch live/demo status
   useEffect(() => {
-    const savedLang = localStorage.getItem("app_lang") as Language;
-    if (savedLang) setLang(savedLang);
-  }, []);
+    const fetchLiveStatus = async () => {
+      if (!supabase) return;
+      const ctx = tenantContext || await getTenantContext();
+      if (!ctx) return;
 
-  // Search query effect
+      // Check if we have real data
+      const { data: familiesData } = await supabase
+        .from("families")
+        .select("id")
+        .eq("masjid_id", ctx.masjidId)
+        .limit(1);
+      
+      const { data: membersData } = await supabase
+        .from("members")
+        .select("id")
+        .eq("masjid_id", ctx.masjidId)
+        .limit(1);
+
+      const hasRealData = (familiesData && familiesData.length > 0) || (membersData && membersData.length > 0);
+      setIsLive(hasRealData);
+    };
+
+    fetchLiveStatus();
+  }, [tenantContext]);
+
+  // Fetch family and member counts
   useEffect(() => {
-    const q = searchQuery.trim();
-    if (q.length < 2) {
-      setSearchError("");
-      setMemberResults([]);
-      setFamilyResults([]);
-      setResultType("none");
-      return;
-    }
+    const fetchCounts = async () => {
+      if (!supabase) return;
+      const ctx = tenantContext || await getTenantContext();
+      if (!ctx) return;
 
-    const tmr = setTimeout(() => {
-      runSearch(searchQuery);
-    }, 350);
+      const { count: familiesCount } = await supabase
+        .from("families")
+        .select("*", { count: "exact", head: false })
+        .eq("masjid_id", ctx.masjidId);
 
-    return () => clearTimeout(tmr);
-  }, [searchQuery]);
+      const { count: membersCount } = await supabase
+        .from("members")
+        .select("*", { count: "exact", head: false })
+        .eq("masjid_id", ctx.masjidId);
 
-  // Services modal effect
+      setFamilyCount(familiesCount || 0);
+      setMemberCount(membersCount || 0);
+    };
+
+    fetchCounts();
+  }, [tenantContext]);
+
+  // Fetch masjid data
   useEffect(() => {
-    if (isServicesModalOpen) {
-      fetchActiveServices();
-    }
-  }, [isServicesModalOpen]);
+    const fetchMasjidData = async () => {
+      if (!supabase) return;
+      const ctx = tenantContext || await getTenantContext();
+      if (!ctx) return;
 
-  // Fetch data effect
-  useEffect(() => {
-    if (!user || !tenantContext?.masjidId) return;
-    
-    async function fetchData() {
-      try {
-        if (!supabase) return;
+      const { data: masjidData } = await supabase
+        .from("masjids")
+        .select("masjid_name, logo_url, tagline, preferred_language")
+        .eq("id", ctx.masjidId)
+        .single();
 
-        // Get tenant context - don't fail if it doesn't exist yet
-        const ctx = tenantContext || await getTenantContext();
-        
-        if (!ctx || !ctx.masjidId) {
-          // Show loading state instead of wrong data
-          setLoading(true);
-          setFamilyCount(null);
-          setMemberCount(null);
-          return;
+      if (masjidData) {
+        setMasjid({
+          name: (masjidData as any).masjid_name || "MJM",
+          logo_url: (masjidData as any).logo_url || "",
+          tagline: (masjidData as any).tagline || "Mubeen Jummah Masjid",
+        });
+        // Set language from masjid data if available
+        if ((masjidData as any).preferred_language && ["en", "ta", "si"].includes((masjidData as any).preferred_language)) {
+          setLang((masjidData as any).preferred_language);
         }
-
-        // Load masjid profile
-        try {
-          const { data: masjidData, error: masjidErr } = await supabase
-            .from("masjids")
-            .select("id, masjid_name, tagline, logo_url")
-            .eq("id", ctx.masjidId)
-            .maybeSingle();
-
-          if (masjidErr) throw masjidErr;
-
-          if (masjidData) {
-            setMasjid({
-              name: (masjidData as any).masjid_name || "MJM",
-              logo_url: (masjidData as any).logo_url || "",
-              tagline: (masjidData as any).tagline || "Mubeen Jummah Masjid",
-            });
-          } else {
-            // Default Fallback
-            setMasjid({
-              name: "MJM",
-              logo_url: "",
-              tagline: "Mubeen Jummah Masjid",
-            });
-          }
-        } catch (e: any) {
-          const msg = e?.message || "";
-          if (msg.includes("schema cache") || msg.includes("column") || msg.includes("Could not find")) {
-            // ignore - allow dashboard to render
-            setMasjid({
-              name: "MJM",
-              logo_url: "",
-              tagline: "Mubeen Jummah Masjid",
-            });
-          } else {
-            throw e;
-          }
-        }
-
-        // Fetch family count with fallback
-        try {
-          const { count, error: countError } = await supabase
-            .from("families")
-            .select("id", { count: "exact", head: true })
-            .eq("masjid_id", ctx.masjidId);
-          
-          if (!countError) {
-            setFamilyCount(count || 0);
-          } else {
-            // Fallback to mock data if table doesn't exist
-            setFamilyCount(0);
-          }
-        } catch (e) {
-          // Fallback to mock data
-          setFamilyCount(0);
-        }
-
-        // Fetch member count with fallback
-        try {
-          const { count: mCount, error: mError } = await supabase
-            .from("members")
-            .select("*", { count: "exact", head: true })
-            .eq("masjid_id", ctx.masjidId);
-          
-          if (!mError) {
-            setMemberCount(mCount || 0);
-          } else {
-            // Fallback to mock data if table doesn't exist
-            setMemberCount(0);
-          }
-        } catch (e) {
-          // Fallback to mock data
-          setMemberCount(0);
-        }
-
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        // Set fallback values
-        setFamilyCount(0);
-        setMemberCount(0);
-      } finally {
-        setLoading(false);
       }
-    }
-    fetchData();
-  }, [user, tenantContext?.masjidId, router]);
+    };
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+    fetchMasjidData();
+  }, [tenantContext]);
 
-  // Show loading state if user exists but tenant context is still loading
-  if (user && !tenantContext) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Setting up your masjid...</p>
-          <p className="text-gray-500 text-sm mt-2">This should only take a moment</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
-
-  const parseQuery = (q: string) => {
-    const s = q.trim().toLowerCase();
-    const hasWidow = /(விதவை|விதவைகள்|widow)/.test(s);
-    if (hasWidow) {
-      return { kind: "widows" as const };
-    }
-    const male = /(ஆண்|ஆண்கள்|male)/.test(s) ? "Male" : /(பெண்|பெண்கள்|female)/.test(s) ? "Female" : undefined;
-    const range1 = s.match(/(\d{1,3})\s*[-–]\s*(\d{1,3})/);
-    const range2 = s.match(/(\d{1,3})\s*(?:to|முதல்)\s*(\d{1,3})/);
-    if (range1 || range2) {
-      const m = range1 || range2;
-      const a = parseInt(m![1], 10);
-      const b = parseInt(m![2], 10);
-      const minAge = Math.min(a, b);
-      const maxAge = Math.max(a, b);
-      return { kind: "ageRange" as const, minAge, maxAge, gender: male };
-    }
-    const exactAgeMatch = s.match(/(\d{1,3})\s*(?:வயது|years?|yr|age)?/);
-    if (exactAgeMatch && exactAgeMatch[1]) {
-      const age = parseInt(exactAgeMatch[1], 10);
-      return { kind: "ageExact" as const, age, gender: male };
-    }
-    return { kind: "free" as const, text: q.trim() };
-  };
-
+  // Search function
   const runSearch = async (query: string) => {
-    if (!supabase) return;
-    const q = query.trim();
-
-    if (q.length < 2) {
-      setSearchError("");
-      setMemberResults([]);
-      setFamilyResults([]);
-      setResultType("none");
-      return;
-    }
-
+    if (!supabase || !query) return;
     const requestId = ++searchRequestSeq.current;
     setSearchLoading(true);
     setSearchError("");
     setMemberResults([]);
     setFamilyResults([]);
-    setResultType("none");
+    setResultType("members");
+
     try {
-      const ctx = await getTenantContext();
-      if (!ctx) {
-        if (requestId !== searchRequestSeq.current) return;
-        setSearchError(lang === "tm" ? "லாகின் தேவை" : "Login required");
+      const ctx = tenantContext || await getTenantContext();
+      if (!ctx) return;
+
+      // Parse search query
+      const trimmed = query.trim();
+      
+      // Check for specific patterns
+      if (trimmed.startsWith("age:")) {
+        const ageStr = trimmed.substring(4).trim();
+        if (ageStr.includes(">")) {
+          const minAge = parseInt(ageStr.split(">")[1]);
+          if (isNaN(minAge)) return;
+          const p = { kind: "ageMin", minAge };
+          if (trimmed.includes("male")) p.gender = "Male";
+          if (trimmed.includes("female")) p.gender = "Female";
+          await executeSearch(p, requestId);
+          return;
+        }
+        if (ageStr.includes("<")) {
+          const maxAge = parseInt(ageStr.split("<")[1]);
+          if (isNaN(maxAge)) return;
+          const p = { kind: "ageMax", maxAge };
+          if (trimmed.includes("male")) p.gender = "Male";
+          if (trimmed.includes("female")) p.gender = "Female";
+          await executeSearch(p, requestId);
+          return;
+        }
+        if (ageStr.includes("-")) {
+          const [minAgeStr, maxAgeStr] = ageStr.split("-");
+          const minAge = parseInt(minAgeStr);
+          const maxAge = parseInt(maxAgeStr);
+          if (isNaN(minAge) || isNaN(maxAge)) return;
+          const p = { kind: "ageRange", minAge, maxAge };
+          if (trimmed.includes("male")) p.gender = "Male";
+          if (trimmed.includes("female")) p.gender = "Female";
+          await executeSearch(p, requestId);
+          return;
+        }
+        const age = parseInt(ageStr);
+        if (isNaN(age)) return;
+        const p = { kind: "ageExact", age };
+        if (trimmed.includes("male")) p.gender = "Male";
+        if (trimmed.includes("female")) p.gender = "Female";
+        await executeSearch(p, requestId);
         return;
       }
-      const p = parseQuery(q);
-      if (p.kind === "widows") {
+
+      // Family code search
+      if (trimmed.startsWith("FAM-")) {
+        const p = { kind: "familyCode", code: trimmed };
+        await executeSearch(p, requestId);
+        return;
+      }
+
+      // Free text search
+      const p = { kind: "free", text: trimmed };
+      await executeSearch(p, requestId);
+    } catch (e: any) {
+      if (requestId !== searchRequestSeq.current) return;
+      setSearchError(e.message || "Search failed");
+    } finally {
+      if (requestId !== searchRequestSeq.current) return;
+      setSearchLoading(false);
+    }
+  };
+
+  // Execute search based on parsed parameters
+  const executeSearch = async (p: any, requestId: number) => {
+    try {
+      const ctx = tenantContext || await getTenantContext();
+      if (!ctx) return;
+
+      if (p.kind === "familyCode") {
         const { data, error } = await supabase
           .from("families")
           .select("id,family_code,head_name,is_widow_head")
           .eq("masjid_id", ctx.masjidId)
-          .eq("is_widow_head", true)
+          .eq("family_code", p.code)
           .order("family_code", { ascending: true });
         if (error) throw error;
         if (requestId !== searchRequestSeq.current) return;
         setFamilyResults(data || []);
         setResultType("families");
+        return;
+      }
+      if (p.kind === "ageMin") {
+        let q = supabase
+          .from("members")
+          .select("id,family_id,full_name,age,gender")
+          .eq("masjid_id", ctx.masjidId)
+          .gte("age", p.minAge);
+        if (p.gender) q = q.eq("gender", p.gender);
+        const { data, error } = await q;
+        if (error) throw error;
+        if (requestId !== searchRequestSeq.current) return;
+        setMemberResults(data || []);
+        setResultType("members");
+        return;
+      }
+      if (p.kind === "ageMax") {
+        let q = supabase
+          .from("members")
+          .select("id,family_id,full_name,age,gender")
+          .eq("masjid_id", ctx.masjidId)
+          .lte("age", p.maxAge);
+        if (p.gender) q = q.eq("gender", p.gender);
+        const { data, error } = await q;
+        if (error) throw error;
+        if (requestId !== searchRequestSeq.current) return;
+        setMemberResults(data || []);
+        setResultType("members");
         return;
       }
       if (p.kind === "ageExact") {
@@ -590,15 +599,15 @@ export default function DashboardPage() {
           </div>
 
           <div className="mt-auto pt-4 border-t border-neutral-200">
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center gap-4 p-4 text-red-600 hover:bg-red-50 rounded-3xl font-bold transition-all"
-          >
-            <LogOut className="w-5 h-5" />
-            <span>{t.logout}</span>
-          </button>
+            <button 
+              onClick={handleLogout}
+              className="w-full flex items-center gap-4 p-4 text-red-600 hover:bg-red-50 rounded-3xl font-bold transition-all"
+            >
+              <LogOut className="w-5 h-5" />
+              <span>{t.logout}</span>
+            </button>
+          </div>
         </div>
-      </div>
       </aside>
 
       {/* Header */}
@@ -627,23 +636,31 @@ export default function DashboardPage() {
         {/* Circular Mosque Logo */}
         <div className="flex justify-center">
           <div className="w-24 h-24 rounded-full bg-emerald-100 border-4 border-emerald-200 flex items-center justify-center">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#047857" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L4 7v11h16V7l-8-5z"></path>
-              <path d="M12 22v-4"></path>
-              <path d="M8 18v4"></path>
-              <path d="M16 18v4"></path>
-              <path d="M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path>
-            </svg>
+            {masjid?.logo_url ? (
+              <img 
+                src={masjid.logo_url} 
+                alt="Masjid Logo" 
+                className="w-20 h-20 rounded-full object-cover"
+              />
+            ) : (
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#047857" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2L4 7v11h16V7l-8-5z"></path>
+                <path d="M12 22v-4"></path>
+                <path d="M8 18v4"></path>
+                <path d="M16 18v4"></path>
+                <path d="M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path>
+              </svg>
+            )}
           </div>
         </div>
 
         {/* Masjid Name Bar */}
         <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-3xl p-6 text-center shadow-xl">
           <h1 className="text-2xl font-black text-white tracking-wide">
-            MUBEEN JUMMAH MASJID
+            {masjid?.name || "MJM"}
           </h1>
           <p className="text-sm text-emerald-100 mt-1">
-            Mubeen Jummah Masjid
+            {masjid?.tagline || "Mubeen Jummah Masjid"}
           </p>
         </div>
 
@@ -663,18 +680,18 @@ export default function DashboardPage() {
 
         {/* Search Bar */}
         <div className="relative group">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400 group-focus-within:text-emerald-600 transition-colors" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400 group-focus-within:text-emerald-600 transition-colors" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={lang === "tm" ? "எதை வேண்டுமானாலும் தேடுக..." : "Search anything..."}
-            className="app-input pl-12 font-bold"
+            placeholder={t.search_placeholder}
+            className="app-input pl-12 font-bold text-sm md:text-base"
           />
         </div>
 
-        {/* Menu Grid - 4 Column Circular Icons */}
-        <div className="grid grid-cols-4 gap-4 justify-items-center">
+        {/* Menu Grid - Responsive Circular Icons */}
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 sm:gap-4 justify-items-center">
           <Link href="/families" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
             <Users className="w-6 h-6 text-emerald-700" />
           </Link>
@@ -703,7 +720,7 @@ export default function DashboardPage() {
       </main>
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30">
         <div className="grid grid-cols-4 h-16">
           <Link href="/" className="flex flex-col items-center justify-center gap-1 text-emerald-600">
             <HomeIcon className="w-5 h-5" />
@@ -723,14 +740,6 @@ export default function DashboardPage() {
           </Link>
         </div>
       </div>
-
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
     </div>
   );
 }
