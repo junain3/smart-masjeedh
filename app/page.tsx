@@ -12,7 +12,7 @@ import { useMockAuth } from "@/components/MockAuthProvider";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import RouteGuard from "@/components/RouteGuard";
 import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
-import { toast } from "@/components/ToastProvider";
+import { useAppToast } from "@/components/ToastProvider";
 
 type Member = {
   id: string;
@@ -67,6 +67,7 @@ const dummyFamilies: Family[] = [
 export default function HomePage() {
   const router = useRouter();
   const { user, tenantContext, loading: authLoading } = useSupabaseAuth();
+  const { toast } = useAppToast();
   
   // Parse permissions and check access
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
