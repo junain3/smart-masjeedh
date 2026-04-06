@@ -25,9 +25,9 @@ export default function LoginPage() {
     console.log("LOGIN STEP 2: signIn finished");
 
     const next = new URLSearchParams(window.location.search).get("next");
-    console.log("LOGIN STEP 3: redirecting to", next || "/dashboard");
+    console.log("LOGIN STEP 3: redirecting to", next || "/");
 
-    router.push(next || "/dashboard");
+    router.push(next || "/");
   } catch (error: any) {
     console.error("LOGIN STEP ERROR:", error);
     alert(error?.message || "Login failed");
