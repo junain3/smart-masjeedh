@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download, HomeIcon, User, Calendar, Briefcase, Settings, LogOut, MoreHorizontal, Shield, Wallet, HelpCircle, Menu } from "lucide-react";
@@ -509,11 +509,44 @@ export default function HomePage() {
   };
 
   // Format date: "25 February 2026 at 6:43"
-  const formatDate = (date: Date) => {
+  const formatDate = useMemo(() => (date: Date) => {
     const d = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
     const t = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
     return `${d} at ${t}`;
-  };
+  }, []);
+
+  // Loading skeleton component
+  const LoadingSkeleton = () => (
+    <div className="animate-pulse">
+      <div className="h-6 bg-gray-200 rounded w-48 mx-auto mb-6"></div>
+      <div className="w-24 h-24 bg-gray-200 rounded-full mx-auto mb-6"></div>
+      <div className="bg-gradient-to-r from-gray-200 to-gray-300 rounded-3xl p-6 text-center shadow-xl mb-6">
+        <div className="h-8 bg-gray-300 rounded w-32 mx-auto mb-2"></div>
+        <div className="h-4 bg-gray-300 rounded w-48 mx-auto"></div>
+      </div>
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="bg-white border-2 border-gray-200 rounded-2xl p-4 text-center shadow-lg">
+          <div className="w-8 h-8 bg-gray-200 rounded-full mx-auto mb-2"></div>
+          <div className="h-3 bg-gray-200 rounded w-24 mx-auto mb-2"></div>
+          <div className="h-8 bg-gray-200 rounded w-12 mx-auto"></div>
+        </div>
+        <div className="bg-white border-2 border-gray-200 rounded-2xl p-4 text-center shadow-lg">
+          <div className="w-8 h-8 bg-gray-200 rounded-full mx-auto mb-2"></div>
+          <div className="h-3 bg-gray-200 rounded w-24 mx-auto mb-2"></div>
+          <div className="h-8 bg-gray-200 rounded w-12 mx-auto"></div>
+        </div>
+      </div>
+      <div className="h-12 bg-gray-200 rounded-full mb-6"></div>
+      <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 sm:gap-4 justify-items-center">
+        {[...Array(8)].map((_, i) => (
+          <div key={i} className="w-14 h-14 bg-gray-200 rounded-full"></div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Check if initial data is still loading
+  const isInitialLoading = !masjid || familyCount === null || memberCount === null;
 
   return (
   <AppShell 
@@ -525,97 +558,104 @@ export default function HomePage() {
     }
   >
     <main className="flex-1 p-4 space-y-6 w-full">
-        {/* Date Display */}
-        <div className="text-center">
-          <p className="text-lg font-bold text-neutral-900">
-            {formatDate(time)}
-          </p>
-        </div>
-
-        {/* Circular Mosque Logo */}
-        <div className="flex justify-center">
-          <div className="w-24 h-24 rounded-full bg-emerald-100 border-4 border-emerald-200 flex items-center justify-center">
-            {masjid?.logo_url ? (
-              <img 
-                src={masjid.logo_url} 
-                alt="Masjid Logo" 
-                className="w-20 h-20 rounded-full object-cover"
-              />
-            ) : (
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#047857" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2L4 7v11h16V7l-8-5z"></path>
-                <path d="M12 22v-4"></path>
-                <path d="M8 18v4"></path>
-                <path d="M16 18v4"></path>
-                <path d="M12 11a3 3 0 1 0 0-6 3 3 0 0 0 6z"></path>
-              </svg>
-            )}
+      {isInitialLoading ? (
+        <LoadingSkeleton />
+      ) : (
+        <>
+          {/* Date Display */}
+          <div className="text-center">
+            <p className="text-lg font-bold text-neutral-900">
+              {formatDate(time)}
+            </p>
           </div>
-        </div>
 
-        {/* Masjid Name Bar */}
-        <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-3xl p-6 text-center shadow-xl">
-          <h1 className="text-2xl font-black text-white tracking-wide">
-            {masjid?.name || "MJM"}
-          </h1>
-          <p className="text-sm text-emerald-100 mt-1">
-            {masjid?.tagline || "Mubeen Jummah Masjid"}
-          </p>
-        </div>
-
-        {/* Quick Stats Cards - Below Masjid Name Bar */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-white border-2 border-emerald-200 rounded-2xl p-4 text-center shadow-lg">
-            <Users className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-            <p className="text-xs font-black text-emerald-700 uppercase tracking-widest">TOTAL FAMILIES</p>
-            <p className="text-3xl font-black text-emerald-800">{familyCount || 0}</p>
+          {/* Circular Mosque Logo */}
+          <div className="flex justify-center">
+            <div className="w-24 h-24 rounded-full bg-emerald-100 border-4 border-emerald-200 flex items-center justify-center">
+              {masjid?.logo_url ? (
+                <img 
+                  src={masjid.logo_url} 
+                  alt="Masjid Logo" 
+                  className="w-20 h-20 rounded-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#047857" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2L4 7v11h16V7l-8-5z"></path>
+                  <path d="M12 22v-4"></path>
+                  <path d="M8 18v4"></path>
+                  <path d="M16 18v4"></path>
+                  <path d="M12 11a3 3 0 1 0 0-6 3 3 0 0 0 6z"></path>
+                </svg>
+              )}
+            </div>
           </div>
-          <div className="bg-white border-2 border-emerald-200 rounded-2xl p-4 text-center shadow-lg">
-            <User className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-            <p className="text-xs font-black text-emerald-700 uppercase tracking-widest">TOTAL MEMBERS</p>
-            <p className="text-3xl font-black text-emerald-800">{memberCount || 0}</p>
-          </div>
-        </div>
 
-        {/* Search Bar */}
-        <div className="relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400 group-focus-within:text-emerald-600 transition-colors" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t.search_placeholder}
-            className="app-input pl-12 font-bold text-sm md:text-base"
-          />
-        </div>
-
-        {/* Menu Grid - Responsive Circular Icons */}
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 sm:gap-4 justify-items-center">
-          <Link href="/families" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
-            <Users className="w-6 h-6 text-emerald-700" />
-          </Link>
-          <Link href="/accounts" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
-            <CreditCard className="w-6 h-6 text-emerald-700" />
-          </Link>
-          <Link href="/collections" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
-            <FileText className="w-6 h-6 text-emerald-700" />
-          </Link>
-          <Link href="/events" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
-            <Calendar className="w-6 h-6 text-emerald-700" />
-          </Link>
-          <Link href="/staff" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
-            <Briefcase className="w-6 h-6 text-emerald-700" />
-          </Link>
-          <Link href="/accounts" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
-            <Settings className="w-6 h-6 text-emerald-700" />
-          </Link>
-          <Link href="/settings" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
-            <Settings className="w-6 h-6 text-emerald-700" />
-          </Link>
-          <div className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center">
-            <MoreHorizontal className="w-6 h-6 text-emerald-700" />
+          {/* Masjid Name Bar */}
+          <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-3xl p-6 text-center shadow-xl">
+            <h1 className="text-2xl font-black text-white tracking-wide">
+              {masjid?.name || "MJM"}
+            </h1>
+            <p className="text-sm text-emerald-100 mt-1">
+              {masjid?.tagline || "Mubeen Jummah Masjid"}
+            </p>
           </div>
-        </div>
+
+          {/* Quick Stats Cards - Below Masjid Name Bar */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white border-2 border-emerald-200 rounded-2xl p-4 text-center shadow-lg">
+              <Users className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+              <p className="text-xs font-black text-emerald-700 uppercase tracking-widest">TOTAL FAMILIES</p>
+              <p className="text-3xl font-black text-emerald-800">{familyCount || 0}</p>
+            </div>
+            <div className="bg-white border-2 border-emerald-200 rounded-2xl p-4 text-center shadow-lg">
+              <User className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+              <p className="text-xs font-black text-emerald-700 uppercase tracking-widest">TOTAL MEMBERS</p>
+              <p className="text-3xl font-black text-emerald-800">{memberCount || 0}</p>
+            </div>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400 group-focus-within:text-emerald-600 transition-colors" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t.search_placeholder}
+              className="app-input pl-12 font-bold text-sm md:text-base"
+            />
+          </div>
+
+          {/* Menu Grid - Responsive Circular Icons */}
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 sm:gap-4 justify-items-center">
+            <Link href="/families" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+              <Users className="w-6 h-6 text-emerald-700" />
+            </Link>
+            <Link href="/accounts" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+              <CreditCard className="w-6 h-6 text-emerald-700" />
+            </Link>
+            <Link href="/collections" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+              <FileText className="w-6 h-6 text-emerald-700" />
+            </Link>
+            <Link href="/events" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+              <Calendar className="w-6 h-6 text-emerald-700" />
+            </Link>
+            <Link href="/staff" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+              <Briefcase className="w-6 h-6 text-emerald-700" />
+            </Link>
+            <Link href="/accounts" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+              <Settings className="w-6 h-6 text-emerald-700" />
+            </Link>
+            <Link href="/settings" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+              <Settings className="w-6 h-6 text-emerald-700" />
+            </Link>
+            <div className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center">
+              <MoreHorizontal className="w-6 h-6 text-emerald-700" />
+            </div>
+          </div>
+        </>
+      )}
     </main>
   </AppShell>
 );

@@ -588,55 +588,124 @@ export default function FamiliesPage() {
               </div>
             </div>
           ) : (
-            filteredFamilies.map((family) => (
-              <Link
-                key={family.id}
-                href={`/families/${family.id}`}
-                className="block bg-white professional-card rounded-[1.5rem] p-5 active:scale-[0.98] transition-all group"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-md uppercase tracking-tighter">
-                        {family.family_code}
-                      </span>
+            <>
+              {/* Mobile Card Layout */}
+              <div className="sm:hidden space-y-3 w-full">
+                {filteredFamilies.map((family) => (
+                  <div key={family.id} className="bg-white rounded-2xl p-4 shadow-md space-y-3">
+                    {/* Family Name and Code */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-bold text-slate-900 truncate">
+                          {family.head_name}
+                        </h3>
+                        <span className="text-xs font-black bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md uppercase tracking-tighter">
+                          {family.family_code}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600 flex items-center gap-1">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400">
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                          <circle cx="12" cy="10" r="3"></circle>
+                        </svg>
+                        {family.address}
+                      </p>
+                      <p className="text-sm text-slate-600">{family.phone}</p>
                     </div>
-                    <h3 className="text-base font-bold text-slate-900 group-hover:text-emerald-600 transition-colors truncate">
-                      {family.head_name}
-                    </h3>
-                    <p className="text-xs text-slate-400 truncate flex items-center gap-1">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-300"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                      {family.address}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <div className="flex items-center gap-1">
+                    
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 pt-2">
+                      <Link
+                        href={`/families/${family.id}`}
+                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2 px-4 rounded-xl flex items-center justify-center gap-2 font-medium transition-colors"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                          <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        View
+                      </Link>
                       <button 
                         onClick={(e) => {
                           e.preventDefault();
-                          e.stopPropagation();
                           setEditingFamily(family);
                         }}
-                        className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-xl flex items-center justify-center gap-2 font-medium transition-colors"
                       >
                         <Edit className="w-4 h-4" />
+                        Edit
                       </button>
                       <button 
                         onClick={(e) => {
                           e.preventDefault();
-                          e.stopPropagation();
                           deleteFamily(family.id);
                         }}
-                        className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                        className="flex-1 bg-rose-500 hover:bg-rose-600 text-white py-2 px-4 rounded-xl flex items-center justify-center gap-2 font-medium transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
+                        Delete
                       </button>
                     </div>
-                    <p className="text-[10px] font-bold text-slate-400">{family.phone}</p>
                   </div>
-                </div>
-              </Link>
-            ))
+                ))}
+              </div>
+
+              {/* Desktop Table Layout */}
+              <div className="hidden sm:block space-y-3 w-full">
+                {filteredFamilies.map((family) => (
+                  <Link
+                    key={family.id}
+                    href={`/families/${family.id}`}
+                    className="block bg-white professional-card rounded-[1.5rem] p-5 active:scale-[0.98] transition-all group"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-md uppercase tracking-tighter">
+                            {family.family_code}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-bold text-slate-900 group-hover:text-emerald-600 transition-colors truncate">
+                          {family.head_name}
+                        </h3>
+                        <p className="text-xs text-slate-400 truncate flex items-center gap-1">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-300">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                          </svg>
+                          {family.address}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="flex items-center gap-1">
+                          <button 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEditingFamily(family);
+                            }}
+                            className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              deleteFamily(family.id);
+                            }}
+                            className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-400">{family.phone}</p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </section>

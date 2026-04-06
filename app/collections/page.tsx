@@ -714,17 +714,185 @@ const [commissionBalance, setCommissionBalance] = useState(0);
 
       {/* My Pending Collections */}
       {collections.filter(c => c.status === 'pending' && c.collected_by_user_id === user?.id).length > 0 && (
-        <div className="app-card p-5 mb-6">
-          <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4">
-            My Pending Collections
-          </h2>
-          <div className="space-y-2">
-            {collections
-              .filter(c => c.status === 'pending' && c.collected_by_user_id === user?.id)
-              .map((collection) => (
+        <>
+          {/* Mobile Card Layout */}
+          <div className="sm:hidden app-card p-5 mb-6">
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4">
+              My Pending Collections
+            </h2>
+            <div className="space-y-3">
+              {collections
+                .filter(c => c.status === 'pending' && c.collected_by_user_id === user?.id)
+                .map((collection) => (
+                  <div
+                    key={collection.id}
+                    className="bg-white rounded-2xl p-4 shadow-md border border-amber-200 space-y-3"
+                  >
+                    {/* Family Name and Code */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-slate-800">
+                          {collection.family?.family_code} - {collection.family?.head_name}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          {new Date(collection.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-emerald-600">
+                          {collection.amount.toFixed(2)}
+                        </div>
+                        <div className="text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full bg-amber-100 text-amber-700">
+                          Pending
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Commission and Notes */}
+                    {collection.commission_amount > 0 && (
+                      <div className="text-xs text-purple-600 font-bold">
+                        Commission: {collection.commission_amount.toFixed(2)} ({collection.commission_percent}%)
+                      </div>
+                    )}
+                    {collection.notes && (
+                      <div className="text-xs text-slate-500">{collection.notes}</div>
+                    )}
+
+                    {/* Action Button */}
+                    <div className="pt-2">
+                      <button
+                        onClick={() => handleEdit(collection)}
+                        className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-xl font-medium transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {/* Desktop Layout */}
+          <div className="hidden sm:block app-card p-5 mb-6">
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4">
+              My Pending Collections
+            </h2>
+            <div className="space-y-2">
+              {collections
+                .filter(c => c.status === 'pending' && c.collected_by_user_id === user?.id)
+                .map((collection) => (
+                  <div
+                    key={collection.id}
+                    className="border border-amber-200 rounded-2xl p-4 bg-amber-50"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <div className="font-bold text-slate-800">
+                          {collection.family?.family_code} - {collection.family?.head_name}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          {new Date(collection.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-emerald-600">
+                          {collection.amount.toFixed(2)}
+                        </div>
+                        <div className="text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full bg-amber-100 text-amber-700">
+                          Pending
+                        </div>
+                      </div>
+                    </div>
+                    {collection.commission_amount > 0 && (
+                      <div className="text-xs text-purple-600 font-bold">
+                        Commission: {collection.commission_amount.toFixed(2)} ({collection.commission_percent}%)
+                      </div>
+                    )}
+                    {collection.notes && (
+                      <div className="text-xs text-slate-500 mt-1">{collection.notes}</div>
+                    )}
+                    <div className="mt-3">
+                      <button
+                        onClick={() => handleEdit(collection)}
+                        className="text-xs px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Recent Collections */}
+      <div className="app-card p-5">
+        <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4">
+          My Collections
+        </h2>
+        <>
+          {/* Mobile Card Layout */}
+          <div className="sm:hidden space-y-3">
+            {collections.filter(c => c.status !== 'pending').length === 0 ? (
+              <p className="text-[11px] font-bold text-slate-400 text-center py-8">
+                No collections yet
+              </p>
+            ) : (
+              collections.filter(c => c.status !== 'pending').map((collection) => (
                 <div
                   key={collection.id}
-                  className="border border-amber-200 rounded-2xl p-4 bg-amber-50"
+                  className="bg-white rounded-2xl p-4 shadow-md border border-slate-100 space-y-3"
+                >
+                  {/* Family Name and Code */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-slate-800">
+                        {collection.family?.family_code} - {collection.family?.head_name}
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        {new Date(collection.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-emerald-600">
+                        {collection.amount.toFixed(2)}
+                      </div>
+                      <div className={`text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full ${
+                        collection.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                        collection.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' :
+                        'bg-rose-100 text-rose-700'
+                      }`}>
+                        {collection.status}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Commission and Notes */}
+                  {collection.commission_amount > 0 && (
+                    <div className="text-xs text-purple-600 font-bold">
+                      Commission: {collection.commission_amount.toFixed(2)} ({collection.commission_percent}%)
+                    </div>
+                  )}
+                  {collection.notes && (
+                    <div className="text-xs text-slate-500">{collection.notes}</div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Layout */}
+          <div className="hidden sm:block space-y-2">
+            {collections.filter(c => c.status !== 'pending').length === 0 ? (
+              <p className="text-[11px] font-bold text-slate-400 text-center py-8">
+                No collections yet
+              </p>
+            ) : (
+              collections.filter(c => c.status !== 'pending').map((collection) => (
+                <div
+                  key={collection.id}
+                  className="border border-slate-100 rounded-2xl p-4 bg-white"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div>
@@ -739,8 +907,12 @@ const [commissionBalance, setCommissionBalance] = useState(0);
                       <div className="font-bold text-emerald-600">
                         {collection.amount.toFixed(2)}
                       </div>
-                      <div className="text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full bg-amber-100 text-amber-700">
-                        Pending
+                      <div className={`text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full ${
+                        collection.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                        collection.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' :
+                        'bg-rose-100 text-rose-700'
+                      }`}>
+                        {collection.status}
                       </div>
                     </div>
                   </div>
@@ -752,70 +924,11 @@ const [commissionBalance, setCommissionBalance] = useState(0);
                   {collection.notes && (
                     <div className="text-xs text-slate-500 mt-1">{collection.notes}</div>
                   )}
-                  <div className="mt-3">
-                    <button
-                      onClick={() => handleEdit(collection)}
-                      className="text-xs px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                    >
-                      Edit
-                    </button>
-                  </div>
                 </div>
-              ))}
+              ))
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Recent Collections */}
-      <div className="app-card p-5">
-        <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4">
-          My Collections
-        </h2>
-        <div className="space-y-2">
-          {collections.filter(c => c.status !== 'pending').length === 0 ? (
-            <p className="text-[11px] font-bold text-slate-400 text-center py-8">
-              No collections yet
-            </p>
-          ) : (
-            collections.filter(c => c.status !== 'pending').map((collection) => (
-              <div
-                key={collection.id}
-                className="border border-slate-100 rounded-2xl p-4 bg-white"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <div className="font-bold text-slate-800">
-                      {collection.family?.family_code} - {collection.family?.head_name}
-                    </div>
-                    <div className="text-xs text-slate-400">
-                      {new Date(collection.created_at).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-emerald-600">
-                      {collection.amount.toFixed(2)}
-                    </div>
-                    <div className={`text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full ${
-                      collection.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                      collection.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' :
-                      'bg-rose-100 text-rose-700'
-                    }`}>
-                      {collection.status}
-                    </div>
-                  </div>
-                </div>
-                {collection.commission_amount > 0 && (
-                  <div className="text-xs text-purple-600 font-bold">
-                    Commission: {collection.commission_amount.toFixed(2)} ({collection.commission_percent}%)
-                  </div>
-                )}
-                {collection.notes && (
-                  <div className="text-xs text-slate-500 mt-1">{collection.notes}</div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
+        </>
       </div>
 
       {/* Add Collection Modal */}

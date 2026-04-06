@@ -623,74 +623,150 @@ const { error } = await supabase
                 </p>
               </div>
             ) : (
-              filteredTransactions.map((tx, idx) => {
-                const kind = getFinancialKind(tx);
-                const altBg = idx % 2 === 0 ? "bg-white/65" : "bg-emerald-50/20";
+              <>
+                {/* Mobile Card Layout */}
+                <div className="sm:hidden space-y-3 w-full">
+                  {filteredTransactions.map((tx, idx) => {
+                    const kind = getFinancialKind(tx);
+                    const altBg = idx % 2 === 0 ? "bg-white/65" : "bg-emerald-50/20";
 
-                return (
-                  <div
-                    key={tx.id}
-                    className={`bg-white rounded-3xl p-5 flex items-center justify-between group hover:border-emerald-200 transition-all relative overflow-hidden border ${altBg}`}
-                  >
-                    <div
-                      className={`absolute left-0 top-3 bottom-3 w-1 rounded-full ${
-                        kind === "income" ? "bg-emerald-600" : "bg-rose-600"
-                      }`}
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-1">
-                        <span
-                          className={`text-sm font-black uppercase tracking-widest ${
-                            kind === "income" ? "text-emerald-600" : "text-rose-600"
-                          }`}
-                        >
-                          {kind === "income" ? "Income" : "Expense"}
-                        </span>
-                        <span className="text-xs text-neutral-500">{tx.date}</span>
-                      </div>
-                      <p className="font-semibold text-neutral-900 mb-1">{tx.description}</p>
-                      {tx.category && <p className="text-sm text-neutral-600">{tx.category}</p>}
-                    </div>
-
-                    <div className="text-right">
-                      <p
-                        className={`text-xl font-black ${
-                          kind === "income" ? "text-emerald-600" : "text-rose-600"
-                        }`}
+                    return (
+                      <div
+                        key={tx.id}
+                        className={`bg-white rounded-2xl p-4 shadow-md space-y-3 border ${altBg}`}
                       >
-                        {kind === "income" ? "+" : "-"}Rs. {tx.amount.toLocaleString()}
-                      </p>
+                        {/* Transaction Type and Date */}
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`text-sm font-black uppercase tracking-widest ${
+                              kind === "income" ? "text-emerald-600" : "text-rose-600"
+                            }`}
+                          >
+                            {kind === "income" ? "Income" : "Expense"}
+                          </span>
+                          <span className="text-xs text-neutral-500">{tx.date}</span>
+                        </div>
 
-                      <div className="flex gap-1 mt-2">
-                        <button
-                          onClick={() => {
-                            setEditingTransaction(tx);
-                            setAmount(tx.amount.toString());
-                            setDescription(
-                              tx.description.replace(/^(Subscription|Income|Expense):\s*/i, "")
-                            );
-                            setCategory(tx.category);
-                            setDate(tx.date);
-                            setType(tx.type);
-                            setSelectedFamilyId(tx.family_id || "");
-                            setIsModalOpen(true);
-                          }}
-                          className="p-1 text-neutral-400 hover:text-emerald-600 transition-colors"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
+                        {/* Description and Category */}
+                        <div className="space-y-1">
+                          <p className="font-semibold text-neutral-900">{tx.description}</p>
+                          {tx.category && <p className="text-sm text-neutral-600">{tx.category}</p>}
+                        </div>
 
-                        <button
-                          onClick={() => deleteTransaction(tx.id)}
-                          className="p-1 text-neutral-400 hover:text-rose-600 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {/* Amount and Actions */}
+                        <div className="flex items-center justify-between pt-2">
+                          <p
+                            className={`text-xl font-black ${
+                              kind === "income" ? "text-emerald-600" : "text-rose-600"
+                            }`}
+                          >
+                            {kind === "income" ? "+" : "-"}Rs. {tx.amount.toLocaleString()}
+                          </p>
+
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingTransaction(tx);
+                                setAmount(tx.amount.toString());
+                                setDescription(
+                                  tx.description.replace(/^(Subscription|Income|Expense):\s*/i, "")
+                                );
+                                setCategory(tx.category);
+                                setDate(tx.date);
+                                setType(tx.type);
+                                setSelectedFamilyId(tx.family_id || "");
+                                setIsModalOpen(true);
+                              }}
+                              className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-colors"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              onClick={() => deleteTransaction(tx.id)}
+                              className="p-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              })
+                    );
+                  })}
+                </div>
+
+                {/* Desktop Table Layout */}
+                <div className="hidden sm:block space-y-3 w-full">
+                  {filteredTransactions.map((tx, idx) => {
+                    const kind = getFinancialKind(tx);
+                    const altBg = idx % 2 === 0 ? "bg-white/65" : "bg-emerald-50/20";
+
+                    return (
+                      <div
+                        key={tx.id}
+                        className={`bg-white rounded-3xl p-5 flex items-center justify-between group hover:border-emerald-200 transition-all relative overflow-hidden border ${altBg}`}
+                      >
+                        <div
+                          className={`absolute left-0 top-3 bottom-3 w-1 rounded-full ${
+                            kind === "income" ? "bg-emerald-600" : "bg-rose-600"
+                          }`}
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-1">
+                            <span
+                              className={`text-sm font-black uppercase tracking-widest ${
+                                kind === "income" ? "text-emerald-600" : "text-rose-600"
+                              }`}
+                            >
+                              {kind === "income" ? "Income" : "Expense"}
+                            </span>
+                            <span className="text-xs text-neutral-500">{tx.date}</span>
+                          </div>
+                          <p className="font-semibold text-neutral-900 mb-1">{tx.description}</p>
+                          {tx.category && <p className="text-sm text-neutral-600">{tx.category}</p>}
+                        </div>
+
+                        <div className="text-right">
+                          <p
+                            className={`text-xl font-black ${
+                              kind === "income" ? "text-emerald-600" : "text-rose-600"
+                            }`}
+                          >
+                            {kind === "income" ? "+" : "-"}Rs. {tx.amount.toLocaleString()}
+                          </p>
+
+                          <div className="flex gap-1 mt-2">
+                            <button
+                              onClick={() => {
+                                setEditingTransaction(tx);
+                                setAmount(tx.amount.toString());
+                                setDescription(
+                                  tx.description.replace(/^(Subscription|Income|Expense):\s*/i, "")
+                                );
+                                setCategory(tx.category);
+                                setDate(tx.date);
+                                setType(tx.type);
+                                setSelectedFamilyId(tx.family_id || "");
+                                setIsModalOpen(true);
+                              }}
+                              className="p-1 text-neutral-400 hover:text-emerald-600 transition-colors"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              onClick={() => deleteTransaction(tx.id)}
+                              className="p-1 text-neutral-400 hover:text-rose-600 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
         </main>
