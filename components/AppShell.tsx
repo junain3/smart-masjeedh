@@ -30,8 +30,9 @@ export function AppShell(props: {
   children: React.ReactNode;
   actions?: React.ReactNode;
   backHref?: string;
+  headerRight?: React.ReactNode;
 }) {
-  const { title, children, actions, backHref } = props;
+  const { title, children, actions, backHref, headerRight } = props;
   const pathname = usePathname();
   const router = useRouter();
 
@@ -229,7 +230,10 @@ export function AppShell(props: {
                 {title}
               </h1>
             </div>
-            <div className="shrink-0 flex items-center gap-2">{actions}</div>
+            <div className="shrink-0 flex items-center gap-2">
+              {actions}
+              {headerRight}
+            </div>
           </div>
         </header>
 

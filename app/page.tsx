@@ -11,6 +11,7 @@ import { QrScannerModal } from "@/components/QrScannerModal";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import RouteGuard from "@/components/RouteGuard";
+import { AppShell } from "@/components/AppShell";
 import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
 import { useAppToast } from "@/components/ToastProvider";
 
@@ -515,118 +516,15 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-neutral-50 text-neutral-900 font-sans pb-24 relative overflow-x-hidden">
-      {/* Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm transition-opacity"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar Drawer */}
-      <aside className={`fixed top-0 left-0 h-full w-72 bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-6 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-xl font-black text-emerald-600 uppercase tracking-tighter">Menu</h2>
-            <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors">
-              <X className="w-6 h-6 text-neutral-600" />
-            </button>
-          </div>
-
-          <div className="flex-1 space-y-2">
-            <Link href="/" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 bg-emerald-50 text-emerald-700 rounded-3xl font-bold transition-all">
-              <HomeIcon className="w-5 h-5" />
-              <span>{t.dashboard}</span>
-            </Link>
-            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'families')) && (
-              <Link href="/families" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
-                <Users className="w-5 h-5" />
-                <span>{t.families}</span>
-              </Link>
-            )}
-            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'accounts')) && (
-              <Link href="/accounts" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
-                <CreditCard className="w-5 h-5" />
-                <span>{t.accounts}</span>
-              </Link>
-            )}
-            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'staff_management')) && (
-              <Link href="/staff" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
-                <Briefcase className="w-5 h-5 text-emerald-600" />
-                <span>{t.staff_management || t.staff}</span>
-              </Link>
-            )}
-            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'settings')) && (
-              <Link href="/settings" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all">
-                <Settings className="w-5 h-5" />
-                <span>{t.settings}</span>
-              </Link>
-            )}
-            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'events')) && (
-              <Link 
-                href="/events"
-                onClick={() => setIsSidebarOpen(false)}
-                className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
-              >
-                <Calendar className="w-5 h-5 text-amber-500" />
-                <span>{t.events || "Events"}</span>
-              </Link>
-            )}
-            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'subscriptions_collect')) && (
-              <Link
-                href="/collections"
-                onClick={() => setIsSidebarOpen(false)}
-                className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
-              >
-                <Wallet className="w-5 h-5 text-emerald-600" />
-                <span>Collections</span>
-              </Link>
-            )}
-            {(userIsSuperAdmin || hasModulePermission(parsedPermissions, 'subscriptions_approve')) && (
-              <Link
-                href="/subscriptions/pending"
-                onClick={() => setIsSidebarOpen(false)}
-                className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
-              >
-                <Shield className="w-5 h-5 text-orange-500" />
-                <span>Pending Collections</span>
-              </Link>
-            )}
-            <div className="flex items-center gap-4 p-4 opacity-40 text-neutral-600 rounded-3xl font-bold cursor-not-allowed">
-              <HelpCircle className="w-5 h-5" />
-              <span>Help & Support</span>
-            </div>
-          </div>
-
-          <div className="mt-auto pt-4 border-t border-neutral-200">
-            <button 
-              onClick={handleLogout}
-              className="w-full flex items-center gap-4 p-4 text-red-600 hover:bg-red-50 rounded-3xl font-bold transition-all"
-            >
-              <LogOut className="w-5 h-5" />
-              <span>{t.logout}</span>
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* Header */}
-      <header className="p-4 flex items-center justify-between sticky top-0 bg-white/80 backdrop-blur-md z-20 border-b border-neutral-200">
-        <button 
-          onClick={() => setIsSidebarOpen(true)}
-          className="p-2 text-neutral-600 hover:bg-neutral-50 rounded-3xl transition-colors"
-        >
-          <Menu className="w-6 h-6" />
-        </button>
-        <h1 className="text-lg font-black tracking-tight">{t.home}</h1>
-        <Link href="/scan" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-3xl transition-colors">
-          <QrCode className="w-6 h-6" />
-        </Link>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 p-4 space-y-6 w-full">
+  <AppShell 
+    title={t.home}
+    headerRight={
+      <Link href="/scan" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-3xl transition-colors">
+        <QrCode className="w-6 h-6" />
+      </Link>
+    }
+  >
+    <main className="flex-1 p-4 space-y-6 w-full">
         {/* Date Display */}
         <div className="text-center">
           <p className="text-lg font-bold text-neutral-900">
@@ -649,7 +547,7 @@ export default function HomePage() {
                 <path d="M12 22v-4"></path>
                 <path d="M8 18v4"></path>
                 <path d="M16 18v4"></path>
-                <path d="M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path>
+                <path d="M12 11a3 3 0 1 0 0-6 3 3 0 0 0 6z"></path>
               </svg>
             )}
           </div>
@@ -718,29 +616,7 @@ export default function HomePage() {
             <MoreHorizontal className="w-6 h-6 text-emerald-700" />
           </div>
         </div>
-      </main>
-
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30">
-        <div className="grid grid-cols-4 h-16">
-          <Link href="/" className="flex flex-col items-center justify-center gap-1 text-emerald-600">
-            <HomeIcon className="w-5 h-5" />
-            <span className="text-xs font-medium">HOME</span>
-          </Link>
-          <Link href="/families" className="flex flex-col items-center justify-center gap-1 text-gray-600">
-            <Users className="w-5 h-5" />
-            <span className="text-xs font-medium">FAMILIES</span>
-          </Link>
-          <Link href="/accounts" className="flex flex-col items-center justify-center gap-1 text-gray-600">
-            <CreditCard className="w-5 h-5" />
-            <span className="text-xs font-medium">ACCOUNTS</span>
-          </Link>
-          <Link href="/staff" className="flex flex-col items-center justify-center gap-1 text-gray-600">
-            <Briefcase className="w-5 h-5" />
-            <span className="text-xs font-medium">STAFF</span>
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
+    </main>
+  </AppShell>
+);
 }
