@@ -197,6 +197,12 @@ export default function FamilyDetailsPage() {
         .eq("status", "approved")
         .order("created_at", { ascending: false });
 
+      console.log("DEBUG PAYMENTS QUERY:");
+      console.log("- familyId:", familyId);
+      console.log("- masjidId:", tenantContext.masjidId);
+      console.log("- paymentsData:", paymentsData);
+      console.log("- paymentsError:", paymentsError);
+
       if (paymentsError) {
         console.log("Payments fetch error:", paymentsError);
         setPayments([]);
