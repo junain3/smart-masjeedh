@@ -414,13 +414,17 @@ export default function FamilyDetailsPage() {
 
   const paidThisYear = payments
     .filter((p) => {
-      const y = new Date(p.date).getFullYear();
+      const paymentDate = p.collected_at || p.created_at;
+      const y = new Date(paymentDate).getFullYear();
       return y === selectedYear && p.amount > 0;
     })
     .reduce((s, p) => s + p.amount, 0);
 
   const paidPrevYear = payments
-    .filter((p) => new Date(p.date).getFullYear() === selectedYear - 1 && p.amount > 0)
+    .filter((p) => {
+      const paymentDate = p.collected_at || p.created_at;
+      return new Date(paymentDate).getFullYear() === selectedYear - 1 && p.amount > 0;
+    })
     .reduce((s, p) => s + p.amount, 0);
 
   const previousArrears = Math.max(0, openingBal);
