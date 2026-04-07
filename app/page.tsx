@@ -149,18 +149,25 @@ export default function HomePage() {
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
 
-      const { count: familiesCount } = await supabase
-        .from("families")
-        .select("*", { count: "exact", head: false })
-        .eq("masjid_id", ctx.masjidId);
+      try {
+        const { count: familiesCount, error: familiesError } = await supabase
+          .from("families")
+          .select("*", { count: "exact", head: false })
+          .eq("masjid_id", ctx.masjidId);
 
-      const { count: membersCount } = await supabase
-        .from("members")
-        .select("*", { count: "exact", head: false })
-        .eq("masjid_id", ctx.masjidId);
+        const { count: membersCount, error: membersError } = await supabase
+          .from("members")
+          .select("*", { count: "exact", head: false })
+          .eq("masjid_id", ctx.masjidId);
 
-      setFamilyCount(familiesCount || 0);
-      setMemberCount(membersCount || 0);
+        // Safe fallback: set 0 if queries fail
+        setFamilyCount(familiesError ? 0 : (familiesCount || 0));
+        setMemberCount(membersError ? 0 : (membersCount || 0));
+      } catch (error) {
+        // Safe fallback: set 0 if anything fails
+        setFamilyCount(0);
+        setMemberCount(0);
+      }
     };
 
     fetchCounts();
@@ -173,22 +180,38 @@ export default function HomePage() {
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
 
-      const { data: masjidData } = await supabase
-        .from("masjids")
-        .select("masjid_name, logo_url, tagline, preferred_language")
-        .eq("id", ctx.masjidId)
-        .single();
+      try {
+        const { data: masjidData, error: masjidError } = await supabase
+          .from("masjids")
+          .select("masjid_name, logo_url, tagline, preferred_language")
+          .eq("id", ctx.masjidId)
+          .single();
 
-      if (masjidData) {
-        setMasjid({
-          name: (masjidData as any).masjid_name || "MJM",
-          logo_url: (masjidData as any).logo_url || "",
-          tagline: (masjidData as any).tagline || "Mubeen Jummah Masjid",
-        });
-        // Set language from masjid data if available
-        if ((masjidData as any).preferred_language && ["en", "ta", "si"].includes((masjidData as any).preferred_language)) {
-          setLang((masjidData as any).preferred_language);
+        if (masjidError || !masjidData) {
+          // Safe fallback: set default masjid if query fails or no data
+          setMasjid({
+            name: "MJM",
+            logo_url: "",
+            tagline: "Mubeen Jummah Masjid",
+          });
+        } else {
+          setMasjid({
+            name: (masjidData as any).masjid_name || "MJM",
+            logo_url: (masjidData as any).logo_url || "",
+            tagline: (masjidData as any).tagline || "Mubeen Jummah Masjid",
+          });
+          // Set language from masjid data if available
+          if ((masjidData as any).preferred_language && ["en", "ta", "si"].includes((masjidData as any).preferred_language)) {
+            setLang((masjidData as any).preferred_language);
+          }
         }
+      } catch (error) {
+        // Safe fallback: set default masjid if anything fails
+        setMasjid({
+          name: "MJM",
+          logo_url: "",
+          tagline: "Mubeen Jummah Masjid",
+        });
       }
     };
 
