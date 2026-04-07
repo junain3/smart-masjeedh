@@ -596,9 +596,12 @@ export default function FamiliesPage() {
                     {/* Family Name and Code */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-bold text-slate-900 truncate">
+                        <Link
+                          href={`/families/${family.id}`}
+                          className="text-lg font-bold text-slate-900 truncate hover:text-emerald-600 transition-colors"
+                        >
                           {family.head_name}
-                        </h3>
+                        </Link>
                         <span className="text-xs font-black bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md uppercase tracking-tighter">
                           {family.family_code}
                         </span>
@@ -615,35 +618,23 @@ export default function FamiliesPage() {
                     
                     {/* Action Buttons */}
                     <div className="flex gap-2 pt-2">
-                      <Link
-                        href={`/families/${family.id}`}
-                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2 px-4 rounded-xl flex items-center justify-center gap-2 font-medium transition-colors"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                          <circle cx="12" cy="12" r="3"></circle>
-                        </svg>
-                        View
-                      </Link>
                       <button 
                         onClick={(e) => {
                           e.preventDefault();
                           setEditingFamily(family);
                         }}
-                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-xl flex items-center justify-center gap-2 font-medium transition-colors"
+                        className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
                       >
                         <Edit className="w-4 h-4" />
-                        Edit
                       </button>
                       <button 
                         onClick={(e) => {
                           e.preventDefault();
                           deleteFamily(family.id);
                         }}
-                        className="flex-1 bg-rose-500 hover:bg-rose-600 text-white py-2 px-4 rounded-xl flex items-center justify-center gap-2 font-medium transition-colors"
+                        className="p-2 bg-rose-500 hover:bg-rose-600 text-white rounded-lg transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
-                        Delete
                       </button>
                     </div>
                   </div>

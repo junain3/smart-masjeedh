@@ -614,6 +614,94 @@ export default function StaffPage() {
     closeStaffProfile();
   };
 
+  const hasEligibleReplacement = async (currentUserId: string, masjidId: string) => {
+    try {
+      const { data: otherAdmins } = await supabase
+        .from('user_roles')
+        .select('*')
+        .eq('masjid_id', masjidId)
+        .neq('user_id', currentUserId)
+        .in('role', ['super_admin', 'co_admin']);
+
+      const eligibleReplacement = otherAdmins?.find(admin => {
+        const parsedPermissions = parsePermissions(admin.permissions);
+        return isSuperAdmin(parsedPermissions);
+      });
+
+      return !!eligibleReplacement;
+    } catch (error) {
+      console.error('Error checking eligible replacement:', error);
+      return false;
+    }
+  };
+
+  const [replacementCheck, setReplacementCheck] = useState<{ [key: string]: boolean }>({});
+
+  useEffect(() => {
+    const checkReplacementForCurrentAdmin = async () => {
+      if (tenantContext?.userId && tenantContext?.masjidId) {
+        const hasReplacement = await hasEligibleReplacement(tenantContext.userId, tenantContext.masjidId);
+        setReplacementCheck({ [tenantContext.userId]: hasReplacement });
+      }
+    };
+
+    checkReplacementForCurrentAdmin();
+  }, [tenantContext?.userId, tenantContext?.masjidId]);
+
+  const safeSelfRemoval = async (currentUserId: string, masjidId: string) => {
+    // STEP 1: Fetch all other admin-level users for the same masjid
+    const { data: otherAdmins, error: fetchError } = await supabase
+      .from('user_roles')
+      .select('*')
+      .eq('masjid_id', masjidId)
+      .neq('user_id', currentUserId)
+      .in('role', ['super_admin', 'co_admin']);
+
+    if (fetchError) throw fetchError;
+
+    // STEP 2: Find eligible replacement with FULL access only
+    const eligibleReplacement = otherAdmins?.find(admin => {
+      const parsedPermissions = parsePermissions(admin.permissions);
+      return isSuperAdmin(parsedPermissions);
+    });
+
+    // STEP 3: Validate replacement exists (NO fallback)
+    if (!eligibleReplacement) {
+      throw new Error('Cannot remove yourself: No other admin with full app access exists');
+    }
+
+    // STEP 4: Promote replacement to super_admin FIRST
+    const { error: promoteError } = await supabase
+      .from('user_roles')
+      .update({ 
+        role: 'super_admin',
+        permissions: {
+          families: true,
+          staff_management: true,
+          subscriptions_collect: true,
+          subscriptions_approve: true,
+          accounts: true,
+          reports: true,
+          settings: true,
+          events: true
+        }
+      })
+      .eq('id', eligibleReplacement.id);
+
+    if (promoteError) throw promoteError;
+
+    // STEP 5: Remove current super admin
+    const { error: removeError } = await supabase
+      .from('user_roles')
+      .delete()
+      .eq('user_id', currentUserId)
+      .eq('masjid_id', masjidId);
+
+    if (removeError) throw removeError;
+
+    return { success: true, promotedAdmin: eligibleReplacement };
+  };
+
   const handleDeleteStaff = async (staffMember: Staff) => {
     // CRITICAL: Only current Super Admin can manage other Super Admins
     const currentUserIsSuperAdmin = tenantContext?.role === 'super_admin' || user?.role === 'super_admin';
@@ -621,16 +709,30 @@ export default function StaffPage() {
     const isCurrentUser = staffMember.user_id === user?.id || staffMember.user_id === tenantContext?.userId;
 
     // RULES:
-    // 1. Cannot delete yourself
+    // 1. Cannot delete yourself (UNLESS another full-access admin exists)
     // 2. Only Super Admin can delete others
     // 3. Super Admin cannot delete other Super Admins
     if (isCurrentUser) {
-      toast({ 
-        kind: "error", 
-        title: "ACCESS DENIED", 
-        message: "You cannot delete your own account!" 
-      });
-      return;
+      try {
+        await safeSelfRemoval(staffMember.user_id, tenantContext?.masjidId);
+        
+        toast({ 
+          kind: "success", 
+          title: "SUCCESS", 
+          message: "You have been removed and replacement admin promoted!" 
+        });
+        
+        // Redirect to login
+        router.push('/login');
+        return;
+      } catch (error) {
+        toast({ 
+          kind: "error", 
+          title: "CANNOT REMOVE", 
+          message: error.message || "Cannot remove yourself when no other admin with full app access exists!" 
+        });
+        return;
+      }
     }
 
     if (!currentUserIsSuperAdmin) {
@@ -1200,8 +1302,15 @@ export default function StaffPage() {
                               </button>
                             )}
                             {(() => {
-                              console.log("DEBUG: User role:", user?.role, "Tenant role:", tenantContext?.role);
-                              return (tenantContext?.role === 'super_admin' || user?.role === 'super_admin') && staffMember.role !== 'super_admin';
+                              const isCurrentUser = staffMember.user_id === user?.id || staffMember.user_id === tenantContext?.userId;
+                              const currentUserIsSuperAdmin = tenantContext?.role === 'super_admin' || user?.role === 'super_admin';
+                              const hasReplacement = isCurrentUser && currentUserIsSuperAdmin ? replacementCheck[staffMember.user_id] : true;
+                              
+                              // Show delete button if:
+                              // 1. Current user is super admin AND
+                              // 2. Either deleting someone else (not super admin) OR deleting self with replacement
+                              return (tenantContext?.role === 'super_admin' || user?.role === 'super_admin') && 
+                                     (staffMember.role !== 'super_admin' || (isCurrentUser && hasReplacement));
                             })() && (
                               <button
                                 onClick={(e) => {
@@ -1209,7 +1318,9 @@ export default function StaffPage() {
                                   handleDeleteStaff(staffMember);
                                 }}
                                 className="text-red-600 hover:text-red-900"
-                                title="Delete Staff Member"
+                                title={staffMember.user_id === user?.id || staffMember.user_id === tenantContext?.userId ? 
+                                  (replacementCheck[staffMember.user_id] ? "Delete Your Account" : "Cannot delete: No replacement admin with full access") : 
+                                  "Delete Staff Member"}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
