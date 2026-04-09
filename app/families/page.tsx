@@ -50,6 +50,9 @@ export default function FamiliesPage() {
   const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
   const hasFamiliesAccess = hasModulePermission(parsedPermissions, 'families');
   
+  // Role-based super admin fallback
+  const isSuperAdminByRole = tenantContext?.role === 'super_admin' || user?.role === 'super_admin';
+  
   // Page-level access control
   if (authLoading) return <div>Loading...</div>;
   if (!user) {
@@ -57,7 +60,7 @@ export default function FamiliesPage() {
     return null;
   }
   
-  if (!hasFamiliesAccess && !userIsSuperAdmin) {
+  if (!hasFamiliesAccess && !userIsSuperAdmin && !isSuperAdminByRole) {
     return <div>No access to Families module</div>;
   }
 

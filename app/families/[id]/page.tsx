@@ -202,12 +202,17 @@ export default function FamilyDetailsPage() {
       console.log("- masjidId:", tenantContext.masjidId);
       console.log("- paymentsData:", paymentsData);
       console.log("- paymentsError:", paymentsError);
+      console.log("- paymentsData length:", paymentsData?.length || 0);
 
       if (paymentsError) {
         console.log("Payments fetch error:", paymentsError);
         setPayments([]);
       } else {
-        setPayments(paymentsData || []);
+        const mappedPayments = paymentsData || [];
+        console.log("DEBUG PAYMENTS MAPPING:");
+        console.log("- mappedPayments:", mappedPayments);
+        console.log("- mappedPayments length:", mappedPayments.length);
+        setPayments(mappedPayments);
       }
 
       const { data: servicesData, error: servicesError } = await supabase
