@@ -194,7 +194,7 @@ export default function FamilyDetailsPage() {
         .select("id, amount, status, collected_by_user_id, date, accepted_at, created_at")
         .eq("family_id", familyId)
         .eq("masjid_id", tenantContext.masjidId)
-        .eq("status", "approved")
+        .eq("status", "accepted")
         .order("created_at", { ascending: false });
 
       console.log("DEBUG PAYMENTS QUERY:");
