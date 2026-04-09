@@ -22,7 +22,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { translations, Language } from "@/lib/i18n/translations";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 
 declare module "jspdf" {
   interface jsPDF {
@@ -399,7 +399,7 @@ export default function FamilyDetailsPage() {
         m.phone,
       ]);
 
-      doc.autoTable({
+      autoTable(doc, {
         startY: 20,
         head: [["Name", "Relation", "Age", "Gender", "NIC", "Phone"]],
         body: tableData,
