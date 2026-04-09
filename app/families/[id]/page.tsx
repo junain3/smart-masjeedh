@@ -191,7 +191,7 @@ export default function FamilyDetailsPage() {
 
       const { data: paymentsData, error: paymentsError } = await supabase
         .from("subscription_collections")
-        .select("id, amount, status, collected_by_user_id, collected_at, created_at")
+        .select("id, amount, status, collected_by_user_id, date, accepted_at, created_at")
         .eq("family_id", familyId)
         .eq("masjid_id", tenantContext.masjidId)
         .eq("status", "approved")
@@ -217,7 +217,7 @@ export default function FamilyDetailsPage() {
 
       const { data: servicesData, error: servicesError } = await supabase
         .from("service_distributions")
-        .select("id, status, date, service_name")
+        .select("id, status, date, name")
         .eq("family_id", familyId)
         .eq("masjid_id", tenantContext.masjidId)
         .order("date", { ascending: false });
@@ -229,7 +229,7 @@ export default function FamilyDetailsPage() {
         setServices(
           (servicesData || []).map((s: any) => ({
             id: s.id,
-            name: s.service_name || "Service",
+            name: s.name || "Service",
             date: s.date,
             status: s.status,
           }))
@@ -423,17 +423,26 @@ export default function FamilyDetailsPage() {
   const remainingBalance = Math.max(annualFee - totalApproved, 0);
   const openingBal = family?.opening_balance || 0;
 
+  console.log("DEBUG CALCULATIONS:");
+  console.log("- selectedYear:", selectedYear);
+  console.log("- payments array:", payments);
+  console.log("- payments.length:", payments.length);
+  console.log("- annualFee:", annualFee);
+  console.log("- totalApproved:", totalApproved);
+
   const paidThisYear = payments
     .filter((p) => {
-      const paymentDate = p.collected_at || p.created_at;
+      const paymentDate = p.accepted_at || p.date || p.created_at;
       const y = new Date(paymentDate).getFullYear();
       return y === selectedYear && p.amount > 0;
     })
     .reduce((s, p) => s + p.amount, 0);
 
+  console.log("- paidThisYear:", paidThisYear);
+
   const paidPrevYear = payments
     .filter((p) => {
-      const paymentDate = p.collected_at || p.created_at;
+      const paymentDate = p.accepted_at || p.date || p.created_at;
       return new Date(paymentDate).getFullYear() === selectedYear - 1 && p.amount > 0;
     })
     .reduce((s, p) => s + p.amount, 0);
