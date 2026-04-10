@@ -74,6 +74,12 @@ export default function HomePage() {
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
   const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
   
+  const [lang, setLang] = useState<Language>("en");
+  const t = getTranslation(lang);
+  
+  // Debug log to verify safe translation object
+  console.log("LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: !!t.home });
+  
   // Authentication flow: redirect to login if no session, home if session exists
   useEffect(() => {
     if (authLoading) return; // Don't redirect while loading
@@ -102,7 +108,6 @@ export default function HomePage() {
     );
   }
   
-  const [lang, setLang] = useState<Language>("en");
   const [time, setTime] = useState(new Date());
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -124,8 +129,6 @@ export default function HomePage() {
   const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [submittingService, setSubmittingService] = useState(false);
   const searchRequestSeq = useRef(0);
-
-  const t = getTranslation(lang);
 
   // Load language preference on mount
   useEffect(() => {

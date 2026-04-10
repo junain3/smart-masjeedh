@@ -91,6 +91,9 @@ export default function FamiliesPage() {
 
   const t = getTranslation(lang);
 
+// Debug log to verify safe translation object
+console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: !!t.home });
+
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
