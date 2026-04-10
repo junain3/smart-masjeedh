@@ -36,16 +36,10 @@ export function AppShell(props: {
   const pathname = usePathname();
   const router = useRouter();
 
-  // ALL hooks at top - STRICT ORDER
+  // ALL HOOKS AT TOP - STRICT ORDER
   const [lang, setLang] = useState<Language>("en");
   const [open, setOpen] = useState(false);
   const t = getTranslation(lang || "en");
-  
-  // Guard: Don't render if translation object is not ready
-  if (!t) {
-    return null;
-  }
-
   const [role, setRole] = useState<"super_admin" | "co_admin" | "staff" | "editor" | null>(null);
   const [permissions, setPermissions] = useState<{
     accounts?: boolean;
@@ -55,6 +49,7 @@ export function AppShell(props: {
     subscriptions_approve?: boolean;
   } | null>(null);
 
+  // Load language preference on mount
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
@@ -133,6 +128,9 @@ export function AppShell(props: {
         : "text-neutral-600 hover:bg-neutral-50"
     }`;
   };
+
+  // Conditional rendering AFTER all hooks are declared
+  // No guard needed since t is always defined with fallback
 
   const bottomItemClass = (href: string) => {
     const active = pathname === href || (href !== "/" && pathname?.startsWith(href));

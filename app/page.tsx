@@ -69,51 +69,14 @@ export default function HomePage() {
   const router = useRouter();
   const { user, tenantContext, loading: authLoading } = useSupabaseAuth();
   const { toast } = useAppToast();
-  
+
   // Parse permissions and check access
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
   const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
-  
-  // ALL hooks at top - STRICT ORDER
+
+  // ALL HOOKS AT TOP - STRICT ORDER
   const [lang, setLang] = useState<Language>("en");
   const t = getTranslation(lang || "en");
-  
-  // Debug log to verify safe translation object
-  console.log("LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: !!t.home });
-  
-  // Guard: Don't render if translation object is not ready
-  if (!t) {
-    return null;
-  }
-  
-  // Authentication flow: redirect to login if no session, home if session exists
-  useEffect(() => {
-    if (authLoading) return; // Don't redirect while loading
-    
-    if (!user) {
-      // No session - redirect to login
-      router.replace('/login');
-      return;
-    }
-    
-    // Session exists - check if should be on login page
-    if (window.location.pathname === '/login') {
-      router.replace('/');
-    }
-  }, [user, authLoading, router]);
-  
-  // Show loading state while checking authentication
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-700 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-  
   const [time, setTime] = useState(new Date());
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -135,6 +98,25 @@ export default function HomePage() {
   const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [submittingService, setSubmittingService] = useState(false);
   const searchRequestSeq = useRef(0);
+
+  // Debug log to verify safe translation object
+  console.log("LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: !!t.home });
+
+  // Authentication flow: redirect to login if no session, home if session exists
+  useEffect(() => {
+    if (authLoading) return; // Don't redirect while loading
+    
+    if (!user) {
+      // No session - redirect to login
+      router.replace('/login');
+      return;
+    }
+    
+    // Session exists - check if should be on login page
+    if (window.location.pathname === '/login') {
+      router.replace('/');
+    }
+  }, [user, authLoading, router]);
 
   // Load language preference on mount
   useEffect(() => {
@@ -254,6 +236,19 @@ export default function HomePage() {
 
     fetchMasjidData();
   }, [tenantContext]);
+
+  // Conditional rendering AFTER all hooks are declared
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-700 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Search function
   const runSearch = async (query: string) => {
