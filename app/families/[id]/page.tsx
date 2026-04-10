@@ -387,8 +387,12 @@ export default function FamilyDetailsPage() {
         return;
       }
 
-      const doc = new jsPDF();
-      doc.text(`Family: ${family?.head_name} (${family?.family_code})`, 14, 15);
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+      doc.text(`Family: ${family?.head_name} (${family?.family_code})`, 15, 15);
 
       const tableData = members.map((m) => [
         m.name,
@@ -400,9 +404,31 @@ export default function FamilyDetailsPage() {
       ]);
 
       autoTable(doc, {
-        startY: 20,
+        startY: 25,
         head: [["Name", "Relation", "Age", "Gender", "NIC", "Phone"]],
         body: tableData,
+        columnStyles: {
+          0: {cellWidth: 40},  // Name
+          1: {cellWidth: 25},  // Relation
+          2: {cellWidth: 15},  // Age
+          3: {cellWidth: 20},  // Gender
+          4: {cellWidth: 30},  // NIC
+          5: {cellWidth: 35},  // Phone
+        },
+        styles: { 
+          fontSize: 9,
+          cellPadding: 2
+        },
+        margin: { 
+          top: 20, 
+          left: 15, 
+          right: 15, 
+          bottom: 20 
+        },
+        didDrawPage: (data) => {
+          // Add page number at bottom
+          doc.text(`Page ${doc.getCurrentPageInfo().pageNumber}`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: 'center' });
+        }
       });
 
       doc.save(`family_${family?.family_code}_members.pdf`);
