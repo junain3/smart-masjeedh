@@ -74,11 +74,17 @@ export default function HomePage() {
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
   const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
   
+  // ALL hooks at top - STRICT ORDER
   const [lang, setLang] = useState<Language>("en");
-  const t = getTranslation(lang);
+  const t = getTranslation(lang || "en");
   
   // Debug log to verify safe translation object
   console.log("LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: !!t.home });
+  
+  // Guard: Don't render if translation object is not ready
+  if (!t) {
+    return null;
+  }
   
   // Authentication flow: redirect to login if no session, home if session exists
   useEffect(() => {

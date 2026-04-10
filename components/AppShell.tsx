@@ -36,9 +36,15 @@ export function AppShell(props: {
   const pathname = usePathname();
   const router = useRouter();
 
+  // ALL hooks at top - STRICT ORDER
   const [lang, setLang] = useState<Language>("en");
   const [open, setOpen] = useState(false);
-  const t = getTranslation(lang);
+  const t = getTranslation(lang || "en");
+  
+  // Guard: Don't render if translation object is not ready
+  if (!t) {
+    return null;
+  }
 
   const [role, setRole] = useState<"super_admin" | "co_admin" | "staff" | "editor" | null>(null);
   const [permissions, setPermissions] = useState<{
