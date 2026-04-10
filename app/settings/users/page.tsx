@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { getTenantContext } from "@/lib/tenant";
 import { useAppToast } from "@/components/ToastProvider";
-import { translations, Language } from "@/lib/i18n/translations";
+import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +16,7 @@ export default function UserSettingsPage() {
   const router = useRouter();
   const { user, loading: authLoading, tenantContext } = useSupabaseAuth();
   const [lang, setLang] = useState<Language>("en");
-  const t = translations[lang];
+  const t = getTranslation(lang);
 
   // Login redirect effect
   useEffect(() => {

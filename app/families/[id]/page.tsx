@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { QRCodeSVG } from "qrcode.react";
-import { translations, Language } from "@/lib/i18n/translations";
+import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -106,7 +106,7 @@ export default function FamilyDetailsPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const t = translations[lang];
+  const t = getTranslation(lang);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;

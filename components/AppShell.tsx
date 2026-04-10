@@ -15,7 +15,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { translations, Language } from "@/lib/i18n/translations";
+import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { supabase } from "@/lib/supabase";
 import { getTenantContext } from "@/lib/tenant";
 
@@ -38,7 +38,7 @@ export function AppShell(props: {
 
   const [lang, setLang] = useState<Language>("en");
   const [open, setOpen] = useState(false);
-  const t = translations[lang];
+  const t = getTranslation(lang);
 
   const [role, setRole] = useState<"super_admin" | "co_admin" | "staff" | "editor" | null>(null);
   const [permissions, setPermissions] = useState<{

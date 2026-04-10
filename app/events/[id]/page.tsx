@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Users, CheckCircle, Clock, QrCode, FileText, Search } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { translations, Language } from "@/lib/i18n/translations";
+import { getTranslation, translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { QrScannerModal } from "@/components/QrScannerModal";
@@ -25,7 +25,7 @@ export default function EventDetailPage() {
   const params = useParams();
   const eventId = params?.id as string;
   const [lang, setLang] = useState<Language>("en");
-  const t = translations[lang];
+  const t = getTranslation(lang);
   const [ev, setEv] = useState<Ev | null>(null);
   const [rows, setRows] = useState<Att[]>([]);
   const [loading, setLoading] = useState(true);

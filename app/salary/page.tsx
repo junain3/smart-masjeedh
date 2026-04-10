@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { DollarSign, Wallet, Calendar, Users, TrendingUp, AlertCircle, Check, Plus, X, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { translations, Language } from "@/lib/i18n/translations";
+import { getTranslation, translations, Language } from "@/lib/i18n/translations";
 import { AppShell } from "@/components/AppShell";
 
 type StaffMember = {
@@ -48,7 +48,7 @@ export default function SalaryManagementPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const t = translations[lang];
+  const t = getTranslation(lang);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;

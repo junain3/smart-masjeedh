@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, AlertCircle, Loader2 } from "lucide-react";
+import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { supabase } from "@/lib/supabase";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useAppToast } from "@/components/ToastProvider";

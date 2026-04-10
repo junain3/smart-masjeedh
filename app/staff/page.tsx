@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, Edit2, Trash2, X, Users, DollarSign, Calendar, Mail, Phone, Briefcase, Shield, Home as HomeIcon, CreditCard, Menu, LogOut, Settings, HelpCircle, Check, AlertCircle, Wallet } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { translations, Language } from "@/lib/i18n/translations";
+import { getTranslation, translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { useAppToast } from "@/components/ToastProvider";
 import { useMockAuth } from "@/components/MockAuthProvider";
@@ -128,7 +128,7 @@ export default function StaffPage() {
   const [inviteMessage, setInviteMessage] = useState('');
   const [inviteError, setInviteError] = useState('');
 
-  const t = translations[lang];
+  const t = getTranslation(lang);
 
   const canManageAccess = tenantContext?.role === "super_admin" || tenantContext?.role === "co_admin";
 

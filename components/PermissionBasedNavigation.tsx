@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Users, CreditCard, Briefcase, Settings, Calendar, Home as HomeIcon } from 'lucide-react';
 import { parsePermissions, hasModulePermission, ModulePermissions } from '@/lib/permissions-utils';
-import { translations, Language } from '@/lib/i18n/translations';
+import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 
 interface PermissionBasedNavigationProps {
   permissions: string | null;
@@ -19,7 +19,7 @@ export default function PermissionBasedNavigation({
   onClose, 
   currentPage 
 }: PermissionBasedNavigationProps) {
-  const t = translations[lang];
+  const t = getTranslation(lang);
   const parsedPermissions = parsePermissions(permissions);
 
   const navItems = [

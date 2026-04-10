@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Calendar, Plus, ArrowLeft, FileText, QrCode, Edit2, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { translations, Language } from "@/lib/i18n/translations";
+import { getTranslation, translations, Language } from "@/lib/i18n/translations";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { getTenantContext } from "@/lib/tenant";
 import { AppShell } from "@/components/AppShell";
@@ -21,7 +21,7 @@ export default function EventsPage() {
   const { toast, confirm } = useAppToast();
   const { user, loading: authLoading, tenantContext } = useMockAuth();
   const [lang, setLang] = useState<Language>("en");
-  const t = translations[lang];
+  const t = getTranslation(lang);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);

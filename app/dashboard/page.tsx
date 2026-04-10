@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { translations, Language } from "@/lib/i18n/translations";
+import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import {
   Users,
@@ -35,7 +35,7 @@ export default function DashboardPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [lang, setLang] = useState<Language>("en");
 
-  const t = translations[lang];
+  const t = getTranslation(lang);
 
   useEffect(() => {
   if (authLoading) return;

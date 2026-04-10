@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Briefcase, Phone, MapPin, Wallet, Plus, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { translations, Language } from "@/lib/i18n/translations";
+import { getTranslation, translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { useAppToast } from "@/components/ToastProvider";
 import { useMockAuth } from "@/components/MockAuthProvider";
@@ -47,7 +47,7 @@ export default function EmployeeProfilePage() {
   const { tenantContext } = useMockAuth();
 
   const [lang, setLang] = useState<Language>("en");
-  const t = translations[lang];
+  const t = getTranslation(lang);
 
   const [loading, setLoading] = useState(true);
   const [employee, setEmployee] = useState<Employee | null>(null);

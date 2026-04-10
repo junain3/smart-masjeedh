@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 
 export const dynamic = 'force-dynamic';
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { translations, Language } from "@/lib/i18n/translations";
+import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useMockAuth } from "@/components/MockAuthProvider";
@@ -89,7 +89,7 @@ export default function FamiliesPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const t = translations[lang];
+  const t = getTranslation(lang);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;

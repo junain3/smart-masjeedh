@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { QrCode, Plus, Users, Wallet, Calendar, X, Check, AlertCircle, Search, FileText, DollarSign, CreditCard, Briefcase } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { translations, Language } from "@/lib/i18n/translations";
+import { getTranslation, translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { Html5QrcodeScanner } from "html5-qrcode";
@@ -70,7 +70,7 @@ const [commissionEarned, setCommissionEarned] = useState(0);
 const [commissionPaid, setCommissionPaid] = useState(0);
 const [commissionBalance, setCommissionBalance] = useState(0);
 
-  const t = translations[lang];
+  const t = getTranslation(lang);
 
   // Filter families based on search term
   const filteredFamilies = useMemo(() => {

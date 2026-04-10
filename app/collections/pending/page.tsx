@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Check, X, AlertCircle, Users, Wallet, Calendar, Filter, Search, DollarSign, TrendingUp, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { translations, Language } from "@/lib/i18n/translations";
+import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { AppShell } from "@/components/AppShell";
 
 type Family = {
@@ -67,7 +67,7 @@ export default function PendingCollectionsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const t = translations[lang];
+  const t = getTranslation(lang);
 
   // Filter collections based on search and status
   const filteredCollections = useMemo(() => {

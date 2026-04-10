@@ -23,7 +23,7 @@ import {
   CreditCard,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { translations, Language } from "@/lib/i18n/translations";
+import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useAppToast } from "@/components/ToastProvider";
@@ -98,7 +98,7 @@ export default function AccountsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [lang, setLang] = useState<Language>("en");
 
-  const t = translations[lang];
+  const t = getTranslation(lang);
 
   const isNonZeroAmount = (value: unknown) => {
     if (typeof value !== "number") return false;

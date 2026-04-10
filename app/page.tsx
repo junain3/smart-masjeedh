@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download, HomeIcon, User, Calendar, Briefcase, Settings, LogOut, MoreHorizontal, Shield, Wallet, HelpCircle, Menu } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { translations, Language } from "@/lib/i18n/translations";
+import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useMockAuth } from "@/components/MockAuthProvider";
@@ -97,7 +97,7 @@ export default function HomePage() {
   const [submittingService, setSubmittingService] = useState(false);
   const searchRequestSeq = useRef(0);
 
-  const t = translations[lang];
+  const t = getTranslation(lang);
 
   // Load language preference on mount
   useEffect(() => {
