@@ -1,17 +1,24 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMockAuth } from "@/components/MockAuthProvider";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { signIn, requiresOnboarding } = useMockAuth();
+  const { signIn, requiresOnboarding, user } = useMockAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Redirect to home if already logged in
+  useEffect(() => {
+    if (user) {
+      router.replace('/');
+    }
+  }, [user, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -27,7 +34,7 @@ export default function LoginPage() {
     const next = new URLSearchParams(window.location.search).get("next");
     console.log("LOGIN STEP 3: redirecting to", next || "/");
 
-    router.push(next || "/");
+    router.replace(next || "/");
   } catch (error: any) {
     console.error("LOGIN STEP ERROR:", error);
     alert(error?.message || "Login failed");

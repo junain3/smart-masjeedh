@@ -74,6 +74,34 @@ export default function HomePage() {
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
   const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
   
+  // Authentication flow: redirect to login if no session, home if session exists
+  useEffect(() => {
+    if (authLoading) return; // Don't redirect while loading
+    
+    if (!user) {
+      // No session - redirect to login
+      router.replace('/login');
+      return;
+    }
+    
+    // Session exists - check if should be on login page
+    if (window.location.pathname === '/login') {
+      router.replace('/');
+    }
+  }, [user, authLoading, router]);
+  
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-700 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
   const [lang, setLang] = useState<Language>("en");
   const [time, setTime] = useState(new Date());
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
