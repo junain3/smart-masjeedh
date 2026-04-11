@@ -168,25 +168,18 @@ export default function HomePage() {
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
 
-      try {
-        const { count: familiesCount, error: familiesError } = await supabase
-          .from("families")
-          .select("*", { count: "exact", head: false })
-          .eq("masjid_id", ctx.masjidId);
+      const { data: familiesData } = await supabase
+        .from("families")
+        .select("id")
+        .eq("masjid_id", ctx.masjidId);
 
-        const { count: membersCount, error: membersError } = await supabase
-          .from("members")
-          .select("*", { count: "exact", head: false })
-          .eq("masjid_id", ctx.masjidId);
+      const { data: membersData } = await supabase
+        .from("members")
+        .select("id")
+        .eq("masjid_id", ctx.masjidId);
 
-        // Safe fallback: set 0 if queries fail
-        setFamilyCount(familiesError ? 0 : (familiesCount || 0));
-        setMemberCount(membersError ? 0 : (membersCount || 0));
-      } catch (error) {
-        // Safe fallback: set 0 if anything fails
-        setFamilyCount(0);
-        setMemberCount(0);
-      }
+      setFamilyCount(familiesData?.length || 0);
+      setMemberCount(membersData?.length || 0);
     };
 
     fetchCounts();
@@ -200,22 +193,15 @@ export default function HomePage() {
       if (!ctx) return;
 
       try {
-        const { data: masjidData, error: masjidError } = await supabase
+        const { data: masjidData } = await supabase
           .from("masjids")
-          .select("masjid_name, logo_url, tagline, preferred_language")
+          .select("name, logo_url, tagline, preferred_language")
           .eq("id", ctx.masjidId)
           .single();
 
-        if (masjidError || !masjidData) {
-          // Safe fallback: set default masjid if query fails or no data
+        if (masjidData) {
           setMasjid({
-            name: "MJM",
-            logo_url: "",
-            tagline: "Mubeen Jummah Masjid",
-          });
-        } else {
-          setMasjid({
-            name: (masjidData as any).masjid_name || "MJM",
+            name: (masjidData as any).name || "MJM",
             logo_url: (masjidData as any).logo_url || "",
             tagline: (masjidData as any).tagline || "Mubeen Jummah Masjid",
           });
@@ -237,8 +223,23 @@ export default function HomePage() {
     fetchMasjidData();
   }, [tenantContext]);
 
-  // Conditional rendering AFTER all hooks are declared
-  // Show loading state while checking authentication
+  // Authentication flow: redirect to login if no session, home if session exists
+  useEffect(() => {
+    if (authLoading) return; // Don't redirect while loading
+    
+    if (!user) {
+      // No session - redirect to login
+      router.replace('/login');
+      return;
+    }
+    
+    // Session exists - check if should be on login page
+    if (window.location.pathname === '/login') {
+      router.replace('/');
+    }
+  }, [user, authLoading, router]);
+
+  // ONLY ONE conditional render allowed: authLoading
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -249,6 +250,9 @@ export default function HomePage() {
       </div>
     );
   }
+
+  // ALWAYS render component after this point (even if user is null)
+  // Redirect will happen via useEffect
 
   // Search function
   const runSearch = async (query: string) => {
