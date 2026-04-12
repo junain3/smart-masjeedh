@@ -108,6 +108,20 @@ export default function FamilyDetailsPage() {
 
   const t = getTranslation(lang);
 
+  const normalizeRelationship = (value?: string) => {
+  const map: Record<string, string> = {
+    "கணவன்": "Husband",
+    "மனைவி": "Wife",
+    "மகன்": "Son",
+    "மகள்": "Daughter",
+    "தந்தை": "Father",
+    "தாய்": "Mother",
+    "ஏனையோர்": "Other",
+    "குடும்பத் தலைவர்": "Family Head",
+    "Head": "Family Head",
+  };
+  return map[value || ""] || value || "-";
+};
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
@@ -304,7 +318,7 @@ export default function FamilyDetailsPage() {
           .eq("masjid_id", tenantContext.masjidId);
 
         if (error) throw error;
-        setSuccessMessage("உறுப்பினர் விபரம் மாற்றப்பட்டது!");
+        setSuccessMessage("Member details updated!");
       } else {
         const { error } = await supabase.from("members").insert([
           {
@@ -324,7 +338,7 @@ export default function FamilyDetailsPage() {
         ]);
 
         if (error) throw error;
-        setSuccessMessage("புதிய உறுப்பினர் சேர்க்கப்பட்டார்!");
+        setSuccessMessage("New member added successfully!");
       }
 
       setIsModalOpen(false);
@@ -333,7 +347,7 @@ export default function FamilyDetailsPage() {
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (error: any) {
       console.error("ADD MEMBER Error:", error);
-      alert(`பிழை: ${error.message || "உறுப்பினரைச் சேர்க்க முடியவில்லை"}`);
+      alert(`Error: ${error.message || "Failed to add member"}`);
     } finally {
       setSubmitting(false);
     }
@@ -396,7 +410,7 @@ export default function FamilyDetailsPage() {
 
       const tableData = members.map((m) => [
         m.name,
-        m.relationship,
+        normalizeRelationship(m.relationship),
         m.age,
         m.gender,
         m.nic,
@@ -717,9 +731,7 @@ export default function FamilyDetailsPage() {
                         {member.name}
                       </h3>
                       <p className="text-xs font-bold text-slate-400">
-                        {member.relationship === "Head"
-                          ? "Family Head"
-                          : `${member.relationship}${member.age ? ` • ${member.age} YEARS` : ""}`}
+                        {normalizeRelationship(member.relationship)}{member.age ? ` \u2022 ${member.age} YEARS` : ""}
                       </p>
                       <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 mt-1 inline-block">
                         {member.civil_status}
@@ -858,7 +870,7 @@ export default function FamilyDetailsPage() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-6 sm:p-8 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold mb-6 text-center text-slate-900">உறுப்பினர் சேர்க்கை</h2>
+            <h2 className="text-2xl font-bold mb-6 text-center text-slate-900">Add Member</h2>
 
             <form onSubmit={addMember} className="space-y-4">
               <div className="space-y-1">
@@ -875,7 +887,7 @@ export default function FamilyDetailsPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">உறவுமுறை</label>
+                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Relationship</label>
                   <select
                     required
                     value={relationship}
@@ -893,7 +905,7 @@ export default function FamilyDetailsPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">பிறந்த திகதி</label>
+                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Date of Birth</label>
                   <input
                     required
                     type="date"
