@@ -210,13 +210,13 @@ export default function HomePage() {
       try {
         const { data: masjidData } = await supabase
           .from("masjids")
-          .select("name, logo_url, tagline, preferred_language")
+          .select("masjid_name, logo_url, tagline, preferred_language")
           .eq("id", ctx.masjidId)
           .single();
 
         if (masjidData) {
           setMasjid({
-            name: (masjidData as any).name || "MJM",
+            name: (masjidData as any).masjid_name || "MJM",
             logo_url: (masjidData as any).logo_url || "",
             tagline: (masjidData as any).tagline || "Mubeen Jummah Masjid",
           });
