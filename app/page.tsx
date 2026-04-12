@@ -107,6 +107,13 @@ export default function HomePage() {
   const [submittingService, setSubmittingService] = useState(false);
   const searchRequestSeq = useRef(0);
 
+  // Format date: "25 February 2026 at 6:43"
+  const formatDate = useMemo(() => (date: Date) => {
+    const d = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+    const t = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+    return `${d} at ${t}`;
+  }, []);
+
   // Debug log to verify safe translation object
   console.log("LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: !!t.home });
 
@@ -574,13 +581,6 @@ export default function HomePage() {
       router.push('/login'); // Still redirect even if sign out fails
     }
   };
-
-  // Format date: "25 February 2026 at 6:43"
-  const formatDate = useMemo(() => (date: Date) => {
-    const d = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
-    const t = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
-    return `${d} at ${t}`;
-  }, []);
 
   // Loading skeleton component
   const LoadingSkeleton = () => (
