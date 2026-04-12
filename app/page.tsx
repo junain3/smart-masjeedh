@@ -33,6 +33,14 @@ type Family = {
   is_widow_head?: boolean;
 };
 
+type SearchParams = 
+  | { kind: "familyCode"; code: string }
+  | { kind: "ageMin"; minAge: number; gender?: string }
+  | { kind: "ageMax"; maxAge: number; gender?: string }
+  | { kind: "ageExact"; age: number; gender?: string }
+  | { kind: "ageRange"; minAge: number; maxAge: number; gender?: string }
+  | { kind: "free"; text: string };
+
 const dummyMembers: Member[] = [
   {
     id: "1",
@@ -278,8 +286,8 @@ export default function HomePage() {
           const minAge = parseInt(ageStr.split(">")[1]);
           if (isNaN(minAge)) return;
           const p = { kind: "ageMin", minAge };
-          if (trimmed.includes("male")) p.gender = "Male";
-          if (trimmed.includes("female")) p.gender = "Female";
+          if (trimmed.includes("male")) (p as any).gender = "Male";
+          if (trimmed.includes("female")) (p as any).gender = "Female";
           await executeSearch(p, requestId);
           return;
         }
@@ -287,8 +295,8 @@ export default function HomePage() {
           const maxAge = parseInt(ageStr.split("<")[1]);
           if (isNaN(maxAge)) return;
           const p = { kind: "ageMax", maxAge };
-          if (trimmed.includes("male")) p.gender = "Male";
-          if (trimmed.includes("female")) p.gender = "Female";
+          if (trimmed.includes("male")) (p as any).gender = "Male";
+          if (trimmed.includes("female")) (p as any).gender = "Female";
           await executeSearch(p, requestId);
           return;
         }
@@ -298,16 +306,16 @@ export default function HomePage() {
           const maxAge = parseInt(maxAgeStr);
           if (isNaN(minAge) || isNaN(maxAge)) return;
           const p = { kind: "ageRange", minAge, maxAge };
-          if (trimmed.includes("male")) p.gender = "Male";
-          if (trimmed.includes("female")) p.gender = "Female";
+          if (trimmed.includes("male")) (p as any).gender = "Male";
+          if (trimmed.includes("female")) (p as any).gender = "Female";
           await executeSearch(p, requestId);
           return;
         }
         const age = parseInt(ageStr);
         if (isNaN(age)) return;
         const p = { kind: "ageExact", age };
-        if (trimmed.includes("male")) p.gender = "Male";
-        if (trimmed.includes("female")) p.gender = "Female";
+        if (trimmed.includes("male")) (p as any).gender = "Male";
+        if (trimmed.includes("female")) (p as any).gender = "Female";
         await executeSearch(p, requestId);
         return;
       }
@@ -332,7 +340,7 @@ export default function HomePage() {
   };
 
   // Execute search based on parsed parameters
-  const executeSearch = async (p: any, requestId: number) => {
+  const executeSearch = async (p: SearchParams, requestId: number) => {
     try {
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
