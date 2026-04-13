@@ -347,7 +347,7 @@ export default function FamilyDetailsPage() {
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (error: any) {
       console.error("ADD MEMBER Error:", error);
-      alert(`Error: ${error.message || "Failed to add member"}`);
+     alert(`Error: ${error.message || t.failed_to_add_member}`);
     } finally {
       setSubmitting(false);
     }

@@ -264,7 +264,31 @@ export const translations = {
     editor_role: "සංස්කාරක",
     role_pending: "මිලියම",
     remove: "ඉවත් කරන්න",
-  }
+  },
+  ta: {
+  add_member: "உறுப்பினர் சேர்க்கவும்",
+  relationship: "உறவு",
+  date_of_birth: "பிறந்த தேதி",
+  civil_status: "திருமண நிலை",
+  select_option: "தேர்ந்தெடுக்கவும்",
+  cancel: "ரத்து",
+  save: "சேமி",
+  saving: "சேமிக்கிறது...",
+  member_added_success: "உறுப்பினர் வெற்றிகரமாக சேர்க்கப்பட்டது!",
+  member_updated_success: "உறுப்பினர் விவரம் புதுப்பிக்கப்பட்டது!",
+  failed_to_add_member: "உறுப்பினர் சேர்க்க முடியவில்லை",
+  husband: "கணவன்",
+  wife: "மனைவி",
+  son: "மகன்",
+  daughter: "மகள்",
+  father: "தந்தை",
+  mother: "தாய்",
+  other: "ஏனையோர்",
+  single: "திருமணம் ஆகாதவர்",
+  married: "திருமணமானவர்",
+  divorced: "விவாகரத்து",
+  widowed: "கணவர்/மனைவி இழந்தவர்"
+}
 };
 
 // Safe translation getter with fallback to English
