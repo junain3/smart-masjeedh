@@ -307,7 +307,7 @@ logout: "ඉවත් වන්න",
   },
   ta: {
   brand_name: "ஸ்மார்ட் மஸ்ஜீத்",
-back: "பின்",
+back:"பின்",
 collections: "வசூல்கள்",
 pending_collections: "நிலுவை வசூல்கள்",
   add_member: "உறுப்பினர் சேர்க்கவும்",
