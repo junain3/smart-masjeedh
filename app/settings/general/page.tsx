@@ -165,7 +165,7 @@ export default function GeneralSettingsPage() {
       if (error) throw error;
       
       // Also save to localStorage for immediate UI update
-      localStorage.setItem("preferred_language", preferredLanguage);
+      localStorage.setItem("app_lang", preferredLanguage);
       
       // Show success message
       alert("Settings saved successfully!");
