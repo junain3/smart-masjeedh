@@ -92,6 +92,10 @@ export default function FamilyDetailsPage() {
   const [activeTab, setActiveTab] = useState<"members" | "payments" | "services">("members");
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [collectionAmount, setCollectionAmount] = useState("");
+  const [collectionDate, setCollectionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [collectionNote, setCollectionNote] = useState("");
+  const [isCollectionSubmitting, setIsCollectionSubmitting] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [relationship, setRelationship] = useState("மகன்");
@@ -284,6 +288,57 @@ export default function FamilyDetailsPage() {
     setPhone(member.phone || "");
     setCivilStatus(member.civil_status || "");
     setIsModalOpen(true);
+  };
+
+  const addCollection = async () => {
+    if (!supabase || !familyId || !user || !tenantContext?.masjidId) return;
+    
+    const amountNum = parseFloat(collectionAmount);
+    if (!amountNum || amountNum <= 0) {
+      alert("Please enter a valid amount");
+      return;
+    }
+
+    setIsCollectionSubmitting(true);
+    
+    try {
+      const insertPayload = {
+        masjid_id: tenantContext.masjidId,
+        family_id: familyId,
+        amount: amountNum,
+        commission_percent: 0,
+        commission_amount: 0,
+        notes: collectionNote || null,
+        collected_by_user_id: user.id,
+        date: collectionDate
+      };
+
+      const { data, error: insertError } = await supabase
+        .from("subscription_collections")
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Collection insert failed:', insertError);
+        alert("Failed to add collection: " + insertError.message);
+      } else {
+        // Reset form
+        setCollectionAmount("");
+        setCollectionNote("");
+        setCollectionDate(new Date().toISOString().split('T')[0]);
+        
+        // Refresh data
+        await fetchData(user);
+        
+        alert("Collection added successfully!");
+      }
+    } catch (error: any) {
+      console.error('Collection error:', error);
+      alert("Error: " + error.message);
+    } finally {
+      setIsCollectionSubmitting(false);
+    }
   };
 
   const addMember = async (e: React.FormEvent) => {
@@ -593,6 +648,59 @@ export default function FamilyDetailsPage() {
           </div>
           <p className="text-sm font-black text-slate-900">Rs. {finalDue.toLocaleString()}</p>
           <p className="text-[9px] font-black text-rose-600/60 uppercase tracking-tighter">Due for {selectedYear}</p>
+        </div>
+      </div>
+
+      {/* Collection Form */}
+      <div className="bg-blue-50 rounded-[2rem] p-5 border border-blue-100 mb-6">
+        <div className="flex items-center gap-2 text-blue-600 mb-3">
+          <Wallet className="w-4 h-4" />
+          <span className="text-[10px] font-black uppercase tracking-widest">Add Collection</span>
+        </div>
+        
+        <div className="space-y-3">
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount</label>
+            <input
+              type="number"
+              value={collectionAmount}
+              onChange={(e) => setCollectionAmount(e.target.value)}
+              className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              placeholder="Enter amount"
+              step="0.01"
+            />
+          </div>
+          
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</label>
+            <input
+              type="date"
+              value={collectionDate}
+              onChange={(e) => setCollectionDate(e.target.value)}
+              className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+          </div>
+          
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Note (Optional)</label>
+            <textarea
+              value={collectionNote}
+              onChange={(e) => setCollectionNote(e.target.value)}
+              className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              placeholder="Add any notes..."
+              rows={2}
+            />
+          </div>
+          
+          <div className="flex justify-end">
+            <button
+              onClick={addCollection}
+              disabled={isCollectionSubmitting}
+              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {isCollectionSubmitting ? "Adding..." : "Add Collection"}
+            </button>
+          </div>
         </div>
       </div>
 
