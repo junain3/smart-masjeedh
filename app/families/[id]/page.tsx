@@ -918,7 +918,7 @@ export default function FamilyDetailsPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">வயது</label>
+                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">{t.age}</label>
                   <input readOnly value={age} className="w-full bg-slate-100 border-none rounded-2xl p-4 text-sm text-slate-500" />
                 </div>
 
