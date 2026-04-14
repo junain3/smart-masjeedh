@@ -491,7 +491,6 @@ export default function FamilyDetailsPage() {
   const previousArrears = openingBal;
   const currentDue = annualFee - paidThisYear;
   const finalDue = previousArrears + currentDue;
-  const isOverpaid = finalDue < 0;
 
   if (loading) {
     return <div>Loading...</div>;
