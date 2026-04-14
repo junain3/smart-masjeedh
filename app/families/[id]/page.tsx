@@ -957,6 +957,7 @@ export default function FamilyDetailsPage() {
                   <option value="Married">{t.married}</option>
                   <option value="Divorced">{t.divorced}</option>
                   <option value="Widowed">{t.widowed}</option>
+                  <option value="Other">{t.other}</option>
                 </select>
               </div>
 
