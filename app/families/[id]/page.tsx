@@ -16,6 +16,7 @@ import {
   FileText,
   CheckCircle,
   Clock,
+  X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { QRCodeSVG } from "qrcode.react";
@@ -96,6 +97,7 @@ export default function FamilyDetailsPage() {
   const [collectionDate, setCollectionDate] = useState(new Date().toISOString().split('T')[0]);
   const [collectionNote, setCollectionNote] = useState("");
   const [isCollectionSubmitting, setIsCollectionSubmitting] = useState(false);
+  const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [relationship, setRelationship] = useState("மகன்");
@@ -327,6 +329,9 @@ export default function FamilyDetailsPage() {
         setCollectionAmount("");
         setCollectionNote("");
         setCollectionDate(new Date().toISOString().split('T')[0]);
+        
+        // Close modal
+        setIsCollectionModalOpen(false);
         
         // Refresh data
         await fetchData(user);
@@ -651,57 +656,15 @@ export default function FamilyDetailsPage() {
         </div>
       </div>
 
-      {/* Collection Form */}
+      {/* Add Subscription Button */}
       <div className="bg-blue-50 rounded-[2rem] p-5 border border-blue-100 mb-6">
-        <div className="flex items-center gap-2 text-blue-600 mb-3">
+        <button
+          onClick={() => setIsCollectionModalOpen(true)}
+          className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all"
+        >
           <Wallet className="w-4 h-4" />
-          <span className="text-[10px] font-black uppercase tracking-widest">Add Collection</span>
-        </div>
-        
-        <div className="space-y-3">
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount</label>
-            <input
-              type="number"
-              value={collectionAmount}
-              onChange={(e) => setCollectionAmount(e.target.value)}
-              className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              placeholder="Enter amount"
-              step="0.01"
-            />
-          </div>
-          
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</label>
-            <input
-              type="date"
-              value={collectionDate}
-              onChange={(e) => setCollectionDate(e.target.value)}
-              className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-          
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Note (Optional)</label>
-            <textarea
-              value={collectionNote}
-              onChange={(e) => setCollectionNote(e.target.value)}
-              className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              placeholder="Add any notes..."
-              rows={2}
-            />
-          </div>
-          
-          <div className="flex justify-end">
-            <button
-              onClick={addCollection}
-              disabled={isCollectionSubmitting}
-              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              {isCollectionSubmitting ? "Adding..." : "Add Collection"}
-            </button>
-          </div>
-        </div>
+          Add Subscription
+        </button>
       </div>
 
       <div className="p-6">
@@ -1087,6 +1050,77 @@ export default function FamilyDetailsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Collection Modal */}
+      {isCollectionModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-[2rem] p-6 w-full max-w-md space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-blue-600">
+                <Wallet className="w-4 h-4" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Add Subscription</span>
+              </div>
+              <button
+                onClick={() => setIsCollectionModalOpen(false)}
+                className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount</label>
+                <input
+                  type="number"
+                  value={collectionAmount}
+                  onChange={(e) => setCollectionAmount(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="Enter amount"
+                  step="0.01"
+                />
+              </div>
+              
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</label>
+                <input
+                  type="date"
+                  value={collectionDate}
+                  onChange={(e) => setCollectionDate(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Note (Optional)</label>
+                <textarea
+                  value={collectionNote}
+                  onChange={(e) => setCollectionNote(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="Add any notes..."
+                  rows={2}
+                />
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsCollectionModalOpen(false)}
+                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addCollection}
+                  disabled={isCollectionSubmitting}
+                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {isCollectionSubmitting ? "Adding..." : "Add Subscription"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
