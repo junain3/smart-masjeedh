@@ -894,13 +894,13 @@ export default function FamilyDetailsPage() {
                     onChange={(e) => setRelationship(e.target.value)}
                     className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20 appearance-none"
                   >
-                    <option value="கணவன்">கணவன்</option>
-                    <option value="மனைவி">மனைவி</option>
-                    <option value="மகன்">மகன்</option>
-                    <option value="மகள்">மகள்</option>
-                    <option value="தந்தை">தந்தை</option>
-                    <option value="தாய்">தாய்</option>
-                    <option value="ஏனையோர்">ஏனையோர்</option>
+                    <option value="கணவன்">{t.husband}</option>
+<option value="மனைவி">{t.wife}</option>
+<option value="மகன்">{t.son}</option>
+<option value="மகள்">{t.daughter}</option>
+<option value="தந்தை">{t.father}</option>
+<option value="தாய்">{t.mother}</option>
+<option value="ஏனையோர்">{t.other}</option>
                   </select>
                 </div>
 
