@@ -488,9 +488,10 @@ export default function FamilyDetailsPage() {
     })
     .reduce((s, p) => s + p.amount, 0);
 
-  const previousArrears = Math.max(0, openingBal);
-  const currentDue = Math.max(0, annualFee - paidThisYear);
+  const previousArrears = openingBal;
+  const currentDue = annualFee - paidThisYear;
   const finalDue = previousArrears + currentDue;
+  const isOverpaid = finalDue < 0;
 
   if (loading) {
     return <div>Loading...</div>;
