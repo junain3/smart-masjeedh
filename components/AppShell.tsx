@@ -96,10 +96,10 @@ export function AppShell(props: {
     }
 
     if (canSubCollect) {
-      base.push({ href: "/collections", label: "Collections", icon: <Wallet className="w-5 h-5" /> });
+      base.push({ href: "/collections", label: t.collections, icon: <Wallet className="w-5 h-5" /> });
     }
     if (canSubApprove) {
-      base.push({ href: "/subscriptions/pending", label: "Pending Collections", icon: <Shield className="w-5 h-5" /> });
+      base.push({ href: "/subscriptions/pending", label: t.pending_collections, icon: <Shield className="w-5 h-5" /> });
     }
 
     // Staff & admin only for masjid admins
@@ -174,7 +174,7 @@ export function AppShell(props: {
           <div className="flex items-center justify-between mb-6">
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Smart Masjeedh
+                {t.brand_name}
               </p>
               <p className="text-lg font-black text-emerald-700 truncate">
                 {t.dashboard}
@@ -204,7 +204,7 @@ export function AppShell(props: {
               onClick={handleLogout}
               className="w-full px-4 py-3 rounded-3xl bg-red-50 text-red-700 font-black text-xs uppercase tracking-widest hover:bg-red-100 transition-all"
             >
-              Log out
+              {t.logout}
             </button>
           </div>
         </div>
@@ -227,7 +227,7 @@ export function AppShell(props: {
                   href={backHref}
                   className="hidden sm:inline-flex px-3 py-2 rounded-3xl bg-neutral-50 text-neutral-900 font-black text-xs uppercase tracking-widest hover:bg-neutral-100 transition-all"
                 >
-                  Back
+                  {t.back}
                 </Link>
               ) : null}
               <h1 className="text-lg md:text-xl font-black text-neutral-900 truncate">
