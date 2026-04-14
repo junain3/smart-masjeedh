@@ -92,7 +92,7 @@ export function AppShell(props: {
       base.push({ href: "/accounts", label: t.accounts, icon: <CreditCard className="w-5 h-5" /> });
     }
     if (canEvents) {
-      base.push({ href: "/events", label: t.events || "Events", icon: <Calendar className="w-5 h-5" /> });
+      base.push({ href: "/events", label: t.events, icon: <Calendar className="w-5 h-5" /> });
     }
 
     if (canSubCollect) {
@@ -106,12 +106,12 @@ export function AppShell(props: {
     if (isSuper) {
       base.push({
         href: "/staff",
-        label: (t as any).staff_management || t.staff,
+        label: t.staff_management,
         icon: <Briefcase className="w-5 h-5" />,
       });
       base.push({
         href: "/admin",
-        label: (t as any).admin_settings || "Admin",
+        label: t.admin_settings,
         icon: <Shield className="w-5 h-5" />,
       });
     }

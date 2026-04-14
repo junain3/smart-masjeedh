@@ -104,14 +104,14 @@ export default function DashboardPage() {
   };
 
   const menuItems = [
-    { icon: Home, label: "Home", href: "/dashboard", alwaysVisible: true },
-    { icon: Users, label: "Families", href: "/families", permission: "members" },
-    { icon: Calendar, label: "Events", href: "/events", alwaysVisible: true },
-    { icon: CreditCard, label: "Accounts", href: "/accounts", permission: ["accounts", "subscriptions_collect", "subscriptions_approve"] },
-    { icon: Briefcase, label: "Staff", href: "/staff", permission: "staff_management" },
-    { icon: QrCode, label: "QR Scanner", href: "/scanner", alwaysVisible: true },
-    { icon: FileText, label: "Reports", href: "/reports", permission: "reports" },
-    { icon: Settings, label: "Settings", href: "/settings", permission: "settings" },
+    { icon: Home, label: t.home, href: "/dashboard", alwaysVisible: true },
+    { icon: Users, label: t.families, href: "/families", permission: "members" },
+    { icon: Calendar, label: t.events, href: "/events", alwaysVisible: true },
+    { icon: CreditCard, label: t.accounts, href: "/accounts", permission: ["accounts", "subscriptions_collect", "subscriptions_approve"] },
+    { icon: Briefcase, label: t.staff, href: "/staff", permission: "staff_management" },
+    { icon: QrCode, label: t.qr_scanner, href: "/scanner", alwaysVisible: true },
+    { icon: FileText, label: t.reports, href: "/reports", permission: "reports" },
+    { icon: Settings, label: t.settings, href: "/settings", permission: "settings" },
   ].filter(item => {
     if (item.alwaysVisible) return true;
     if (!item.permission) return true;
@@ -135,7 +135,7 @@ return (
         } transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}
       >
         <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-semibold text-gray-800">Smart Masjeedh</h2>
+          <h2 className="text-lg font-semibold text-gray-800">{t.brand_name}</h2>
           <button
             onClick={() => setIsSidebarOpen(false)}
             className="lg:hidden p-2 rounded-md hover:bg-gray-100"
@@ -163,7 +163,7 @@ return (
             className="flex items-center w-full px-4 py-3 text-red-600 hover:bg-red-50 transition-colors"
           >
             <LogOut className="w-5 h-5 mr-3" />
-            Logout
+            {t.logout}
           </button>
         </div>
       </div>
@@ -184,7 +184,7 @@ return (
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Search..."
+                    placeholder={t.search}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
@@ -201,7 +201,7 @@ return (
               <Home className="w-10 h-10 text-white" />
             </div>
             <h1 className="text-3xl font-black text-white mb-2">MUBEEN JUMMAH MASJID</h1>
-            <p className="text-emerald-100 font-medium">Smart Masjid Management System</p>
+            <p className="text-emerald-100 font-medium">{t.smart_masjid_management_system}</p>
           </div>
 
           <div className="mb-6">
@@ -209,7 +209,7 @@ return (
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search families, members, transactions..."
+                placeholder={t.search_placeholder}
                 className="w-full pl-12 pr-4 py-4 bg-white border-2 border-gray-200 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               />
             </div>
@@ -219,7 +219,7 @@ return (
             <div className="bg-white border-2 border-emerald-200 rounded-2xl p-6 text-center">
               <Users className="w-12 h-12 text-emerald-600 mx-auto mb-4" />
               <h3 className="text-lg font-bold text-emerald-700 uppercase tracking-wider mb-2">
-                Total Families
+                {t.total_families}
               </h3>
               <p className="text-3xl font-black text-gray-900">{familyCount}</p>
             </div>
@@ -227,7 +227,7 @@ return (
             <div className="bg-white border-2 border-emerald-200 rounded-2xl p-6 text-center">
               <Users className="w-12 h-12 text-emerald-600 mx-auto mb-4" />
               <h3 className="text-lg font-bold text-emerald-700 uppercase tracking-wider mb-2">
-                Total Members
+                {t.total_members}
               </h3>
               <p className="text-3xl font-black text-gray-900">{memberCount}</p>
             </div>
