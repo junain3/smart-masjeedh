@@ -460,7 +460,8 @@ export default function FamilyDetailsPage() {
 
   const annualFee = Number(family?.subscription_amount || 0);
   const totalApproved = payments.reduce((sum, p) => sum + p.amount, 0);
-  const remainingBalance = Math.max(annualFee - totalApproved, 0);
+  const remainingBalance = annualFee - totalApproved;
+  const isOverpaid = remainingBalance < 0;
   const openingBal = family?.opening_balance || 0;
 
   console.log("DEBUG CALCULATIONS:");
