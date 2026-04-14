@@ -870,7 +870,7 @@ export default function FamilyDetailsPage() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-6 sm:p-8 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold mb-6 text-center text-slate-900">Add Member</h2>
+            <h2 className="text-2xl font-bold mb-6 text-center text-slate-900">{t.add_member}</h2>
 
             <form onSubmit={addMember} className="space-y-4">
               <div className="space-y-1">
@@ -887,7 +887,7 @@ export default function FamilyDetailsPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Relationship</label>
+                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">{t.relationship}</label>
                   <select
                     required
                     value={relationship}
@@ -905,7 +905,7 @@ export default function FamilyDetailsPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Date of Birth</label>
+                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">{t.date_of_birth}</label>
                   <input
                     required
                     type="date"
@@ -946,18 +946,17 @@ export default function FamilyDetailsPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">நிலை</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.civil_status}</label>
                 <select
                   value={civilStatus}
                   onChange={(e) => setCivilStatus(e.target.value)}
                   className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
                 >
-                  <option value="">தேர்ந்தெடுக்கவும்</option>
-                  <option value="Single">Single</option>
-                  <option value="Married">Married</option>
-                  <option value="Divorced">Divorced</option>
-                  <option value="Widowed">Widowed</option>
-                  <option value="Other">Other</option>
+                  <option value="">{t.select_option}</option>
+                  <option value="Single">{t.single}</option>
+                  <option value="Married">{t.married}</option>
+                  <option value="Divorced">{t.divorced}</option>
+                  <option value="Widowed">{t.widowed}</option>
                 </select>
               </div>
 
@@ -967,14 +966,14 @@ export default function FamilyDetailsPage() {
                   onClick={() => setIsModalOpen(false)}
                   className="flex-1 py-4 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600"
                 >
-                  ரத்து
+                  {t.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
                   className="flex-1 py-4 rounded-2xl text-sm font-bold bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 disabled:opacity-50"
                 >
-                  {submitting ? "சேமி..." : "சேமி"}
+                  {submitting ? t.saving : t.save}
                 </button>
               </div>
             </form>
