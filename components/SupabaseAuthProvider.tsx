@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
@@ -41,6 +41,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
     role: string;
     permissions: Record<string, boolean>;
   }>>([]);
+  const recoveryLockRef = useRef(false);
 
   const loadTenantContext = async (userId: string) => {
     try {
@@ -188,27 +189,15 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     // Recovery: Detect when app regains focus or becomes visible after idle session
-    const handleFocus = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        console.log("Recovering from stale session on focus");
-        setUser(session.user);
-        await loadTenantContext(session.user.id);
-        setLoading(false);
-      } else {
-        setUser(null);
-        setTenantContext(null);
-        setAvailableMasjids([]);
-        setRequiresOnboarding(false);
-        setLoading(false);
-      }
-    };
+    const recoverSession = async () => {
+      if (recoveryLockRef.current) return;
+      recoveryLockRef.current = true;
 
-    const handleVisibility = async () => {
-      if (document.visibilityState === "visible") {
+      try {
         const { data: { session } } = await supabase.auth.getSession();
+
         if (session?.user) {
-          console.log("Recovering from stale session on visibility change");
+          console.log("Recovering session...");
           setUser(session.user);
           await loadTenantContext(session.user.id);
           setLoading(false);
@@ -219,7 +208,18 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
           setRequiresOnboarding(false);
           setLoading(false);
         }
+      } finally {
+        recoveryLockRef.current = false;
       }
+    };
+
+    const handleFocus = () => {
+      void recoverSession();
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      void recoverSession();
     };
 
     window.addEventListener('focus', handleFocus);

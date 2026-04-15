@@ -179,7 +179,6 @@ export const translations = {
 back: "ආපසු",
 collections: "එකතු කිරීම්",
 pending_collections: "අනුමැතියට බලාපොරොත්තු වන එකතු කිරීම්",
-logout: "ඉවත් වන්න",
     language: "භාෂාව",
     profile: "මස්ජිද් පැතිකඩ",
     edit: "සංස්කරණය",
