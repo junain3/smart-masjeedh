@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
-import { getTenantContext } from "@/lib/tenant";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
@@ -97,8 +96,12 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
-    fetchFamilies();
   }, []);
+
+  useEffect(() => {
+    if (!tenantContext?.masjidId) return;
+    fetchFamilies();
+  }, [tenantContext?.masjidId]);
 
   useEffect(() => {
     if (editingFamily) {
@@ -144,15 +147,17 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
   }, [isOpen, families, isLive]);
 
   async function fetchFamilies() {
-    if (!supabase) return;
-    setIsFetching(true);
     try {
-      // Use tenantContext from useMockAuth instead of getTenantContext
-      const ctx = tenantContext || await getTenantContext();
-      if (!ctx) return;
+      if (!supabase) return;
+      setIsFetching(true);
 
-      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
-      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      if (!tenantContext?.masjidId) {
+        setIsFetching(false);
+        return;
+      }
+
+      const isAdmin = tenantContext.role === "super_admin" || tenantContext.role === "co_admin";
+      const canMembers = isAdmin || tenantContext.permissions?.members !== false;
       setAllowed(canMembers);
       if (!canMembers) {
         setFamilies([]);
@@ -163,10 +168,11 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
       const { data, error } = await supabase
         .from("families")
         .select("*")
-        .eq("masjid_id", ctx.masjidId)
+        .eq("masjid_id", tenantContext.masjidId)
         .order("family_code", { ascending: true });
 
       if (error) throw error;
+
       if (data) {
         setFamilies(data);
         setIsLive(true);
@@ -193,9 +199,10 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
     }
 
     try {
-      // Use tenantContext from useMockAuth instead of getTenantContext
-      const ctx = tenantContext || await getTenantContext();
-      if (!ctx) throw new Error("லாகின் செய்யப்படவில்லை.");
+      if (!tenantContext?.masjidId) {
+        setLoading(false);
+        throw new Error("லாகின் செய்யப்படவில்லை.");
+      }
 
       // Get the authenticated user ID from auth, not from state
       const { data: { session } } = await supabase.auth.getSession();
@@ -203,8 +210,8 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
 
       const authUserId = session.user.id;
 
-      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
-      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      const isAdmin = tenantContext.role === "super_admin" || tenantContext.role === "co_admin";
+      const canMembers = isAdmin || tenantContext.permissions?.members !== false;
       if (!canMembers) throw new Error("Access denied");
 
       if (editingFamily) {
@@ -221,7 +228,7 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
             is_widow_head: isWidowHead
           })
           .eq("id", editingFamily.id)
-          .eq("masjid_id", ctx.masjidId);
+          .eq("masjid_id", tenantContext.masjidId);
 
         if (error) throw error;
         setSuccessMessage("குடும்ப விபரம் திருத்தப்பட்டது.");
@@ -239,7 +246,7 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
               opening_balance: parseFloat(openingBalance) || 0,
               is_widow_head: isWidowHead,
               user_id: authUserId, // Use authenticated user ID
-              masjid_id: ctx.masjidId // Include masjid ID
+              masjid_id: tenantContext.masjidId // Include masjid ID
             }
           ])
           .select()
@@ -265,7 +272,7 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
               relationship: "Head",
               civil_status: "",
               user_id: authUserId,
-              masjid_id: ctx.masjidId
+              masjid_id: tenantContext.masjidId
             }]);
             
             if (memberInsertError) {
@@ -306,12 +313,10 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
   async function deleteFamily(id: string) {
     if (!supabase || !confirm(t.confirm_delete)) return;
     try {
-      // Use tenantContext from useMockAuth instead of getTenantContext
-      const ctx = tenantContext || await getTenantContext();
-      if (!ctx) return;
+      if (!tenantContext?.masjidId) return;
 
-      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
-      const canMembers = isAdmin || ctx.permissions?.members !== false;
+      const isAdmin = tenantContext.role === "super_admin" || tenantContext.role === "co_admin";
+      const canMembers = isAdmin || tenantContext.permissions?.members !== false;
       if (!canMembers) {
         alert("Access denied");
         return;
@@ -321,7 +326,7 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
         .from("families")
         .delete()
         .eq("id", id)
-        .eq("masjid_id", ctx.masjidId);
+        .eq("masjid_id", tenantContext.masjidId);
       if (error) throw error;
       fetchFamilies();
     } catch (err: any) {

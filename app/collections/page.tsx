@@ -127,8 +127,7 @@ const [commissionBalance, setCommissionBalance] = useState(0);
 
   const loadData = async () => {
     try {
-      const ctx = tenantContext || await getTenantContext();
-      if (!ctx) return;
+      if (!tenantContext) return;
 
       // Get the authenticated user ID from auth, not from state
       const { data: { session } } = await supabase.auth.getSession();

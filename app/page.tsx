@@ -153,20 +153,19 @@ export default function HomePage() {
   useEffect(() => {
     const fetchLiveStatus = async () => {
       if (!supabase) return;
-      const ctx = tenantContext || await getTenantContext();
-      if (!ctx) return;
+      if (!tenantContext?.masjidId) return;
 
       // Check if we have real data
       const { data: familiesData } = await supabase
         .from("families")
         .select("id")
-        .eq("masjid_id", ctx.masjidId)
+        .eq("masjid_id", tenantContext.masjidId)
         .limit(1);
       
       const { data: membersData } = await supabase
         .from("members")
         .select("id")
-        .eq("masjid_id", ctx.masjidId)
+        .eq("masjid_id", tenantContext.masjidId)
         .limit(1);
 
       const hasRealData = (familiesData && familiesData.length > 0) || (membersData && membersData.length > 0);
