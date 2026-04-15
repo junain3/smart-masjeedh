@@ -530,15 +530,7 @@ export default function FamiliesPage() {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-24 font-sans">
-      {/* Debug Info */}
-      <div className="bg-red-500 text-white text-xs p-2 m-2 rounded">
-        <pre className="whitespace-pre-wrap">
-          {debugInfo}
-          {"\n"}
-          {renderDebugText}
-        </pre>
-      </div>
-      {/* App Header */}
+            {/* App Header */}
       <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link href="/" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-emerald-600">
