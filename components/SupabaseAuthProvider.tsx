@@ -186,6 +186,51 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    // Recovery: Detect when app regains focus or becomes visible after idle session
+    const handleFocus = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        console.log("Recovering from stale session on focus");
+        setUser(session.user);
+        await loadTenantContext(session.user.id);
+        setLoading(false);
+      } else {
+        setUser(null);
+        setTenantContext(null);
+        setAvailableMasjids([]);
+        setRequiresOnboarding(false);
+        setLoading(false);
+      }
+    };
+
+    const handleVisibility = async () => {
+      if (document.visibilityState === "visible") {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          console.log("Recovering from stale session on visibility change");
+          setUser(session.user);
+          await loadTenantContext(session.user.id);
+          setLoading(false);
+        } else {
+          setUser(null);
+          setTenantContext(null);
+          setAvailableMasjids([]);
+          setRequiresOnboarding(false);
+          setLoading(false);
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
