@@ -45,10 +45,15 @@ export default function DashboardPage() {
     return;
   }
 
-  // 🔥 Fix: tenantContext wait
-  if (!tenantContext?.masjidId) {
-    console.log("Waiting for tenantContext...");
-    return;
+  if (!authUser || !tenantContext?.masjidId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   console.log("Tenant loaded:", tenantContext);
