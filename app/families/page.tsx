@@ -104,6 +104,28 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
   }, [tenantContext?.masjidId]);
 
   useEffect(() => {
+    const handleFocus = () => {
+      if (tenantContext?.masjidId) {
+        fetchFamilies();
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && tenantContext?.masjidId) {
+        fetchFamilies();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [tenantContext?.masjidId]);
+
+  useEffect(() => {
     if (editingFamily) {
       setHeadName(editingFamily.head_name);
       setAddress(editingFamily.address);
