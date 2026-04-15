@@ -174,6 +174,31 @@ export default function FamilyDetailsPage() {
     void checkAuth();
   }, [authUser, tenantContext, familyId, router]);
 
+  useEffect(() => {
+    // Recovery: Detect when app regains focus or becomes visible after idle session
+    const handleFocus = async () => {
+      if (authUser) {
+        console.log("Recovering from stale session on focus");
+        await fetchData(authUser);
+      }
+    };
+
+    const handleVisibility = async () => {
+      if (document.visibilityState === "visible" && authUser) {
+        console.log("Recovering from stale session on visibility change");
+        await fetchData(authUser);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [authUser]);
+
   const fetchData = async (currentUser: any) => {
     if (!supabase || !familyId || !currentUser || !tenantContext?.masjidId) {
       setLoading(false);
