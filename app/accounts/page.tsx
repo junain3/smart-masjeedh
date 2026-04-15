@@ -437,7 +437,7 @@ const { error } = await supabase
 
           <nav className="flex-1 p-4 space-y-2">
             <Link
-              href="/dashboard"
+              href="/"
               onClick={() => setIsSidebarOpen(false)}
               className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
             >
