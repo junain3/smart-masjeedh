@@ -87,11 +87,12 @@ export default function FamiliesPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debugInfo, setDebugInfo] = useState("");
 
   const t = getTranslation(lang);
 
-// Debug log to verify safe translation object
-console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: !!t.home });
+  // Debug log to verify safe translation object
+  console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: !!t.home });
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -172,6 +173,7 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
     try {
       if (!supabase) return;
       setIsFetching(true);
+      setDebugInfo(`masjidId: ${tenantContext?.masjidId}`);
 
       if (!tenantContext?.masjidId) {
         setIsFetching(false);
@@ -180,10 +182,12 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
 
       const isAdmin = tenantContext.role === "super_admin" || tenantContext.role === "co_admin";
       const canMembers = isAdmin || tenantContext.permissions?.members !== false;
+      setDebugInfo(prev => `${prev}\nisAdmin: ${isAdmin}\ncanMembers: ${canMembers}`);
       setAllowed(canMembers);
       if (!canMembers) {
         setFamilies([]);
         setIsLive(false);
+        setDebugInfo(prev => `${prev}\n→ No permissions, families set to []`);
         return;
       }
 
@@ -194,6 +198,8 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
         .order("family_code", { ascending: true });
 
       if (error) throw error;
+
+      setDebugInfo(prev => `${prev}\ndataLength: ${data?.length || 0}`);
 
       if (data) {
         setFamilies(data);
@@ -514,8 +520,24 @@ console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: 
     f.family_code.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const renderDebugText = [
+    `families: ${families.length}`,
+    `filtered: ${filteredFamilies.length}`,
+    `statusFilter: ${statusFilter}`,
+    `searchQuery: "${searchQuery}"`,
+    `isLive: ${isLive}`,
+  ].join("\n");
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-24 font-sans">
+      {/* Debug Info */}
+      <div className="bg-red-500 text-white text-xs p-2 m-2 rounded">
+        <pre className="whitespace-pre-wrap">
+          {debugInfo}
+          {"\n"}
+          {renderDebugText}
+        </pre>
+      </div>
       {/* App Header */}
       <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
