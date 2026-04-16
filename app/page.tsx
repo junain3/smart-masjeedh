@@ -179,18 +179,17 @@ export default function HomePage() {
   useEffect(() => {
     const fetchCounts = async () => {
       if (!supabase) return;
-      const ctx = tenantContext || await getTenantContext();
-      if (!ctx) return;
+      if (!tenantContext?.masjidId) return;
 
       const { data: familiesData } = await supabase
         .from("families")
         .select("id")
-        .eq("masjid_id", ctx.masjidId);
+        .eq("masjid_id", tenantContext.masjidId);
 
       const { data: membersData } = await supabase
         .from("members")
         .select("id")
-        .eq("masjid_id", ctx.masjidId);
+        .eq("masjid_id", tenantContext.masjidId);
 
       setFamilyCount(familiesData?.length || 0);
       setMemberCount(membersData?.length || 0);
@@ -203,14 +202,13 @@ export default function HomePage() {
   useEffect(() => {
     const fetchMasjidData = async () => {
       if (!supabase) return;
-      const ctx = tenantContext || await getTenantContext();
-      if (!ctx) return;
+      if (!tenantContext?.masjidId) return;
 
       try {
         const { data: masjidData } = await supabase
           .from("masjids")
           .select("masjid_name, logo_url, tagline, preferred_language")
-          .eq("id", ctx.masjidId)
+          .eq("id", tenantContext.masjidId)
           .single();
 
         if (masjidData) {
