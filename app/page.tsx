@@ -75,7 +75,7 @@ const dummyFamilies: Family[] = [
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, tenantContext, loading: authLoading } = useSupabaseAuth();
+  const { user, tenantContext, loading: authLoading, resumeTick } = useSupabaseAuth();
   const { toast } = useAppToast();
 
   // Parse permissions and check access
@@ -173,7 +173,7 @@ export default function HomePage() {
     };
 
     fetchLiveStatus();
-  }, [tenantContext]);
+  }, [tenantContext, resumeTick]);
 
   // Fetch family and member counts
   useEffect(() => {
@@ -197,7 +197,7 @@ export default function HomePage() {
     };
 
     fetchCounts();
-  }, [tenantContext]);
+  }, [tenantContext, resumeTick]);
 
   // Fetch masjid data
   useEffect(() => {
@@ -235,7 +235,7 @@ export default function HomePage() {
     };
 
     fetchMasjidData();
-  }, [tenantContext]);
+  }, [tenantContext, resumeTick]);
 
   // Authentication flow: redirect to login if no session, home if session exists
   useEffect(() => {

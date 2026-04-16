@@ -26,6 +26,7 @@ type AuthContextType = {
     role: string;
     permissions: Record<string, boolean>;
   }>;
+  resumeTick: number;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,6 +43,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
     permissions: Record<string, boolean>;
   }>>([]);
   const recoveryLockRef = useRef(false);
+  const [resumeTick, setResumeTick] = useState(0);
 
   const loadTenantContext = async (userId: string) => {
     try {
@@ -201,6 +203,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
           setUser(session.user);
           await loadTenantContext(session.user.id);
           setLoading(false);
+          setResumeTick(prev => prev + 1);
         } else {
           setUser(null);
           setTenantContext(null);
@@ -243,6 +246,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
         refreshTenantContext,
         authError,
         availableMasjids,
+        resumeTick,
       }}
     >
       {children}

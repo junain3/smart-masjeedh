@@ -47,7 +47,7 @@ type FamilySubscriptionStatus = {
 
 export default function CollectionsPage() {
   const router = useRouter();
-  const { user, tenantContext } = useSupabaseAuth();
+  const { user, tenantContext, loading: authLoading, resumeTick } = useSupabaseAuth();
   const [lang, setLang] = useState<Language>("en");
   const [collections, setCollections] = useState<Collection[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
@@ -87,7 +87,7 @@ const [commissionBalance, setCommissionBalance] = useState(0);
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
     loadData();
-  }, []);
+  }, [tenantContext?.masjidId, resumeTick]);
 
   // Commission summary calculations
   useEffect(() => {

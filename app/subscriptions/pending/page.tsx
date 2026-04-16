@@ -34,7 +34,7 @@ type PendingCollection = {
 };
 
 export default function SubscriptionsPendingPage() {
-  const { user, tenantContext } = useSupabaseAuth();
+  const { user, tenantContext, loading: authLoading, resumeTick } = useSupabaseAuth();
   const { toast } = useAppToast();
   const [pendingCollections, setPendingCollections] = useState<PendingCollection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +48,7 @@ export default function SubscriptionsPendingPage() {
     if (!canApprove || !tenantContext?.masjidId) return;
     
     fetchPendingCollections();
-  }, [canApprove, tenantContext?.masjidId]);
+  }, [canApprove, tenantContext?.masjidId, resumeTick]);
 
   const fetchPendingCollections = async () => {
     try {

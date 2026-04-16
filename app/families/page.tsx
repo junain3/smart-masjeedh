@@ -42,7 +42,7 @@ const dummyFamilies: Family[] = [
 
 export default function FamiliesPage() {
   const router = useRouter();
-  const { user, tenantContext, loading: authLoading } = useSupabaseAuth();
+  const { user, tenantContext, loading: authLoading, resumeTick } = useSupabaseAuth();
   
   // Parse permissions and check access
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
@@ -87,7 +87,6 @@ export default function FamiliesPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [debugInfo, setDebugInfo] = useState("");
 
   const t = getTranslation(lang);
 
@@ -102,29 +101,8 @@ export default function FamiliesPage() {
   useEffect(() => {
     if (!tenantContext?.masjidId) return;
     fetchFamilies();
-  }, [tenantContext?.masjidId]);
+  }, [tenantContext?.masjidId, resumeTick]);
 
-  useEffect(() => {
-    const handleFocus = () => {
-      if (tenantContext?.masjidId) {
-        fetchFamilies();
-      }
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible" && tenantContext?.masjidId) {
-        fetchFamilies();
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [tenantContext?.masjidId]);
 
   useEffect(() => {
     if (editingFamily) {
@@ -173,7 +151,6 @@ export default function FamiliesPage() {
     try {
       if (!supabase) return;
       setIsFetching(true);
-      setDebugInfo(`masjidId: ${tenantContext?.masjidId}`);
 
       if (!tenantContext?.masjidId) {
         setIsFetching(false);
@@ -182,12 +159,10 @@ export default function FamiliesPage() {
 
       const isAdmin = tenantContext.role === "super_admin" || tenantContext.role === "co_admin";
       const canMembers = isAdmin || tenantContext.permissions?.members !== false;
-      setDebugInfo(prev => `${prev}\nisAdmin: ${isAdmin}\ncanMembers: ${canMembers}`);
       setAllowed(canMembers);
       if (!canMembers) {
         setFamilies([]);
         setIsLive(false);
-        setDebugInfo(prev => `${prev}\n→ No permissions, families set to []`);
         return;
       }
 
@@ -199,7 +174,6 @@ export default function FamiliesPage() {
 
       if (error) throw error;
 
-      setDebugInfo(prev => `${prev}\ndataLength: ${data?.length || 0}`);
 
       if (data) {
         setFamilies(data);
@@ -520,13 +494,6 @@ export default function FamiliesPage() {
     f.family_code.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const renderDebugText = [
-    `families: ${families.length}`,
-    `filtered: ${filteredFamilies.length}`,
-    `statusFilter: ${statusFilter}`,
-    `searchQuery: "${searchQuery}"`,
-    `isLive: ${isLive}`,
-  ].join("\n");
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-24 font-sans">

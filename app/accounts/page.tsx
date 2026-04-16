@@ -51,7 +51,7 @@ type Family = {
 
 export default function AccountsPage() {
   const router = useRouter();
-  const { user: authUser, signOut, tenantContext, loading: authLoading } = useSupabaseAuth();
+  const { user: authUser, signOut, tenantContext, loading: authLoading, resumeTick } = useSupabaseAuth();
   
   // Parse permissions and check access
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
@@ -158,7 +158,7 @@ export default function AccountsPage() {
     };
 
     checkAuth();
-  }, [authUser, tenantContext?.masjidId]);
+  }, [authUser, tenantContext?.masjidId, resumeTick]);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
