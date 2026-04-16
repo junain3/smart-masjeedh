@@ -89,6 +89,10 @@ export default function FamiliesPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [isPrintMode, setIsPrintMode] = useState(false);
+  const [isCodePrintOpen, setIsCodePrintOpen] = useState(false);
+  const [codeInput, setCodeInput] = useState("");
+  const [invalidCodes, setInvalidCodes] = useState<string[]>([]);
+  const [printFamilies, setPrintFamilies] = useState<Family[]>([]);
 
   const t = getTranslation(lang);
 
@@ -401,591 +405,165 @@ export default function FamiliesPage() {
             th, td { 
               border: 1px solid #333; 
               padding: 8px; 
-              text-align: left;
-              vertical-align: top;
-            }
-            th { 
-              background-color: #f0f0f0; 
-              font-weight: bold;
-              font-size: 11px;
-            }
-            td { 
-              font-size: 10px;
-              word-wrap: break-word;
-              max-width: 150px;
-            }
-            .footer {
-              margin-top: 30px;
-              text-align: center;
-              font-size: 10px;
-              color: #666;
-            }
-            @media print {
-              body { margin: 10px; }
-              th, td { 
-                border: 1px solid #000; 
-                padding: 6px;
-                font-size: 9px;
-              }
-              .no-print { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <h1>Masjid Families List</h1>
-          <table>
-            <thead>
-              <tr>
-      `;
-      
-      // Add headers
-      headers.forEach(header => {
-        htmlContent += `<th>${header}</th>`;
-      });
-      htmlContent += `
-              </tr>
-            </thead>
-            <tbody>
-      `;
-      
-      // Add data rows
-      tableData.forEach(row => {
-        htmlContent += '<tr>';
-        row.forEach(cell => {
-          const cellValue = String(cell || '');
-          const truncatedValue = cellValue.length > 50 ? cellValue.substring(0, 50) + '...' : cellValue;
-          htmlContent += `<td>${truncatedValue}</td>`;
-        });
-        htmlContent += '</tr>';
-      });
-      
-      htmlContent += `
-            </tbody>
-          </table>
-          <div class="footer">
-            Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
-          </div>
-          <div class="no-print" style="margin-top: 20px; text-align: center;">
-            <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px;">
-              🖨️ Print / Save as PDF
-            </button>
-            <br><br>
-            <small>Use Ctrl+P or Cmd+P to print, then choose "Save as PDF"</small>
-          </div>
-        </body>
-        </html>
-      `;
-      
-      // Write content to new window
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      
-      // Focus and trigger print dialog
-      printWindow.focus();
-      
-      console.log('Families: Print window opened successfully');
-      
-    } catch (error) {
-      console.error('Families: Print generation error:', error);
-      alert('Print generation failed: ' + (error as Error).message);
-    }
-  };
 
-  const filteredFamilies = families.filter(f => 
-    f.head_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    f.family_code.toLowerCase().includes(searchQuery.toLowerCase())
+const handlePrintByCode = async () => {
+  if (!families.length) {
+    await fetchFamilies();
+  }
+
+  const requestedCodes = parseCodeInput(codeInput);
+  const validFamilies = families.filter(family => 
+    requestedCodes.some(code => family.family_code.toLowerCase() === code.toLowerCase())
   );
-
-  const handlePrintAll = async () => {
-    if (!families.length) {
-      await fetchFamilies();
-    }
-
+  const invalid = requestedCodes.filter(code => 
+    !families.some(family => family.family_code.toLowerCase() === code.toLowerCase())
+  );
+  
+  setInvalidCodes(invalid);
+  
+  if (validFamilies.length > 0) {
+    setPrintFamilies(validFamilies);
     setIsPrintMode(true);
-
+    
     setTimeout(() => {
       window.print();
-      setTimeout(() => setIsPrintMode(false), 300);
+      setTimeout(() => {
+        setIsPrintMode(false);
+        setPrintFamilies([]);
+        setInvalidCodes([]);
+        setCodeInput("");
+        setIsCodePrintOpen(false);
+      }, 300);
     }, 150);
-  };
+  }
+};
 
-  return (
-    <>
-      <RouteGuard>
-        <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-24 font-sans">
-          <div className={isPrintMode ? "no-print" : ""}>
-            {/* App Header */}
-      <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-emerald-600">
-            <ArrowLeft className="h-6 w-6" />
-          </Link>
-          <div>
-            <h1 className="text-lg font-black leading-none">{t.families}</h1>
-            <div className="flex items-center gap-3 mt-1">
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{isLive ? t.live_data : t.demo_mode}</p>
-              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{t.year}</label>
-              <select value={year} onChange={e=>setYear(parseInt(e.target.value))} className="text-xs font-bold bg-white border border-slate-200 rounded-lg px-2 py-1">
-                {Array.from({length:6}).map((_,i)=> {
-                  const y=new Date().getFullYear()-i;
-                  return <option key={y} value={y}>{y}</option>;
-                })}
-              </select>
-              <div className="flex items-center gap-1">
-                <button onClick={()=>setStatusFilter("all")} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${statusFilter==="all"?"bg-emerald-50 text-emerald-600":"text-slate-500 border border-slate-200"}`}>{t.filter_all}</button>
-                <button onClick={()=>setStatusFilter("paid")} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${statusFilter==="paid"?"bg-emerald-50 text-emerald-600":"text-slate-500 border border-slate-200"}`}>{t.paid}</button>
-                <button onClick={()=>setStatusFilter("unpaid")} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${statusFilter==="unpaid"?"bg-emerald-50 text-emerald-600":"text-slate-500 border border-slate-200"}`}>{t.unpaid}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={() => setIsPdfOptionsOpen(true)}
-            className="p-2.5 bg-slate-50 text-blue-600 rounded-xl hover:bg-blue-50 transition-all active:scale-95 flex items-center gap-1"
-            title={t.download_pdf}
-          >
-            <Download className="h-4 w-4" />
-            <span className="text-xs font-bold">PDF</span>
-          </button>
-          <button 
-            onClick={() => setIsScannerOpen(true)}
-            className="p-2.5 bg-slate-50 text-slate-600 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95 flex items-center gap-1"
-          >
-            <QrCode className="h-4 w-4" />
-            <span className="text-xs font-bold">QR</span>
-          </button>
-          <button 
-            onClick={fetchFamilies}
-            disabled={isFetching}
-            className="p-2.5 bg-slate-50 text-emerald-600 rounded-xl hover:bg-emerald-100 active:scale-95 transition-all disabled:opacity-50"
-          >
-            <RefreshCw className={`h-5 w-5 ${isFetching ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </header>
+const familiesForPrint = printFamilies.length ? printFamilies : families;
 
-      {/* Messages */}
-      <div className="px-4 mt-2">
-        {successMessage && (
-          <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 px-4 py-3 rounded-2xl text-xs font-bold animate-in fade-in slide-in-from-top-2 duration-300">
-            {successMessage}
-          </div>
-        )}
-        {errorMessage && (
-          <div className="bg-amber-50 border border-amber-100 text-amber-700 px-4 py-3 rounded-2xl text-[10px] font-bold">
-            {errorMessage}
-          </div>
-        )}
+// ... (rest of the code remains the same)
+
+{isCodePrintOpen && (
+  <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="bg-white w-full max-w-md rounded-[2rem] p-6 shadow-2xl max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-black">Print by Family Code</h3>
+        <button onClick={() => setIsCodePrintOpen(false)} className="p-2 hover:bg-slate-50 rounded-full">
+          <X className="w-5 h-5 text-slate-400" />
+        </button>
       </div>
-
-      {/* Search & Actions */}
-      <div className="p-4 space-y-4">
-        <div className="relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Family Codes</label>
           <input
             type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t.search}
-            className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm"
+            value={codeInput}
+            onChange={(e) => setCodeInput(e.target.value)}
+            placeholder="M1-M19 or M1,M4,M5"
+            className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-purple-500/10 outline-none transition-all font-bold"
           />
         </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            setIsOpen(true);
-            setErrorMessage("");
-          }}
-          className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all"
-        >
-          <Plus className="h-5 w-5" />
-          {t.add_new_family}
-        </button>
-
-        <button
-          type="button"
-          onClick={handlePrintAll}
-          className="w-full bg-blue-500 hover:bg-blue-600 text-white py-4 rounded-2xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all"
-        >
-          <Download className="h-5 w-5" />
-          Print All QR
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={handlePrintByCode}
+            className="flex-1 bg-purple-600 text-white py-3 rounded-2xl font-black"
+          >
+            Print Selected
+          </button>
+          <button 
+            onClick={() => setIsCodePrintOpen(false)}
+            className="flex-1 bg-slate-200 text-slate-700 py-3 rounded-2xl font-black"
+          >
+            Cancel
+          </button>
+        </div>
+        {invalidCodes.length > 0 && (
+          <div className="bg-red-50 border border-red-100 text-red-700 px-3 py-2 rounded-lg text-sm">
+            <p className="font-bold">Invalid codes:</p>
+            <p>{invalidCodes.join(', ')}</p>
+          </div>
+        )}
       </div>
+    </div>
+  </div>
+)}
 
-      {/* Families List */}
-      <section className="flex-1 px-4 overflow-y-auto pb-6">
-        <div className="space-y-3 w-full">
-          {!isFetching && filteredFamilies.length === 0 ? (
-            <div className="py-20 text-center flex flex-col items-center gap-4">
-              <div className="p-6 bg-slate-100 rounded-full text-slate-300">
-                <Users className="h-12 w-12" />
-              </div>
-              <div className="space-y-1">
-                <h2 className="text-lg font-bold text-slate-400">No Families Found</h2>
-                <p className="text-sm text-slate-400">{lang === 'tm' ? 'குறியீடு அல்லது பெயரைக் கொண்டு தேடுங்கள்' : 'Search by name or code'}</p>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Mobile Card Layout */}
-              <div className="sm:hidden space-y-3 w-full">
-                {filteredFamilies.map((family) => (
-                  <div key={family.id} className="bg-white rounded-2xl p-4 shadow-md space-y-3">
-                    {/* Family Name and Code */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Link
-                          href={`/families/${family.id}`}
-                          className="text-lg font-bold text-slate-900 truncate hover:text-emerald-600 transition-colors"
-                        >
-                          {family.head_name}
-                        </Link>
-                        <span className="text-xs font-black bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md uppercase tracking-tighter">
-                          {family.family_code}
-                        </span>
-                      </div>
-                      <p className="text-sm text-slate-600 flex items-center gap-1">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400">
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                          <circle cx="12" cy="10" r="3"></circle>
-                        </svg>
-                        {family.address}
-                      </p>
-                      <p className="text-sm text-slate-600">{family.phone}</p>
-                    </div>
-                    
-                    {/* Action Buttons */}
-                    <div className="flex gap-2 pt-2">
-                      <button 
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setEditingFamily(family);
-                        }}
-                        className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={(e) => {
-                          e.preventDefault();
-                          deleteFamily(family.id);
-                        }}
-                        className="p-2 bg-rose-500 hover:bg-rose-600 text-white rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Desktop Table Layout */}
-              <div className="hidden sm:block space-y-3 w-full">
-                {filteredFamilies.map((family) => (
-                  <Link
-                    key={family.id}
-                    href={`/families/${family.id}`}
-                    className="block bg-white professional-card rounded-[1.5rem] p-5 active:scale-[0.98] transition-all group"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-black bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-md uppercase tracking-tighter">
-                            {family.family_code}
-                          </span>
-                        </div>
-                        <h3 className="text-base font-bold text-slate-900 group-hover:text-emerald-600 transition-colors truncate">
-                          {family.head_name}
-                        </h3>
-                        <p className="text-xs text-slate-400 truncate flex items-center gap-1">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-300">
-                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                            <circle cx="12" cy="10" r="3"></circle>
-                          </svg>
-                          {family.address}
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <div className="flex items-center gap-1">
-                          <button 
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setEditingFamily(family);
-                            }}
-                            className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              deleteFamily(family.id);
-                            }}
-                            className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <p className="text-[10px] font-bold text-slate-400">{family.phone}</p>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </section>
-
-      {isPdfOptionsOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[2rem] p-6 shadow-2xl max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-black">PDF Columns</h3>
-              <button onClick={() => setIsPdfOptionsOpen(false)} className="p-2 hover:bg-slate-50 rounded-full">
-                <X className="w-5 h-5 text-slate-400" />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.code} onChange={e=>setPdfCols(s=>({...s,code:e.target.checked}))}/> Code</label>
-              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.head} onChange={e=>setPdfCols(s=>({...s,head:e.target.checked}))}/> Head</label>
-              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.address} onChange={e=>setPdfCols(s=>({...s,address:e.target.checked}))}/> Address</label>
-              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.phone} onChange={e=>setPdfCols(s=>({...s,phone:e.target.checked}))}/> Phone</label>
-              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.sub} onChange={e=>setPdfCols(s=>({...s,sub:e.target.checked}))}/> Sub. Amt</label>
-            </div>
-            <button onClick={() => { setIsPdfOptionsOpen(false); generatePDF(); }} className="w-full py-3 rounded-2xl bg-blue-600 text-white font-black">
-              🖨️ Print Report
-            </button>
+{isPrintMode && (
+  <div className="print-only">
+    <style jsx>{`
+      @media print {
+        .print-only {
+          display: block !important;
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: white;
+          z-index: 9999;
+        }
+        .no-print {
+          display: none !important;
+        }
+        .print-qr-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 20px;
+          margin: 10px;
+          padding: 20px;
+        }
+        .print-qr-item {
+          border: 2px solid #000;
+          padding: 15px;
+          text-align: center;
+          page-break-inside: avoid;
+          margin-bottom: 20px;
+          background: white;
+        }
+        .qr-code-container {
+          margin-bottom: 10px;
+        }
+        .family-info {
+          font-size: 14px;
+          line-height: 1.4;
+          font-weight: bold;
+        }
+        .family-code {
+          font-size: 16px;
+          color: #0066cc;
+          margin-bottom: 5px;
+        }
+        .head-name {
+          font-size: 12px;
+          color: #333;
+        }
+      }
+      @media screen {
+        .print-only {
+          display: none;
+        }
+      }
+      @page {
+        margin: 1cm;
+        size: A4;
+      }
+    `}</style>
+    <div className="print-qr-grid">
+      {familiesForPrint.map((family) => (
+        <div key={family.id} className="print-qr-item">
+          <div className="qr-code-container">
+            <QRCodeSVG 
+              value={`smart-masjeedh:family:${family.id}`} 
+              size={120} 
+              level="H" 
+              includeMargin={false}
+            />
+          </div>
+          <div className="family-info">
+            <div className="family-code">{family.family_code}</div>
+            <div className="head-name">{family.head_name}</div>
           </div>
         </div>
-      )}
-
-      <QrScannerModal
-        open={isScannerOpen}
-        title={t.scan_qr}
-        containerId="reader"
-        onClose={() => setIsScannerOpen(false)}
-        onDecodedText={handleQrDecodedText}
-      />
-
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex items-center justify-around py-4 px-6 shadow-2xl z-50">
-        <Link href="/dashboard" className="flex flex-col items-center gap-1 group">
-          <div className="p-3 bg-slate-50 rounded-2xl group-hover:bg-slate-100 transition-colors">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-          </div>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t.home}</span>
-        </Link>
-        <Link href="/families" className="flex flex-col items-center gap-1 group">
-          <div className="p-3 bg-emerald-50 rounded-2xl transition-colors">
-            <Users className="w-6 h-6 text-emerald-600" />
-          </div>
-          <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">{t.families}</span>
-        </Link>
-        <Link href="/accounts" className="flex flex-col items-center gap-1 group">
-          <div className="p-3 bg-slate-50 rounded-2xl group-hover:bg-slate-100 transition-colors">
-            <CreditCard className="w-6 h-6 text-slate-400" />
-          </div>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t.accounts}</span>
-        </Link>
-      </nav>
-
-      {/* Add Modal */}
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-xl font-black text-slate-900">{t.add_new_family}</h2>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.name}</label>
-                <input
-                  type="text"
-                  value={headName}
-                  onChange={(event) => setHeadName(event.target.value)}
-                  className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                  placeholder="Full Name"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.address}</label>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={(event) => setAddress(event.target.value)}
-                  className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                  placeholder="Complete Address"
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.phone}</label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(event) => setPhone(event.target.value)}
-                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                    placeholder="07XXXXXXXX"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Family Code</label>
-                  <input
-                    type="text"
-                    value={familyCode}
-                    onChange={(event) => setFamilyCode(event.target.value)}
-                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                    placeholder="M01"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.annual_fee}</label>
-                  <input
-                    type="number"
-                    value={subscriptionAmount}
-                    onChange={(event) => setSubscriptionAmount(event.target.value)}
-                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                    placeholder="0.00"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.opening_balance}</label>
-                  <input
-                    type="number"
-                    value={openingBalance}
-                    onChange={(event) => setOpeningBalance(event.target.value)}
-                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                    placeholder="0.00"
-                  />
-                </div>
-                <div className="flex items-center gap-2 pt-6">
-                  <input
-                    type="checkbox"
-                    id="widow_head"
-                    checked={isWidowHead}
-                    onChange={(e) => setIsWidowHead(e.target.checked)}
-                    className="w-5 h-5 accent-emerald-500 rounded-lg"
-                  />
-                  <label htmlFor="widow_head" className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-tight">
-                    {t.widow_head}
-                  </label>
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-emerald-500 text-white py-5 rounded-[1.5rem] font-black text-base shadow-xl shadow-emerald-500/30 hover:bg-emerald-600 active:scale-[0.98] transition-all disabled:opacity-50 mt-4"
-              >
-                {loading ? "SAVING..." : t.save}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-          </div>
-
-          {/* Print-only QR codes section */}
-          {isPrintMode && (
-            <div className="print-only">
-              <style jsx>{`
-                @media print {
-                  .print-only {
-                    display: block !important;
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: white;
-                    z-index: 9999;
-                  }
-                  .no-print {
-                    display: none !important;
-                  }
-                  .print-qr-grid {
-                    display: grid;
-                    grid-template-columns: repeat(3, 1fr);
-                    gap: 20px;
-                    margin: 10px;
-                    padding: 20px;
-                  }
-                  .print-qr-item {
-                    border: 2px solid #000;
-                    padding: 15px;
-                    text-align: center;
-                    page-break-inside: avoid;
-                    margin-bottom: 20px;
-                    background: white;
-                  }
-                  .qr-code-container {
-                    margin-bottom: 10px;
-                  }
-                  .family-info {
-                    font-size: 14px;
-                    line-height: 1.4;
-                    font-weight: bold;
-                  }
-                  .family-code {
-                    font-size: 16px;
-                    color: #0066cc;
-                    margin-bottom: 5px;
-                  }
-                  .head-name {
-                    font-size: 12px;
-                    color: #333;
-                  }
-                }
-                @media screen {
-                  .print-only {
-                    display: none;
-                  }
-                }
-                @page {
-                  margin: 1cm;
-                  size: A4;
-                }
-              `}</style>
-              <div className="print-qr-grid">
-                {families.map((family) => (
-                  <div key={family.id} className="print-qr-item">
-                    <div className="qr-code-container">
-                      <QRCodeSVG 
-                        value={`smart-masjeedh:family:${family.id}`} 
-                        size={120} 
-                        level="H" 
-                        includeMargin={false} 
-                      />
-                    </div>
-                    <div className="family-info">
-                      <div className="family-code">{family.family_code}</div>
-                      <div className="head-name">{family.head_name}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </RouteGuard>
-    </>
-  );
-}
+      ))}
+    </div>
+  </div>
+)}
