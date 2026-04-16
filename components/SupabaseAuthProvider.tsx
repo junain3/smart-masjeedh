@@ -200,18 +200,34 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        setAuthDebug(prev => prev + "\nonAuthStateChange start");
-        if (session?.user) {
-          setUser(session.user);
-          // Wait for loadTenantContext to complete before setting loading to false
-          await loadTenantContext(session.user.id);
-          setLoading(false);
-          setAuthDebug(prev => prev + "\nonAuthStateChange success");
-        } else {
-          setUser(null);
-          setTenantContext(null);
-          setAvailableMasjids([]);
-          setRequiresOnboarding(false);
+        try {
+          setAuthDebug(prev => prev + "\nonAuthStateChange start");
+
+          if (session?.user) {
+            setUser(session.user);
+
+            setAuthDebug(prev => prev + "\nonAuthStateChange loading tenant context...");
+
+            await withTimeout(
+              loadTenantContext(session.user.id),
+              5000,
+              "loadTenantContext() in onAuthStateChange"
+            );
+
+            setAuthDebug(prev => prev + "\nonAuthStateChange tenant context loaded");
+
+            setLoading(false);
+          } else {
+            setUser(null);
+            setTenantContext(null);
+            setAvailableMasjids([]);
+            setRequiresOnboarding(false);
+            setLoading(false);
+          }
+
+        } catch (error: any) {
+          console.error("onAuthStateChange error:", error);
+          setAuthDebug(prev => prev + `\nonAuthStateChange error: ${error.message}`);
           setLoading(false);
         }
       }
