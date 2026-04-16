@@ -75,7 +75,7 @@ const dummyFamilies: Family[] = [
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, tenantContext, loading: authLoading, resumeTick } = useSupabaseAuth();
+  const { user, tenantContext, loading: authLoading, resumeTick, authDebug } = useSupabaseAuth();
   const { toast } = useAppToast();
 
   // Parse permissions and check access
@@ -264,6 +264,7 @@ export default function HomePage() {
             <div>tenantContext masjidId: {tenantContext?.masjidId || "null"}</div>
             <div>resumeTick: {resumeTick}</div>
             <div>route: {typeof window !== "undefined" ? window.location.pathname : "server"}</div>
+            <div className="mt-2 whitespace-pre-wrap break-words">{authDebug || "no authDebug yet"}</div>
           </div>
         </div>
       </div>
