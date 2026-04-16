@@ -484,86 +484,86 @@ const familiesForPrint = printFamilies.length ? printFamilies : families;
         )}
       </div>
     </div>
-  </div>
-)}
+  )}
 
-{isPrintMode && (
-  <div className="print-only">
-    <style jsx>{`
-      @media print {
-        .print-only {
-          display: block !important;
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background: white;
-          z-index: 9999;
-        }
-        .no-print {
-          display: none !important;
-        }
-        .print-qr-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 20px;
-          margin: 10px;
-          padding: 20px;
-        }
-        .print-qr-item {
-          border: 2px solid #000;
-          padding: 15px;
-          text-align: center;
-          page-break-inside: avoid;
-          margin-bottom: 20px;
-          background: white;
-        }
-        .qr-code-container {
-          margin-bottom: 10px;
-        }
-        .family-info {
-          font-size: 14px;
-          line-height: 1.4;
-          font-weight: bold;
-        }
-        .family-code {
-          font-size: 16px;
-          color: #0066cc;
-          margin-bottom: 5px;
-        }
-        .head-name {
-          font-size: 12px;
-          color: #333;
-        }
-      }
-      @media screen {
-        .print-only {
-          display: none;
-        }
-      }
-      @page {
-        margin: 1cm;
-        size: A4;
-      }
-    `}</style>
-    <div className="print-qr-grid">
-      {familiesForPrint.map((family) => (
-        <div key={family.id} className="print-qr-item">
-          <div className="qr-code-container">
-            <QRCodeSVG 
-              value={`smart-masjeedh:family:${family.id}`} 
-              size={120} 
-              level="H" 
-              includeMargin={false}
-            />
-          </div>
-          <div className="family-info">
-            <div className="family-code">{family.family_code}</div>
-            <div className="head-name">{family.head_name}</div>
+      {/* Print-only QR codes section */}
+      {isPrintMode && (
+        <div className="print-only">
+          <style jsx>{`
+            @media print {
+              .print-only {
+                display: block !important;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: white;
+                z-index: 9999;
+              }
+              .no-print {
+                display: none !important;
+              }
+              .print-qr-grid {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 20px;
+                margin: 10px;
+                padding: 20px;
+              }
+              .print-qr-item {
+                border: 2px solid #000;
+                padding: 15px;
+                text-align: center;
+                page-break-inside: avoid;
+                margin-bottom: 20px;
+                background: white;
+              }
+              .qr-code-container {
+                margin-bottom: 10px;
+              }
+              .family-info {
+                font-size: 14px;
+                line-height: 1.4;
+                font-weight: bold;
+              }
+              .family-code {
+                font-size: 16px;
+                color: #0066cc;
+                margin-bottom: 5px;
+              }
+              .head-name {
+                font-size: 12px;
+                color: #333;
+              }
+            }
+            @media screen {
+              .print-only {
+                display: none;
+              }
+            }
+            @page {
+              margin: 1cm;
+              size: A4;
+            }
+          `}</style>
+          <div className="print-qr-grid">
+            {familiesForPrint.map((family) => (
+              <div key={family.id} className="print-qr-item">
+                <div className="qr-code-container">
+                  <QRCodeSVG 
+                    value={`smart-masjeedh:family:${family.id}`} 
+                    size={120} 
+                    level="H" 
+                    includeMargin={false}
+                  />
+                </div>
+                <div className="family-info">
+                  <div className="family-code">{family.family_code}</div>
+                  <div className="head-name">{family.head_name}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      ))}
-    </div>
-  </div>
-)}
+      )}
