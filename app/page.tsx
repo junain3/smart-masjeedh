@@ -258,6 +258,13 @@ export default function HomePage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-700 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
+
+          <div className="mt-4 p-3 rounded bg-red-100 text-xs text-left text-red-800">
+            <div>authLoading: {String(authLoading)}</div>
+            <div>tenantContext masjidId: {tenantContext?.masjidId || "null"}</div>
+            <div>resumeTick: {resumeTick}</div>
+            <div>route: {typeof window !== "undefined" ? window.location.pathname : "server"}</div>
+          </div>
         </div>
       </div>
     );
