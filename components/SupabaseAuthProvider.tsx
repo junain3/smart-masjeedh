@@ -27,7 +27,6 @@ type AuthContextType = {
     permissions: Record<string, boolean>;
   }>;
   resumeTick: number;
-  authDebug: string;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,7 +37,6 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
   const [loading, setLoading] = useState(true);
   const [requiresOnboarding, setRequiresOnboarding] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [authDebug, setAuthDebug] = useState("");
   const [availableMasjids, setAvailableMasjids] = useState<Array<{
     masjid_id: string;
     role: string;
@@ -136,7 +134,6 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
       console.error("Sign in error:", error);
       setAuthError(error.message || "Login failed");
       setLoading(false);
-      setAuthDebug(prev => prev + `\nsignIn error: ${error.message}`);
       throw error;
     }
   };
@@ -154,33 +151,26 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        setAuthDebug(prev => prev + "\ninitializeAuth start");
-        
         const { data: { session }, error } = await withTimeout(
           supabase.auth.getSession(),
           5000,
           "supabase.auth.getSession()"
         );
         
-        setAuthDebug(prev => prev + "\ngot session");
-        
         if (error) {
           console.error("Error getting session:", error);
-          setAuthDebug(prev => prev + `\nsession error: ${error.message}`);
           setLoading(false);
           return;
         }
 
         if (session?.user) {
           setUser(session.user);
-          setAuthDebug(prev => prev + "\nloading tenant context...");
           // Wait for loadTenantContext to complete before setting loading to false
           await withTimeout(
             loadTenantContext(session.user.id),
             5000,
             "loadTenantContext()"
           );
-          setAuthDebug(prev => prev + "\ntenant context loaded");
           setLoading(false);
         } else {
           setUser(null);
@@ -191,7 +181,6 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
         }
       } catch (error: any) {
         console.error("Initialize auth error:", error);
-        setAuthDebug(prev => prev + `\ninitializeAuth error: ${error.message}`);
         setLoading(false);
       }
     };
@@ -201,25 +190,18 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         try {
-          setAuthDebug(prev => prev + "\nonAuthStateChange start");
-
           if (session?.user) {
             setUser(session.user);
 
             // Skip tenant context reload if already loaded for same user
             if (tenantContext?.masjidId && user?.id === session.user.id) {
-              setAuthDebug(prev => prev + "\nonAuthStateChange skipped tenant reload");
               setLoading(false);
             } else {
-              setAuthDebug(prev => prev + "\nonAuthStateChange loading tenant context...");
-
               await withTimeout(
                 loadTenantContext(session.user.id),
                 5000,
                 "loadTenantContext() in onAuthStateChange"
               );
-
-              setAuthDebug(prev => prev + "\nonAuthStateChange tenant context loaded");
 
               setLoading(false);
             }
@@ -233,7 +215,6 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
 
         } catch (error: any) {
           console.error("onAuthStateChange error:", error);
-          setAuthDebug(prev => prev + `\nonAuthStateChange error: ${error.message}`);
           setLoading(false);
         }
       }
@@ -248,26 +229,20 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
     recoveryLockRef.current = true;
 
     try {
-      setAuthDebug(prev => prev + "\nrecoverSession start");
-      
       const { data: { session } } = await withTimeout(
         supabase.auth.getSession(),
         5000,
         "supabase.auth.getSession() in recoverSession"
       );
-      
-      setAuthDebug(prev => prev + "\nrecoverSession got session");
 
         if (session?.user) {
           console.log("Recovering session...");
           setUser(session.user);
-          setAuthDebug(prev => prev + "\nrecoverSession loading tenant context...");
           await withTimeout(
             loadTenantContext(session.user.id),
             5000,
             "loadTenantContext() in recoverSession"
           );
-          setAuthDebug(prev => prev + "\nrecoverSession tenant context loaded");
           setLoading(false);
           setResumeTick(prev => prev + 1);
         } else {
@@ -279,7 +254,6 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
         }
     } catch (error: any) {
       console.error("Recover session error:", error);
-      setAuthDebug(prev => prev + `\nrecoverSession error: ${error.message}`);
       setLoading(false);
     } finally {
       recoveryLockRef.current = false;
@@ -319,7 +293,6 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
         authError,
         availableMasjids,
         resumeTick,
-        authDebug,
       }}
     >
       {children}
