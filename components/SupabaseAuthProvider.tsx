@@ -206,17 +206,23 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
           if (session?.user) {
             setUser(session.user);
 
-            setAuthDebug(prev => prev + "\nonAuthStateChange loading tenant context...");
+            // Skip tenant context reload if already loaded for same user
+            if (tenantContext?.masjidId && user?.id === session.user.id) {
+              setAuthDebug(prev => prev + "\nonAuthStateChange skipped tenant reload");
+              setLoading(false);
+            } else {
+              setAuthDebug(prev => prev + "\nonAuthStateChange loading tenant context...");
 
-            await withTimeout(
-              loadTenantContext(session.user.id),
-              5000,
-              "loadTenantContext() in onAuthStateChange"
-            );
+              await withTimeout(
+                loadTenantContext(session.user.id),
+                5000,
+                "loadTenantContext() in onAuthStateChange"
+              );
 
-            setAuthDebug(prev => prev + "\nonAuthStateChange tenant context loaded");
+              setAuthDebug(prev => prev + "\nonAuthStateChange tenant context loaded");
 
-            setLoading(false);
+              setLoading(false);
+            }
           } else {
             setUser(null);
             setTenantContext(null);
