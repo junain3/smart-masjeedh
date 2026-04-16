@@ -175,30 +175,29 @@ export default function AccountsPage() {
     setErrorMessage("");
 
     try {
-      const ctx = tenantContext || await getTenantContext();
-      if (!ctx || !ctx.masjidId) {
-        console.log("No tenant context or masjidId available");
-        setLoading(false);
+      if (!tenantContext?.masjidId) {
+        console.log("No tenant context available");
         return;
       }
 
-      const { data: transactionsData, error: transactionsError } = await supabase
-        .from("transactions")
-        .select("*")
-        .eq("masjid_id", ctx.masjidId)
-        .order("date", { ascending: false });
+      // Run queries in parallel instead of sequentially
+      const [transactionsResponse, familiesResponse] = await Promise.all([
+        supabase
+          .from("transactions")
+          .select("*")
+          .eq("masjid_id", tenantContext.masjidId)
+          .order("date", { ascending: false }),
+        supabase
+          .from("families")
+          .select("id, family_code, head_name")
+          .eq("masjid_id", tenantContext.masjidId)
+      ]);
 
-      if (transactionsError) throw transactionsError;
+      if (transactionsResponse.error) throw transactionsResponse.error;
+      if (familiesResponse.error) throw familiesResponse.error;
 
-      const { data: familiesData, error: familiesError } = await supabase
-        .from("families")
-        .select("id, family_code, head_name")
-        .eq("masjid_id", ctx.masjidId);
-
-      if (familiesError) throw familiesError;
-
-      setTransactions((transactionsData as Transaction[]) || []);
-      setFamilies((familiesData as Family[]) || []);
+      setTransactions((transactionsResponse.data as Transaction[]) || []);
+      setFamilies((familiesResponse.data as Family[]) || []);
       setErrorMessage("");
     } catch (err: any) {
       console.error("Fetch error:", err);
