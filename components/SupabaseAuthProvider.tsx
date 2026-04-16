@@ -189,14 +189,13 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    // Recovery: Detect when app regains focus or becomes visible after idle session
-    const recoverSession = async () => {
-      if (recoveryLockRef.current) return;
-      recoveryLockRef.current = true;
+  // Recovery: Detect when app regains focus or becomes visible after idle session
+  const recoverSession = async () => {
+    if (recoveryLockRef.current) return;
+    recoveryLockRef.current = true;
 
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
 
         if (session?.user) {
           console.log("Recovering session...");
@@ -211,11 +210,12 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
           setRequiresOnboarding(false);
           setLoading(false);
         }
-      } finally {
-        recoveryLockRef.current = false;
-      }
-    };
+    } finally {
+      recoveryLockRef.current = false;
+    }
+  };
 
+  useEffect(() => {
     const handleFocus = () => {
       void recoverSession();
     };
@@ -233,6 +233,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
+
 
   return (
     <AuthContext.Provider
