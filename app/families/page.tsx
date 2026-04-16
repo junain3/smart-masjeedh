@@ -7,6 +7,7 @@ import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit,
 import { supabase } from "@/lib/supabase";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { QrScannerModal } from "@/components/QrScannerModal";
+import { QRCodeSVG } from "qrcode.react";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import RouteGuard from "@/components/RouteGuard";
@@ -87,6 +88,7 @@ export default function FamiliesPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isPrintMode, setIsPrintMode] = useState(false);
 
   const t = getTranslation(lang);
 
@@ -494,9 +496,24 @@ export default function FamiliesPage() {
     f.family_code.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handlePrintAll = async () => {
+    if (!families.length) {
+      await fetchFamilies();
+    }
+
+    setIsPrintMode(true);
+
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => setIsPrintMode(false), 300);
+    }, 150);
+  };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-24 font-sans">
+    <>
+      <RouteGuard>
+        <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-24 font-sans">
+          <div className={isPrintMode ? "no-print" : ""}>
             {/* App Header */}
       <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -585,6 +602,15 @@ export default function FamiliesPage() {
         >
           <Plus className="h-5 w-5" />
           {t.add_new_family}
+        </button>
+
+        <button
+          type="button"
+          onClick={handlePrintAll}
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white py-4 rounded-2xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all"
+        >
+          <Download className="h-5 w-5" />
+          Print All QR
         </button>
       </div>
 
@@ -875,6 +901,91 @@ export default function FamiliesPage() {
           </div>
         </div>
       )}
-    </div>
+          </div>
+
+          {/* Print-only QR codes section */}
+          {isPrintMode && (
+            <div className="print-only">
+              <style jsx>{`
+                @media print {
+                  .print-only {
+                    display: block !important;
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: white;
+                    z-index: 9999;
+                  }
+                  .no-print {
+                    display: none !important;
+                  }
+                  .print-qr-grid {
+                    display: grid;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 20px;
+                    margin: 10px;
+                    padding: 20px;
+                  }
+                  .print-qr-item {
+                    border: 2px solid #000;
+                    padding: 15px;
+                    text-align: center;
+                    page-break-inside: avoid;
+                    margin-bottom: 20px;
+                    background: white;
+                  }
+                  .qr-code-container {
+                    margin-bottom: 10px;
+                  }
+                  .family-info {
+                    font-size: 14px;
+                    line-height: 1.4;
+                    font-weight: bold;
+                  }
+                  .family-code {
+                    font-size: 16px;
+                    color: #0066cc;
+                    margin-bottom: 5px;
+                  }
+                  .head-name {
+                    font-size: 12px;
+                    color: #333;
+                  }
+                }
+                @media screen {
+                  .print-only {
+                    display: none;
+                  }
+                }
+                @page {
+                  margin: 1cm;
+                  size: A4;
+                }
+              `}</style>
+              <div className="print-qr-grid">
+                {families.map((family) => (
+                  <div key={family.id} className="print-qr-item">
+                    <div className="qr-code-container">
+                      <QRCodeSVG 
+                        value={`smart-masjeedh:family:${family.id}`} 
+                        size={120} 
+                        level="H" 
+                        includeMargin={false} 
+                      />
+                    </div>
+                    <div className="family-info">
+                      <div className="family-code">{family.family_code}</div>
+                      <div className="head-name">{family.head_name}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </RouteGuard>
+    </>
   );
 }
