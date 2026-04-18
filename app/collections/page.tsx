@@ -597,7 +597,7 @@ const [commissionBalance, setCommissionBalance] = useState(0);
     const pending = collections.filter(c => c.status === 'pending').reduce((sum, c) => sum + c.amount, 0);
     const approved = collections.filter(c => c.status === 'accepted').reduce((sum, c) => sum + c.amount, 0);
     const rejected = collections.filter(c => c.status === 'rejected').reduce((sum, c) => sum + c.amount, 0);
-    const totalCommission = collections.reduce((sum, c) => sum + (c.commission_amount || 0), 0);
+    const totalCommission = collections.filter(c => c.status === 'accepted').reduce((sum, c) => sum + (c.commission_amount || 0), 0);
 
     return { total, pending, approved, rejected, totalCommission };
   }, [collections]);
@@ -637,7 +637,7 @@ const [commissionBalance, setCommissionBalance] = useState(0);
         </div>
         <div className="app-card p-4 text-center">
           <div className="text-2xl font-black text-blue-600">{stats.approved.toFixed(2)}</div>
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Approved</div>
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Approved Amount</div>
         </div>
         <div className="app-card p-4 text-center">
           <div className="text-2xl font-black text-purple-600">{stats.totalCommission.toFixed(2)}</div>

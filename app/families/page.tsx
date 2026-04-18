@@ -440,7 +440,64 @@ const handlePrintByCode = async () => {
 
 const familiesForPrint = printFamilies.length ? printFamilies : families;
 
-// ... (rest of the code remains the same)
+const printStyles = `
+  @media print {
+    .print-only {
+      display: block !important;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: white;
+      z-index: 9999;
+    }
+    .no-print {
+      display: none !important;
+    }
+    .print-qr-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin: 10px;
+      padding: 20px;
+    }
+    .print-qr-item {
+      border: 2px solid #000;
+      padding: 15px;
+      text-align: center;
+      page-break-inside: avoid;
+      margin-bottom: 20px;
+      background: white;
+    }
+    .qr-code-container {
+      margin-bottom: 10px;
+    }
+    .family-info {
+      font-size: 14px;
+      line-height: 1.4;
+      font-weight: bold;
+    }
+    .family-code {
+      font-size: 16px;
+      color: #0066cc;
+      margin-bottom: 5px;
+    }
+    .head-name {
+      font-size: 12px;
+      color: #333;
+    }
+  }
+  @media screen {
+    .print-only {
+      display: none;
+    }
+  }
+  @page {
+    margin: 1cm;
+    size: A4;
+  }
+`;
 
 {isCodePrintOpen && (
   <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -489,64 +546,7 @@ const familiesForPrint = printFamilies.length ? printFamilies : families;
       {/* Print-only QR codes section */}
       {isPrintMode && (
         <div className="print-only">
-          <style jsx>{`
-            @media print {
-              .print-only {
-                display: block !important;
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: white;
-                z-index: 9999;
-              }
-              .no-print {
-                display: none !important;
-              }
-              .print-qr-grid {
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 20px;
-                margin: 10px;
-                padding: 20px;
-              }
-              .print-qr-item {
-                border: 2px solid #000;
-                padding: 15px;
-                text-align: center;
-                page-break-inside: avoid;
-                margin-bottom: 20px;
-                background: white;
-              }
-              .qr-code-container {
-                margin-bottom: 10px;
-              }
-              .family-info {
-                font-size: 14px;
-                line-height: 1.4;
-                font-weight: bold;
-              }
-              .family-code {
-                font-size: 16px;
-                color: #0066cc;
-                margin-bottom: 5px;
-              }
-              .head-name {
-                font-size: 12px;
-                color: #333;
-              }
-            }
-            @media screen {
-              .print-only {
-                display: none;
-              }
-            }
-            @page {
-              margin: 1cm;
-              size: A4;
-            }
-          `}</style>
+          <style dangerouslySetInnerHTML={{ __html: printStyles }} />
           <div className="print-qr-grid">
             {familiesForPrint.map((family) => (
               <div key={family.id} className="print-qr-item">
