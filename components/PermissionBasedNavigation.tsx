@@ -90,7 +90,7 @@ export default function PermissionBasedNavigation({
         }
 
         // Check permission for other modules
-        if (item.permission && hasModulePermission(parsedPermissions, item.permission)) {
+        if (item.permission && hasModulePermission(parsedPermissions, item.permission as keyof ModulePermissions)) {
           return (
             <Link
               key={item.key}

@@ -290,7 +290,7 @@ export default function HomePage() {
         if (ageStr.includes(">")) {
           const minAge = parseInt(ageStr.split(">")[1]);
           if (isNaN(minAge)) return;
-          const p = { kind: "ageMin", minAge };
+          const p = { kind: "ageRange" as const, minAge, maxAge: 999 };
           if (trimmed.includes("male")) (p as any).gender = "Male";
           if (trimmed.includes("female")) (p as any).gender = "Female";
           await executeSearch(p, requestId);
@@ -299,7 +299,7 @@ export default function HomePage() {
         if (ageStr.includes("<")) {
           const maxAge = parseInt(ageStr.split("<")[1]);
           if (isNaN(maxAge)) return;
-          const p = { kind: "ageMax", maxAge };
+          const p = { kind: "ageRange" as const, minAge: 0, maxAge } as SearchParams;
           if (trimmed.includes("male")) (p as any).gender = "Male";
           if (trimmed.includes("female")) (p as any).gender = "Female";
           await executeSearch(p, requestId);
@@ -310,7 +310,7 @@ export default function HomePage() {
           const minAge = parseInt(minAgeStr);
           const maxAge = parseInt(maxAgeStr);
           if (isNaN(minAge) || isNaN(maxAge)) return;
-          const p = { kind: "ageRange", minAge, maxAge };
+          const p = { kind: "ageRange" as const, minAge, maxAge } as SearchParams;
           if (trimmed.includes("male")) (p as any).gender = "Male";
           if (trimmed.includes("female")) (p as any).gender = "Female";
           await executeSearch(p, requestId);
@@ -318,7 +318,7 @@ export default function HomePage() {
         }
         const age = parseInt(ageStr);
         if (isNaN(age)) return;
-        const p = { kind: "ageExact", age };
+        const p = { kind: "ageExact" as const, age } as SearchParams;
         if (trimmed.includes("male")) (p as any).gender = "Male";
         if (trimmed.includes("female")) (p as any).gender = "Female";
         await executeSearch(p, requestId);
@@ -327,13 +327,13 @@ export default function HomePage() {
 
       // Family code search
       if (trimmed.startsWith("FAM-")) {
-        const p = { kind: "familyCode", code: trimmed };
+        const p = { kind: "familyCode" as const, code: trimmed } as SearchParams;
         await executeSearch(p, requestId);
         return;
       }
 
       // Free text search
-      const p = { kind: "free", text: trimmed };
+      const p = { kind: "free" as const, text: trimmed } as SearchParams;
       await executeSearch(p, requestId);
     } catch (e: any) {
       if (requestId !== searchRequestSeq.current) return;

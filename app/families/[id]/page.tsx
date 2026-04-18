@@ -558,7 +558,7 @@ export default function FamilyDetailsPage() {
 
   const paidThisYear = payments
     .filter((p) => {
-      const paymentDate = p.accepted_at || p.date || p.created_at;
+      const paymentDate = p.collected_at || p.created_at;
       const y = new Date(paymentDate).getFullYear();
       return y === selectedYear && p.amount > 0;
     })
@@ -568,7 +568,7 @@ export default function FamilyDetailsPage() {
 
   const paidPrevYear = payments
     .filter((p) => {
-      const paymentDate = p.accepted_at || p.date || p.created_at;
+      const paymentDate = p.collected_at || p.created_at;
       return new Date(paymentDate).getFullYear() === selectedYear - 1 && p.amount > 0;
     })
     .reduce((s, p) => s + p.amount, 0);
@@ -918,7 +918,7 @@ export default function FamilyDetailsPage() {
                       <CheckCircle className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-black text-slate-800">{service.service_name}</h4>
+                      <h4 className="text-sm font-black text-slate-800">{service.name}</h4>
                       <p className="text-[10px] font-bold text-slate-400 uppercase">{service.date}</p>
                     </div>
                   </div>

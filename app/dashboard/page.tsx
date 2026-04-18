@@ -45,17 +45,6 @@ export default function DashboardPage() {
     return;
   }
 
-  if (!authUser || !tenantContext?.masjidId) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
   console.log("Tenant loaded:", tenantContext);
 
   setUser(authUser);
@@ -206,7 +195,7 @@ return (
               <Home className="w-10 h-10 text-white" />
             </div>
             <h1 className="text-3xl font-black text-white mb-2">
-              {tenantContext?.name || t.brand_name}
+              {t.brand_name}
             </h1>
             <p className="text-emerald-100 font-medium">{t.smart_masjid_management_system}</p>
           </div>

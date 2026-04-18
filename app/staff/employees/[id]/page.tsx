@@ -180,7 +180,7 @@ export default function EmployeeProfilePage() {
 
       // 1) Create an expense transaction in main accounts
       const txDescription =
-        lang === "tm"
+        lang === "ta"
           ? `${t.salary_payment} - ${employee.name || ""} (${employee.role || ""})`
           : `${t.salary_payment} - ${employee.name || ""} (${employee.role || ""})`;
 
@@ -431,7 +431,7 @@ export default function EmployeeProfilePage() {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-bold focus:ring-4 ring-emerald-500/10 outline-none"
-                  placeholder={lang === "tm" ? "உதா: ஜனவரி சம்பளம்" : "E.g. January salary"}
+                  placeholder={lang === "ta" ? "உதா: ஜனவரி சம்பளம்" : "E.g. January salary"}
                 />
               </div>
 

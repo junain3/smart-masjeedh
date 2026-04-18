@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { parsePermissions, hasModulePermission, isSuperAdmin } from '@/lib/permissions-utils';
+import { parsePermissions, hasModulePermission, isSuperAdmin, ModulePermissions } from '@/lib/permissions-utils';
 import { useSupabaseAuth } from '@/components/SupabaseAuthProvider';
 
 interface RouteGuardProps {
@@ -42,7 +42,7 @@ export default function RouteGuard({
   }
 
   // Check specific permission requirement
-  if (requiredPermission && !hasModulePermission(parsedPermissions, requiredPermission)) {
+  if (requiredPermission && !hasModulePermission(parsedPermissions, requiredPermission as keyof ModulePermissions)) {
     return fallback;
   }
 
@@ -59,10 +59,10 @@ export function usePermissions() {
   return {
     permissions: parsedPermissions,
     isSuperAdmin: userIsSuperAdmin,
-    hasPermission: (permission: keyof any) => hasModulePermission(parsedPermissions, permission),
+    hasPermission: (permission: keyof any) => hasModulePermission(parsedPermissions, permission as keyof ModulePermissions),
     canAccess: (permission?: keyof any, requireSuper?: boolean) => {
       if (requireSuper && !userIsSuperAdmin) return false;
-      if (permission && !hasModulePermission(parsedPermissions, permission)) return false;
+      if (permission && !hasModulePermission(parsedPermissions, permission as keyof ModulePermissions)) return false;
       return true;
     }
   };

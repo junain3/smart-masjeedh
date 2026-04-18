@@ -145,14 +145,14 @@ const [commissionBalance, setCommissionBalance] = useState(0);
         supabase
           .from("families")
           .select("id, family_code, head_name, address, phone")
-          .eq("masjid_id", ctx.masjidId)
+          .eq("masjid_id", tenantContext.masjidId)
           .order("family_code"),
         
         // Load my collections
         supabase
           .from("subscription_collections")
           .select("*")
-          .eq("masjid_id", ctx.masjidId)
+          .eq("masjid_id", tenantContext.masjidId)
           .eq("collected_by_user_id", authUserId)
           .order("created_at", { ascending: false }),
         
@@ -160,7 +160,7 @@ const [commissionBalance, setCommissionBalance] = useState(0);
         supabase
           .from("subscription_collector_profiles")
           .select("default_commission_percent")
-          .eq("masjid_id", ctx.masjidId)
+          .eq("masjid_id", tenantContext.masjidId)
           .eq("user_id", authUserId)
           .maybeSingle()
       ]);
@@ -416,7 +416,7 @@ const [commissionBalance, setCommissionBalance] = useState(0);
       console.log("DEBUG USER IDS:", {
         authUserId,
         collected_by_user_id: authUserId,
-        tenantMasjidId: ctx.masjidId
+        tenantMasjidId: tenantContext.masjidId
       });
       
       // Fetch collector profile to get commission rate
@@ -424,7 +424,7 @@ const [commissionBalance, setCommissionBalance] = useState(0);
         .from("subscription_collector_profiles")
         .select("default_commission_percent")
         .eq("user_id", authUserId)
-        .eq("masjid_id", ctx.masjidId)
+        .eq("masjid_id", tenantContext.masjidId)
         .single();
 
       console.log("PROFILE RESULT:", profile);

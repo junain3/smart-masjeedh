@@ -26,7 +26,7 @@ type Permissions = {
   events: boolean;
 };
 
-type Staff = {
+export type Staff = {
   id: string;
   name: string;
   email: string;
@@ -1148,6 +1148,7 @@ export default function StaffPage() {
             onClick={() => {
               resetForm();
               setIsModalOpen(true);
+              return undefined;
             }}
             className="w-full py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all"
           >
@@ -1430,7 +1431,7 @@ export default function StaffPage() {
               </div>
             )}
 
-            <form onSubmit={handleInviteSubmit} className="p-6 space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); handleInviteSubmit(e); }} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-2">
                   Email Address
@@ -1540,7 +1541,7 @@ export default function StaffPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-2">
                   Name
@@ -1846,7 +1847,7 @@ export default function StaffPage() {
       )}
 
       {/* Staff Profile View - Modular Component */}
-      {console.log("DEBUG: Rendering modal - showProfileView:", showProfileView, "selectedStaffProfile:", selectedStaffProfile?.name)}
+      {(() => { console.log("DEBUG: Rendering modal - showProfileView:", showProfileView, "selectedStaffProfile:", selectedStaffProfile?.name); return null; })()}
       {showProfileView && selectedStaffProfile && (
         <StaffProfile
           staff={selectedStaffProfile}
