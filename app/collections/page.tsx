@@ -55,6 +55,7 @@ export default function CollectionsPage() {
   const [waitingBalance, setWaitingBalance] = useState<CollectorWaitingBalance | null>(null);
   const [loading, setLoading] = useState(true);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [showPaymentHistory, setShowPaymentHistory] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFamilyId, setSelectedFamilyId] = useState("");
   const [amount, setAmount] = useState("");
@@ -985,7 +986,15 @@ const [commissionBalance, setCommissionBalance] = useState(0);
                 
                 return (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-4">
-                    <h4 className="font-bold text-emerald-800 mb-3">Family Details</h4>
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-bold text-emerald-800">Family Details</h4>
+                      <button
+                        onClick={() => setShowPaymentHistory(!showPaymentHistory)}
+                        className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded-full hover:bg-blue-200 transition-colors"
+                      >
+                        {showPaymentHistory ? 'Hide' : 'View'} Payment History
+                      </button>
+                    </div>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-emerald-600 font-semibold">Family Code:</span>
@@ -1000,10 +1009,51 @@ const [commissionBalance, setCommissionBalance] = useState(0);
                         <div className="font-bold text-emerald-700">Rs. {totalPaid.toLocaleString()}</div>
                       </div>
                       <div>
-                        <span className="text-emerald-600 font-semibold">Pending Collected:</span>
-                        <div className="font-bold text-amber-600">Rs. {pendingCollected.toLocaleString()}</div>
+                        <span className="text-emerald-600 font-semibold">Awaiting Admin Receipt:</span>
+                        <div className="font-bold text-rose-600">Rs. {pendingCollected.toLocaleString()}</div>
                       </div>
                     </div>
+                    
+                    {/* Payment History */}
+                    {showPaymentHistory && (
+                      <div className="mt-4 pt-4 border-t border-emerald-200">
+                        <h5 className="font-bold text-emerald-800 mb-3">Payment History</h5>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {familyCollections.length === 0 ? (
+                            <p className="text-xs text-slate-400 text-center py-4">No payment history found</p>
+                          ) : (
+                            familyCollections
+                              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                              .map((collection) => (
+                                <div key={collection.id} className="bg-white rounded-lg p-3 border border-slate-200">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-bold text-sm text-slate-800">
+                                          Rs. {collection.amount.toFixed(2)}
+                                        </span>
+                                        <div className={`text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full ${
+                                          collection.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                          collection.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                                          'bg-red-100 text-red-700'
+                                        }`}>
+                                          {collection.status}
+                                        </div>
+                                      </div>
+                                      <div className="text-xs text-slate-400">
+                                        {new Date(collection.created_at).toLocaleDateString()}
+                                      </div>
+                                      {collection.notes && (
+                                        <div className="text-xs text-slate-500 mt-1">{collection.notes}</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
