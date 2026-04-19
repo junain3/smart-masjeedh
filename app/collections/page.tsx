@@ -16,6 +16,7 @@ type Family = {
   head_name: string;
   address?: string;
   phone?: string;
+  subscription_amount?: number;
 };
 
 type Collection = {
@@ -108,7 +109,7 @@ const [commissionBalance, setCommissionBalance] = useState(0);
         // Load families
         supabase
           .from("families")
-          .select("id, family_code, head_name, address, phone")
+          .select("id, family_code, head_name, address, phone, subscription_amount")
           .eq("masjid_id", tenantContext.masjidId)
           .order("family_code"),
         
@@ -978,11 +979,11 @@ const [commissionBalance, setCommissionBalance] = useState(0);
                 
                 const familyCollections = collections.filter(c => c.family_id === selectedFamilyId);
                 const totalPaid = familyCollections
-                  .filter(c => c.status === 'accepted')
+                  .filter(c => c.status === 'accepted' || c.status === 'pending')
                   .reduce((sum, c) => sum + c.amount, 0);
-                const pendingCollected = familyCollections
-                  .filter(c => c.status === 'pending')
-                  .reduce((sum, c) => sum + c.amount, 0);
+                
+                const annualFee = selectedFamily.subscription_amount || 0;
+                const balance = Math.max(0, annualFee - totalPaid);
                 
                 return (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-4">
@@ -1005,12 +1006,16 @@ const [commissionBalance, setCommissionBalance] = useState(0);
                         <div className="font-bold">{selectedFamily.head_name}</div>
                       </div>
                       <div>
+                        <span className="text-emerald-600 font-semibold">Annual Fee:</span>
+                        <div className="font-bold">Rs. {annualFee.toLocaleString()}</div>
+                      </div>
+                      <div>
                         <span className="text-emerald-600 font-semibold">Total Paid:</span>
                         <div className="font-bold text-emerald-700">Rs. {totalPaid.toLocaleString()}</div>
                       </div>
                       <div>
-                        <span className="text-emerald-600 font-semibold">Awaiting Admin Receipt:</span>
-                        <div className="font-bold text-rose-600">Rs. {pendingCollected.toLocaleString()}</div>
+                        <span className="text-emerald-600 font-semibold">Balance:</span>
+                        <div className="font-bold text-rose-600">Rs. {balance.toLocaleString()}</div>
                       </div>
                     </div>
                     
