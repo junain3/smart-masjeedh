@@ -663,21 +663,21 @@ const [commissionBalance, setCommissionBalance] = useState(0);
         Add Collection
       </button>
 
-      {/* My Pending Collections */}
-      {collections.filter(c => c.status === 'pending' && c.collected_by_user_id === user?.id).length > 0 && (
+      {/* My Collections */}
+      {collections.filter(c => c.collected_by_user_id === user?.id).length > 0 && (
         <>
           {/* Mobile Card Layout */}
           <div className="sm:hidden app-card p-5 mb-6">
             <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4">
-              My Pending Collections
+              My Collections
             </h2>
             <div className="space-y-3">
               {collections
-                .filter(c => c.status === 'pending' && c.collected_by_user_id === user?.id)
+                .filter(c => c.collected_by_user_id === user?.id)
                 .map((collection) => (
                   <div
                     key={collection.id}
-                    className="bg-white rounded-2xl p-4 shadow-md border border-amber-200 space-y-3"
+                    className="bg-white rounded-2xl p-4 shadow-md border border-slate-200 space-y-3"
                   >
                     {/* Family Name and Code */}
                     <div className="flex items-center justify-between">
@@ -693,18 +693,17 @@ const [commissionBalance, setCommissionBalance] = useState(0);
                         <div className="font-bold text-emerald-600">
                           {collection.amount.toFixed(2)}
                         </div>
-                        <div className="text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full bg-amber-100 text-amber-700">
-                          Pending
+                        <div className={`text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full ${
+                          collection.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                          collection.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {collection.status}
                         </div>
                       </div>
                     </div>
 
-                    {/* Commission and Notes */}
-                    {collection.commission_amount > 0 && (
-                      <div className="text-xs text-purple-600 font-bold">
-                        Commission: {collection.commission_amount.toFixed(2)} ({collection.commission_percent}%)
-                      </div>
-                    )}
+                    {/* Notes */}
                     {collection.notes && (
                       <div className="text-xs text-slate-500">{collection.notes}</div>
                     )}
@@ -971,6 +970,44 @@ const [commissionBalance, setCommissionBalance] = useState(0);
                 </div>
               </div>
 
+              {/* Family Details */}
+              {selectedFamilyId && (() => {
+                const selectedFamily = families.find(f => f.id === selectedFamilyId);
+                if (!selectedFamily) return null;
+                
+                const familyCollections = collections.filter(c => c.family_id === selectedFamilyId);
+                const totalPaid = familyCollections
+                  .filter(c => c.status === 'accepted')
+                  .reduce((sum, c) => sum + c.amount, 0);
+                const pendingCollected = familyCollections
+                  .filter(c => c.status === 'pending')
+                  .reduce((sum, c) => sum + c.amount, 0);
+                
+                return (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-4">
+                    <h4 className="font-bold text-emerald-800 mb-3">Family Details</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-emerald-600 font-semibold">Family Code:</span>
+                        <div className="font-bold">{selectedFamily.family_code}</div>
+                      </div>
+                      <div>
+                        <span className="text-emerald-600 font-semibold">Head Name:</span>
+                        <div className="font-bold">{selectedFamily.head_name}</div>
+                      </div>
+                      <div>
+                        <span className="text-emerald-600 font-semibold">Total Paid:</span>
+                        <div className="font-bold text-emerald-700">Rs. {totalPaid.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <span className="text-emerald-600 font-semibold">Pending Collected:</span>
+                        <div className="font-bold text-amber-600">Rs. {pendingCollected.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Amount */}
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
@@ -988,18 +1025,7 @@ const [commissionBalance, setCommissionBalance] = useState(0);
                 />
               </div>
 
-              {/* Commission Display */}
-              {amount && commissionRate > 0 && (
-                <div className="bg-purple-50 border border-purple-200 rounded-2xl p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-purple-700">Commission ({commissionRate}%)</span>
-                    <span className="text-sm font-black text-purple-600">
-                      {((parseFloat(amount) * commissionRate) / 100).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              )}
-
+              
               {/* Notes */}
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
