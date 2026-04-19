@@ -518,10 +518,7 @@ const [commissionBalance, setCommissionBalance] = useState(0);
         await supabase
           .from("employee_commissions")
           .update({
-            amount: commissionAmount,
-            commission_percent: commissionRate,
-            collection_amount: amountNum,
-            notes: `Updated commission for collection of ${amountNum} from family ${selectedFamilyId}`
+            amount: commissionAmount
           })
           .eq("collection_id", editingCollection.id);
       } catch (commissionErr) {

@@ -132,9 +132,27 @@ export default function SubscriptionsPendingPage() {
   };
 
   const handleBulkConfirm = async () => {
-    if (selectedCollectionIds.length === 0) return;
+    if (selectedCollectionIds.length === 0) {
+      toast({
+        kind: "error",
+        title: "No Selection",
+        message: "Please select at least one collection"
+      });
+      return;
+    }
     await processApproval(selectedCollectionIds);
   };
+
+  const handleSelectAll = () => {
+    const allVisibleIds = pendingCollections.map(c => c.id);
+    setSelectedCollectionIds(allVisibleIds);
+  };
+
+  const handleClearAll = () => {
+    setSelectedCollectionIds([]);
+  };
+
+  const isAllSelected = pendingCollections.length > 0 && selectedCollectionIds.length === pendingCollections.length;
 
   const handleAccept = async (collectionId: string) => {
     await processApproval([collectionId]);
@@ -176,9 +194,26 @@ export default function SubscriptionsPendingPage() {
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-2xl font-bold text-gray-900">Pending Collection Approvals</h2>
-            <p className="text-gray-600 mt-1">
-              Review and approve pending subscription collections
-            </p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-gray-600">
+                Review and approve pending subscription collections
+              </p>
+              <label className="flex items-center text-sm text-gray-600 cursor-pointer hover:text-gray-800">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      handleSelectAll();
+                    } else {
+                      handleClearAll();
+                    }
+                  }}
+                  className="mr-2"
+                />
+                Select All
+              </label>
+            </div>
           </div>
           
           <div className="p-6">
@@ -211,7 +246,7 @@ export default function SubscriptionsPendingPage() {
                       ) : (
                         <>
                           <Check className="w-4 h-4 mr-2" />
-                          Confirm All Received
+                          Confirm Selected Received
                         </>
                       )}
                     </button>
