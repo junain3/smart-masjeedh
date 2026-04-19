@@ -40,6 +40,7 @@ export default function SubscriptionsPendingPage() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>([]);
 
   // Check if user has approval permission
   const canApprove = tenantContext?.permissions?.subscriptions_approve || tenantContext?.role === 'super_admin';
@@ -81,208 +82,62 @@ export default function SubscriptionsPendingPage() {
     }
   };
 
-  const handleAccept = async (collectionId: string) => {
-    if (!user || !tenantContext?.masjidId) return;
-    
-    setProcessing(collectionId);
-    
-    try {
-      // First, fetch the pending collection row safely without relation
-      const { data: collection, error: fetchError } = await supabase
-        .from("subscription_collections")
-        .select("*")
-        .eq("id", collectionId)
-        .single();
-
-      if (fetchError) throw fetchError;
-      if (!collection) throw new Error("Collection not found");
-
-      // Fetch family details separately if needed for description
-      let family = null;
-      if (collection.family_id) {
-        const { data: familyData, error: familyError } = await supabase
-          .from("families")
-          .select("id, family_code, head_name")
-          .eq("id", collection.family_id)
-          .single();
-        
-        if (!familyError) {
-          family = familyData;
-        }
-      }
-
-      // Update the collection status to accepted
-      const { error: updateError } = await supabase
-        .from("subscription_collections")
-        .update({
-          status: "accepted",
-          accepted_by_user_id: user.id,
-          accepted_at: new Date().toISOString()
-        })
-        .eq("id", collectionId);
-
-      if (updateError) throw updateError;
-
-      // Create main accounts transaction
-      const { data: transactionData, error: transactionError } = await supabase
-        .from("transactions")
-        .insert({
-          masjid_id: tenantContext.masjidId,
-          user_id: user.id,
-          family_id: collection.family_id,
-          amount: collection.amount,
-          description: `Subscription collection - ${family?.family_code || 'Unknown'}`,
-          type: "income",
-          category: "subscription",
-          date: collection.collected_at || collection.created_at,
-        })
-        .select()
-        .single();
-
-      if (transactionError) throw transactionError;
-
-      // Update collection with main transaction reference
-      if (transactionData) {
-        await supabase
-          .from("subscription_collections")
-          .update({ main_transaction_id: transactionData.id })
-          .eq("id", collectionId);
-      }
-
-      toast({
-        kind: "success",
-        title: "Collection Approved",
-        message: "Collection has been approved and posted to accounts",
-      });
-
-      fetchPendingCollections();
-    } catch (error: any) {
-      toast({
-        kind: "error",
-        title: "Approval Failed",
-        message: error.message || "Failed to approve collection",
-      });
-    } finally {
-      setProcessing(null);
-    }
-  };
-
-  const handleBulkConfirm = async () => {
-    if (!user || !tenantContext?.masjidId || pendingCollections.length === 0) return;
+  const processApproval = async (collectionIds: string[]) => {
+    if (!user || !tenantContext?.masjidId || collectionIds.length === 0) return;
     
     setBulkProcessing(true);
-    let successCount = 0;
-    let failureCount = 0;
-    const failures: string[] = [];
-
+    
     try {
-      for (const collection of pendingCollections) {
-        try {
-          // Fetch collection safely without relation
-          const { data: collectionData, error: fetchError } = await supabase
-            .from("subscription_collections")
-            .select("*")
-            .eq("id", collection.id)
-            .single();
+      const { data, error } = await supabase.rpc('approve_subscription_collections', {
+        p_collection_ids: collectionIds,
+        p_user_id: user.id,
+        p_masjid_id: tenantContext.masjidId
+      });
 
-          if (fetchError) {
-            failures.push(`Failed to fetch collection ${collection.id}: ${fetchError.message}`);
-            failureCount++;
-            continue;
-          }
+      if (error) throw error;
 
-          if (!collectionData) {
-            failures.push(`Collection ${collection.id} not found`);
-            failureCount++;
-            continue;
-          }
-
-          // Fetch family details separately if needed for description
-          let family = null;
-          if (collectionData.family_id) {
-            const { data: familyData, error: familyError } = await supabase
-              .from("families")
-              .select("id, family_code, head_name")
-              .eq("id", collectionData.family_id)
-              .single();
-            
-            if (!familyError) {
-              family = familyData;
-            }
-          }
-
-          // Create main accounts transaction
-          const { data: transaction, error: transactionError } = await supabase
-            .from("transactions")
-            .insert({
-              masjid_id: tenantContext.masjidId,
-              user_id: user.id,
-              family_id: collectionData.family_id,
-              amount: collectionData.amount,
-              description: `Subscription collection - ${family?.family_code || 'Unknown'}`,
-              type: "income",
-              category: "subscription",
-              date: collectionData.collected_at || collectionData.created_at,
-            })
-            .select()
-            .single();
-
-          if (transactionError) {
-            failures.push(`Failed to create transaction for ${collection.id}: ${transactionError.message}`);
-            failureCount++;
-            continue;
-          }
-
-          // Update collection status to accepted
-          const { error: updateError } = await supabase
-            .from("subscription_collections")
-            .update({
-              status: "accepted",
-              accepted_by_user_id: user.id,
-              accepted_at: new Date().toISOString(),
-              main_transaction_id: transaction.id
-            })
-            .eq("id", collection.id);
-
-          if (updateError) {
-            failures.push(`Failed to update collection ${collection.id}: ${updateError.message}`);
-            failureCount++;
-            continue;
-          }
-
-          successCount++;
-        } catch (error: any) {
-          failures.push(`Error processing collection ${collection.id}: ${error.message}`);
-          failureCount++;
-        }
-      }
-
-      // Show results
-      if (failureCount > 0) {
-        toast({
-          kind: "error",
-          title: "Partial Success",
-          message: `Successfully confirmed ${successCount} collections, but ${failureCount} failed. ${failures.join("; ")}`,
-        });
-      } else {
+      const result = data as any;
+      
+      if (result.success) {
         toast({
           kind: "success",
-          title: "All Confirmed",
-          message: `Successfully confirmed ${successCount} pending collections`,
+          title: "Collections Approved",
+          message: `Successfully approved ${result.success_count} collections. Total: Rs. ${result.total_amount?.toFixed(2)}`,
         });
+        
+        // Clear selection and refresh data
+        setSelectedCollectionIds([]);
+        fetchPendingCollections();
+      } else {
+        toast({
+          kind: "error",
+          title: "Approval Failed",
+          message: result.error || "Failed to approve collections",
+        });
+        
+        if (result.failures && result.failures.length > 0) {
+          console.error("Approval failures:", result.failures);
+        }
       }
-
-      // Refresh data
-      fetchPendingCollections();
     } catch (error: any) {
+      console.error("PROCESS_APPROVAL_ERROR", error);
       toast({
         kind: "error",
-        title: "Bulk Confirm Failed",
-        message: error.message || "Failed to confirm all pending collections",
+        title: "Approval Error",
+        message: error.message || "Failed to process approval",
       });
     } finally {
       setBulkProcessing(false);
     }
+  };
+
+  const handleBulkConfirm = async () => {
+    if (selectedCollectionIds.length === 0) return;
+    await processApproval(selectedCollectionIds);
+  };
+
+  const handleAccept = async (collectionId: string) => {
+    await processApproval([collectionId]);
   };
 
   if (!canApprove) {
@@ -383,6 +238,18 @@ export default function SubscriptionsPendingPage() {
                 {pendingCollections.map((collection) => (
                   <div key={collection.id} className="border border-gray-200 rounded-lg p-4">
                     <div className="flex items-start justify-between">
+                      <input
+                        type="checkbox"
+                        checked={selectedCollectionIds.includes(collection.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedCollectionIds([...selectedCollectionIds, collection.id]);
+                          } else {
+                            setSelectedCollectionIds(selectedCollectionIds.filter(id => id !== collection.id));
+                          }
+                        }}
+                        className="mt-1 mr-3"
+                      />
                       <div className="flex-1">
                         <div className="flex items-center space-x-4 mb-2">
                           <div>

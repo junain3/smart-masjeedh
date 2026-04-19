@@ -239,8 +239,7 @@ export default function FamilyDetailsPage() {
         .select("id, amount, status, collected_by_user_id, date, accepted_at, created_at")
         .eq("family_id", familyId)
         .eq("masjid_id", tenantContext.masjidId)
-        .eq("status", "accepted")
-        .order("created_at", { ascending: false });
+                .order("created_at", { ascending: false });
 
       console.log("DEBUG PAYMENTS QUERY:");
       console.log("- familyId:", familyId);
@@ -886,16 +885,31 @@ export default function FamilyDetailsPage() {
               payments.map((payment) => (
                 <div key={payment.id} className="bg-white rounded-2xl p-4 flex items-center justify-between border border-slate-50 shadow-sm animate-in fade-in duration-500">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-500">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                      payment.status === 'pending' ? 'bg-yellow-50 text-yellow-500' : 'bg-blue-50 text-blue-500'
+                    }`}>
                       <TrendingUp className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-black text-slate-800">Subscription Collection</h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-black text-slate-800">Subscription Collection</h4>
+                        <span className={`px-2 py-1 text-[10px] font-bold rounded-full ${
+                          payment.status === 'pending' 
+                            ? 'bg-yellow-100 text-yellow-700' 
+                            : 'bg-green-100 text-green-700'
+                        }`}>
+                          {payment.status === 'pending' ? 'Pending' : 'Accepted'}
+                        </span>
+                      </div>
                       <p className="text-[10px] font-bold text-slate-400 uppercase">{payment.collected_at || payment.created_at}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-black text-emerald-500">+ Rs. {payment.amount.toLocaleString()}</p>
+                    <p className={`font-black ${
+                      payment.status === 'pending' ? 'text-yellow-500' : 'text-emerald-500'
+                    }`}>
+                      + Rs. {payment.amount.toLocaleString()}
+                    </p>
                   </div>
                 </div>
               ))

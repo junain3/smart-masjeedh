@@ -89,57 +89,20 @@ const [commissionBalance, setCommissionBalance] = useState(0);
     loadData();
   }, [tenantContext?.masjidId, resumeTick]);
 
-  // Commission summary calculations
-  useEffect(() => {
-    const fetchCommissionSummary = async () => {
-      if (!tenantContext?.masjidId || !user?.id) return;
-
-      try {
-        // Total earned from accepted collections
-        const { data: earnedData } = await supabase
-          .from('subscription_collections')
-          .select('commission_amount')
-          .eq('collected_by_user_id', user.id)
-          .eq('masjid_id', tenantContext.masjidId)
-          .eq('status', 'accepted');
-
-        const earnedTotal = earnedData?.reduce((sum, item) => sum + (item.commission_amount || 0), 0) || 0;
-
-        // Total paid from commission payments
-        const { data: paidData } = await supabase
-          .from('collector_commission_payments')
-          .select('amount')
-          .eq('collector_user_id', user.id)
-          .eq('masjid_id', tenantContext.masjidId);
-
-        const paidTotal = paidData?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
-
-        setCommissionEarned(earnedTotal);
-        setCommissionPaid(paidTotal);
-        setCommissionBalance(earnedTotal - paidTotal);
-      } catch (err) {
-        console.error('Failed to fetch commission summary:', err);
-      }
-    };
-
-    fetchCommissionSummary();
-  }, [tenantContext?.masjidId, user?.id]);
-
+  
   const loadData = async () => {
     try {
-      if (!tenantContext) return;
+      if (!tenantContext || !user?.id) return;
 
-      // Get the authenticated user ID from auth, not from state
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
-
-      const authUserId = session.user.id;
+      const authUserId = user.id;
 
       // Load all data in parallel for better performance
       const [
         familiesResponse,
         collectionsResponse,
-        profileResponse
+        profileResponse,
+        earnedResponse,
+        paidResponse
       ] = await Promise.all([
         // Load families
         supabase
@@ -162,7 +125,22 @@ const [commissionBalance, setCommissionBalance] = useState(0);
           .select("default_commission_percent")
           .eq("masjid_id", tenantContext.masjidId)
           .eq("user_id", authUserId)
-          .maybeSingle()
+          .maybeSingle(),
+        
+        // Total earned from accepted collections
+        supabase
+          .from('subscription_collections')
+          .select('commission_amount')
+          .eq('collected_by_user_id', authUserId)
+          .eq('masjid_id', tenantContext.masjidId)
+          .eq('status', 'accepted'),
+          
+        // Total paid from commission payments
+        supabase
+          .from('collector_commission_payments')
+          .select('amount')
+          .eq('collector_user_id', authUserId)
+          .eq('masjid_id', tenantContext.masjidId)
       ]);
 
       // Add error guard for families
@@ -205,11 +183,18 @@ const [commissionBalance, setCommissionBalance] = useState(0);
       //   subscriptionMap.set(payment.family_id, existing);
       // });
 
+      // Calculate commission totals
+      const earnedTotal = earnedResponse.data?.reduce((sum, item) => sum + (item.commission_amount || 0), 0) || 0;
+      const paidTotal = paidResponse.data?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+
       setFamilies(familiesData || []);
       setCollections(collectionsWithFamilies || []);
       setFamilySubscriptions(subscriptionMap);
       setWaitingBalance(null); // balanceData?.[0] || null); // Disabled until RPC exists
       setCommissionRate(profileData?.default_commission_percent || 0);
+      setCommissionEarned(earnedTotal);
+      setCommissionPaid(paidTotal);
+      setCommissionBalance(earnedTotal - paidTotal);
     } catch (e: any) {
       setError(e.message || "Failed to load data");
     } finally {
@@ -441,8 +426,9 @@ const [commissionBalance, setCommissionBalance] = useState(0);
         masjid_id: ctx.masjidId,
         family_id: selectedFamilyId,
         amount: amountNum,
-        commission_percent: commissionRate,
-        commission_amount: commissionAmount,
+        commission_percent: 0,
+        commission_amount: 0,
+        status: 'pending',
         notes: notes || null,
         collected_by_user_id: authUserId,
         date: new Date().toISOString().split('T')[0]
@@ -464,42 +450,8 @@ const [commissionBalance, setCommissionBalance] = useState(0);
         throw insertError;
       }
 
-      // Create staff commission if there's a commission amount and the collector is a staff member
-      if (commissionAmount > 0) {
-        try {
-          // Check if the collector is a staff member
-          const { data: staffRole } = await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', authUserId)
-            .eq('masjid_id', ctx.masjidId)
-            .single();
-
-          if (staffRole && ['staff', 'editor'].includes(staffRole.role)) {
-            // Create pending commission
-            const { error: commissionError } = await supabase
-              .from('employee_commissions')
-              .insert({
-                masjid_id: ctx.masjidId,
-                staff_user_id: authUserId,
-                collection_id: data.id,
-                commission_amount: commissionAmount,
-                commission_percent: commissionRate,
-                collection_amount: amountNum,
-                status: 'pending',
-                notes: `Auto-generated commission for collection of ${amountNum} from family ${selectedFamilyId}`
-              });
-
-            if (commissionError) {
-              console.error('Failed to create staff commission:', commissionError);
-              // Don't throw error - collection was successful, just log commission issue
-            }
-          }
-        } catch (commissionErr) {
-          console.error('Error checking staff role or creating commission:', commissionErr);
-          // Don't throw error - collection was successful
-        }
-      }
+      // Phase 1: Commission creation moved to approval time
+      // No employee_commissions record created at collection time
 
       console.log('🔥 Collection successful, calling loadData()');
       setSuccess("Collection recorded successfully!");
