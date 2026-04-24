@@ -165,7 +165,7 @@ export default function CommissionsPage() {
       setPayoutAmount("");
       setPayoutNote("");
       
-      toast({ kind: "success", title: "Success", message: `Payment of Rs. ${Number(payoutAmount).toLocaleString()} processed successfully!` });
+      toast({ kind: "success", title: "Success", message: "Payment of Rs. " + Number(payoutAmount).toLocaleString() + " processed successfully!" });
     } catch (err: any) {
       toast({ kind: "error", title: "Error", message: "Payment failed: " + err.message });
     } finally {
@@ -219,11 +219,7 @@ export default function CommissionsPage() {
                 <button
                   key={status}
                   onClick={() => setFilter(status)}
-                  className={`py-4 px-6 border-b-2 font-medium text-sm capitalize ${
-                    filter === status
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
+                  className={"py-4 px-6 border-b-2 font-medium text-sm capitalize " + (filter === status ? "border-blue-500 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")}
                 >
                   {status} ({status === 'all' ? commissions.length : commissions.filter(c => c.status === status).length})
                 </button>
@@ -298,7 +294,7 @@ export default function CommissionsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(commission.status)}`}>
+                        <span className={"inline-flex px-2 py-1 text-xs font-semibold rounded-full " + getStatusColor(commission.status)}>
                           {commission.status}
                         </span>
                       </td>
@@ -419,6 +415,7 @@ export default function CommissionsPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
   );
+}
 }
