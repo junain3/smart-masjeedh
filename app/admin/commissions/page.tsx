@@ -37,13 +37,6 @@ export default function CommissionsPage() {
         .from('staff_commissions')
         .select(`
           *,
-          collector:auth.users!staff_commissions_collector_user_id_fkey(email),
-          paid_by:auth.users!staff_commissions_paid_by_user_id_fkey(email),
-          collection:subscription_collections(
-            family:families(family_code, head_name),
-            collected_by_user:auth.users(email)
-          )
-        `)
         .eq('masjid_id', tenantContext.masjidId);
 
       if (filter !== 'all') {
