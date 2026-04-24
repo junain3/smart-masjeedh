@@ -81,13 +81,6 @@ export default function StaffPage() {
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [submitting, setSubmitting] = useState(false);
 
-  // Payout Modal states
-  const [showPayoutModal, setShowPayoutModal] = useState(false);
-  const [selectedCollector, setSelectedCollector] = useState<string | null>(null);
-  const [payoutAmount, setPayoutAmount] = useState("");
-  const [payoutNote, setPayoutNote] = useState("");
-  const [collectorBalance, setCollectorBalance] = useState(0);
-  const [payoutSubmitting, setPayoutSubmitting] = useState(false);
   const [staffBalances, setStaffBalances] = useState<{[key: string]: number}>({});
 
   // Staff Profile View states (simplified)
@@ -417,101 +410,6 @@ export default function StaffPage() {
     }
   };
 
-  const handlePayoutCommission = async (collectorUserId: string, payoutAmount: number) => {
-    try {
-      const { error } = await supabase
-        .from('collector_commission_payments')
-        .insert({
-          masjid_id: tenantContext.masjidId,
-          collector_user_id: collectorUserId,
-          amount: payoutAmount,
-          paid_at: new Date().toISOString(),
-          paid_by_user_id: user.id,
-          note: 'Commission payout'
-        });
-
-      if (error) throw error;
-
-      alert(`Paid Rs. ${payoutAmount}`);
-    } catch (err: any) {
-      console.error(err);
-      alert("Payment failed");
-    }
-  };
-
-  const openPayoutModal = async (collectorId: string) => {
-    setSelectedCollector(collectorId);
-    setPayoutAmount("");
-    setPayoutNote("");
-    
-    // Fetch collector's current balance
-    try {
-      const { data: collections } = await supabase
-        .from('subscription_collections')
-        .select('commission_amount')
-        .eq('collected_by_user_id', collectorId)
-        .eq('masjid_id', tenantContext?.masjidId)
-        .eq('status', 'accepted');
-
-      const { data: payments } = await supabase
-        .from('collector_commission_payments')
-        .select('amount')
-        .eq('collector_user_id', collectorId)
-        .eq('masjid_id', tenantContext?.masjidId);
-
-      const earned = collections?.reduce((sum, item) => sum + (item.commission_amount || 0), 0) || 0;
-      const paid = payments?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
-      
-      setCollectorBalance(earned - paid);
-      setShowPayoutModal(true);
-    } catch (err) {
-      console.error('Failed to fetch collector balance:', err);
-      alert('Failed to fetch collector balance');
-    }
-  };
-
-  const handlePayoutSubmit = async () => {
-    if (!selectedCollector || !payoutAmount || Number(payoutAmount) <= 0) {
-      alert('Please enter a valid amount');
-      return;
-    }
-
-    setPayoutSubmitting(true);
-    try {
-      // Insert payment record
-      const { error: paymentError } = await supabase
-        .from('collector_commission_payments')
-        .insert({
-          masjid_id: tenantContext?.masjidId,
-          collector_user_id: selectedCollector,
-          amount: Number(payoutAmount),
-          paid_at: new Date().toISOString(),
-          paid_by_user_id: user?.id,
-          note: payoutNote || 'Commission payout'
-        });
-
-      if (paymentError) throw paymentError;
-
-      // Update collector balance in profile (if needed)
-      // Note: Balance is calculated dynamically, so no direct update needed
-
-      // Refresh staff data
-      await fetchStaff();
-      
-      // Close modal and reset
-      setShowPayoutModal(false);
-      setSelectedCollector(null);
-      setPayoutAmount("");
-      setPayoutNote("");
-      
-      alert(`Payment of Rs. ${Number(payoutAmount).toLocaleString()} successful!`);
-    } catch (err: any) {
-      console.error('Payment failed:', err);
-      alert('Payment failed: ' + err.message);
-    } finally {
-      setPayoutSubmitting(false);
-    }
-  };
 
   const handlePermissionChange = (permission: string, value: boolean) => {
     setPermissions(prev => ({
@@ -1755,91 +1653,6 @@ export default function StaffPage() {
                 className="flex-1 py-3 bg-emerald-600 text-white rounded-3xl font-medium hover:bg-emerald-700 transition-colors"
               >
                 Save Permissions
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Payout Modal */}
-      {showPayoutModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-md mx-4">
-            {/* Modal Header with Green Gradient */}
-            <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 -mx-8 -mt-8 px-8 pt-8 pb-6 rounded-t-3xl mb-6">
-              <div className="flex items-center justify-between">
-                <div className="text-white">
-                  <h2 className="text-xl font-bold">Pay Commission</h2>
-                  <p className="text-emerald-100 text-sm">Process commission payment</p>
-                </div>
-                <button 
-                  onClick={() => setShowPayoutModal(false)}
-                  className="text-white hover:bg-emerald-500 p-2 rounded-xl transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Current Balance Display */}
-            <div className="bg-emerald-50 rounded-2xl p-4 mb-6 border border-emerald-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-emerald-600 mb-1">Current Pending Balance</p>
-                  <p className="text-2xl font-black text-emerald-700">Rs. {collectorBalance.toLocaleString()}</p>
-                </div>
-                <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-                  <Wallet className="w-6 h-6 text-emerald-600" />
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Form */}
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-2">
-                  Amount to Pay
-                </label>
-                <input
-                  type="number"
-                  placeholder="Enter amount"
-                  value={payoutAmount}
-                  onChange={(e) => setPayoutAmount(e.target.value)}
-                  className="w-full px-4 py-3 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  disabled={payoutSubmitting}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-2">
-                  Notes (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Feb 2026 Commission"
-                  value={payoutNote}
-                  onChange={(e) => setPayoutNote(e.target.value)}
-                  className="w-full px-4 py-3 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  disabled={payoutSubmitting}
-                />
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowPayoutModal(false)}
-                className="flex-1 py-3 border border-neutral-200 rounded-2xl font-medium hover:bg-neutral-50 transition-colors"
-                disabled={payoutSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePayoutSubmit}
-                className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-2xl font-medium hover:from-emerald-700 hover:to-emerald-800 transition-all"
-                disabled={payoutSubmitting}
-              >
-                {payoutSubmitting ? 'Processing...' : 'Pay Commission'}
               </button>
             </div>
           </div>

@@ -13,6 +13,14 @@ export default function CommissionsPage() {
   const [commissions, setCommissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  
+  // Payout Modal states
+  const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [selectedCollector, setSelectedCollector] = useState<string | null>(null);
+  const [payoutAmount, setPayoutAmount] = useState("");
+  const [payoutNote, setPayoutNote] = useState("");
+  const [collectorBalance, setCollectorBalance] = useState(0);
+  const [payoutSubmitting, setPayoutSubmitting] = useState(false);
 
   useEffect(() => {
     if (tenantContext?.masjidId) {
@@ -101,6 +109,75 @@ export default function CommissionsPage() {
       toast({ kind: "error", title: "Error", message: err.message || "Failed to reject commission" });
     }
   }
+
+  const openPayoutModal = async (collectorId: string) => {
+    setSelectedCollector(collectorId);
+    setPayoutAmount("");
+    setPayoutNote("");
+    
+    // Fetch collector's current balance
+    try {
+      const { data: collections } = await supabase
+        .from('subscription_collections')
+        .select('commission_amount')
+        .eq('collected_by_user_id', collectorId)
+        .eq('masjid_id', tenantContext?.masjidId)
+        .eq('status', 'accepted');
+
+      const { data: payments } = await supabase
+        .from('collector_commission_payments')
+        .select('amount')
+        .eq('collector_user_id', collectorId)
+        .eq('masjid_id', tenantContext?.masjidId);
+
+      const earned = collections?.reduce((sum, item) => sum + (item.commission_amount || 0), 0) || 0;
+      const paid = payments?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+      
+      setCollectorBalance(earned - paid);
+      setShowPayoutModal(true);
+    } catch (err) {
+      toast({ kind: "error", title: "Error", message: "Failed to fetch collector balance" });
+    }
+  };
+
+  const handlePayoutSubmit = async () => {
+    if (!selectedCollector || !payoutAmount || Number(payoutAmount) <= 0) {
+      toast({ kind: "error", title: "Error", message: "Please enter a valid amount" });
+      return;
+    }
+
+    setPayoutSubmitting(true);
+    try {
+      // Insert payment record
+      const { error: paymentError } = await supabase
+        .from('collector_commission_payments')
+        .insert({
+          masjid_id: tenantContext?.masjidId,
+          collector_user_id: selectedCollector,
+          amount: Number(payoutAmount),
+          paid_at: new Date().toISOString(),
+          paid_by_user_id: user?.id,
+          note: payoutNote || 'Commission payout'
+        });
+
+      if (paymentError) throw paymentError;
+
+      // Refresh commissions data
+      await fetchCommissions();
+      
+      // Close modal and reset
+      setShowPayoutModal(false);
+      setSelectedCollector(null);
+      setPayoutAmount("");
+      setPayoutNote("");
+      
+      toast({ kind: "success", title: "Success", message: `Payment of Rs. ${Number(payoutAmount).toLocaleString()} processed successfully!` });
+    } catch (err: any) {
+      toast({ kind: "error", title: "Error", message: "Payment failed: " + err.message });
+    } finally {
+      setPayoutSubmitting(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -232,24 +309,33 @@ export default function CommissionsPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        {commission.status === 'pending' && (
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => approveCommission(commission.id)}
-                              className="text-green-600 hover:text-green-900"
-                              title="Approve"
-                            >
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => rejectCommission(commission.id)}
-                              className="text-red-600 hover:text-red-900"
-                              title="Reject"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex space-x-2">
+                          {commission.status === 'pending' && (
+                            <>
+                              <button
+                                onClick={() => approveCommission(commission.id)}
+                                className="text-green-600 hover:text-green-900"
+                                title="Approve"
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => rejectCommission(commission.id)}
+                                className="text-red-600 hover:text-red-900"
+                                title="Reject"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => openPayoutModal(commission.staff_user_id)}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="Pay Commission"
+                          >
+                            <DollarSign className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -259,6 +345,86 @@ export default function CommissionsPage() {
           )}
         </div>
       </div>
+
+      {/* Payout Modal */}
+      {showPayoutModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-3xl p-8 w-full max-w-md mx-4">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 -mx-8 -mt-8 px-8 pt-8 pb-6 rounded-t-3xl mb-6">
+              <div className="flex items-center justify-between">
+                <div className="text-white">
+                  <h2 className="text-xl font-bold">Pay Commission</h2>
+                  <p className="text-blue-100 text-sm">Process commission payment</p>
+                </div>
+                <button 
+                  onClick={() => setShowPayoutModal(false)}
+                  className="text-white hover:bg-blue-500 p-2 rounded-xl transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Current Balance Display */}
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-2xl">
+              <div className="flex justify-between items-center">
+                <span className="text-blue-700 font-medium">Available Balance:</span>
+                <span className="text-blue-900 font-bold text-lg">Rs. {collectorBalance.toLocaleString()}</span>
+              </div>
+            </div>
+
+            {/* Form Fields */}
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payout Amount (Rs.)
+                </label>
+                <input
+                  type="number"
+                  placeholder="Enter amount"
+                  value={payoutAmount}
+                  onChange={(e) => setPayoutAmount(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={payoutSubmitting}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Note (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Feb 2026 Commission"
+                  value={payoutNote}
+                  onChange={(e) => setPayoutNote(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={payoutSubmitting}
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowPayoutModal(false)}
+                className="flex-1 py-3 border border-gray-300 rounded-2xl font-medium hover:bg-gray-50 transition-colors"
+                disabled={payoutSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePayoutSubmit}
+                className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-2xl font-medium hover:from-blue-700 hover:to-blue-800 transition-all"
+                disabled={payoutSubmitting}
+              >
+                {payoutSubmitting ? 'Processing...' : 'Pay Commission'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
