@@ -34,10 +34,9 @@ export default function CommissionsPage() {
     setLoading(true);
     try {
       let query = supabase
-        .from('staff_commissions')
-        .select(`
-          *,
-        .eq('masjid_id', tenantContext.masjidId);
+  .from('staff_commissions')
+  .select('*')
+  .eq('masjid_id', tenantContext.masjidId);
 
       if (filter !== 'all') {
         query = query.eq('status', filter);
@@ -418,4 +417,4 @@ export default function CommissionsPage() {
       </div>
   );
 }
-}
+
