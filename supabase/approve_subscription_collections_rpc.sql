@@ -22,6 +22,7 @@ DECLARE
     v_current_collection_ids TEXT[];
     v_unique_collector_ids UUID[];
     v_existing_commission_ids UUID[];
+    v_existing_staff_commission_user_ids UUID[];
 BEGIN
     -- Validate input parameters
     IF p_collection_ids IS NULL OR array_length(p_collection_ids, 1) = 0 THEN
@@ -75,6 +76,15 @@ BEGIN
     FROM public.employee_commissions
     WHERE collection_id = ANY(p_collection_ids);
     
+    -- Step 5.1: Check for existing staff commissions to prevent duplicates
+    SELECT array_agg(DISTINCT collector_user_id) INTO v_existing_staff_commission_user_ids
+    FROM public.staff_commissions
+    WHERE collector_user_id IN (
+        SELECT collected_by_user_id FROM public.subscription_collections
+        WHERE id = ANY(p_collection_ids)
+    )
+    AND created_at >= NOW() - INTERVAL '1 hour';
+    
     -- Step 6: Process each collection
     FOR v_collection IN 
         SELECT sc.*, f.family_code
@@ -87,6 +97,13 @@ BEGIN
             -- Skip if commission already exists
             IF v_collection.id = ANY(v_existing_commission_ids) THEN
                 v_failures := array_append(v_failures, format('Collection %s already has commission record', v_collection.id));
+                v_failure_count := v_failure_count + 1;
+                CONTINUE;
+            END IF;
+            
+            -- Skip if staff commission already exists for this collector recently
+            IF v_collection.collected_by_user_id = ANY(v_existing_staff_commission_user_ids) THEN
+                v_failures := array_append(v_failures, format('Staff commission already exists for collector %s', v_collection.collected_by_user_id));
                 v_failure_count := v_failure_count + 1;
                 CONTINUE;
             END IF;
@@ -112,6 +129,21 @@ BEGIN
                 v_collection.collected_by_user_id,
                 v_collection.id,
                 v_commission_amount,
+                NOW()
+            );
+            
+            -- Step 6c.1: Create staff commission record for admin dashboard
+            INSERT INTO public.staff_commissions (
+                masjid_id,
+                collector_user_id,
+                amount,
+                status,
+                created_at
+            ) VALUES (
+                p_masjid_id,
+                v_collection.collected_by_user_id,
+                v_commission_amount,
+                'pending',
                 NOW()
             );
             

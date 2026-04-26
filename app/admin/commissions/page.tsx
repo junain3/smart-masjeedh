@@ -259,7 +259,7 @@ export default function CommissionsPage() {
                           <User className="w-5 h-5 text-gray-400 mr-2" />
                           <div>
                             <div className="text-sm font-medium text-gray-900">
-                              {commission.staff_user?.email}
+                              {commission.collector_user_id || 'Unknown Collector'}
                             </div>
                             <div className="text-xs text-gray-500">Collected by: {commission.collection?.collected_by_user?.email}</div>
                           </div>
