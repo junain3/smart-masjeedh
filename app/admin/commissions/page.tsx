@@ -45,7 +45,33 @@ export default function CommissionsPage() {
        const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
-      setCommissions(data || []);
+      
+      // Fetch employees separately
+      const commissions = data || [];
+      const uniqueCollectorIds = [...new Set(commissions.map(c => c.collector_user_id).filter(Boolean))];
+      
+      let commissionsWithEmployees = commissions;
+      
+      if (uniqueCollectorIds.length > 0) {
+        const { data: employees, error: employeeError } = await supabase
+          .from('employees')
+          .select('id, name')
+          .in('id', uniqueCollectorIds);
+          
+        if (!employeeError && employees) {
+          const employeeMap = employees.reduce((map, emp) => {
+            map[emp.id] = emp.name;
+            return map;
+          }, {} as Record<string, string>);
+          
+          commissionsWithEmployees = commissions.map(commission => ({
+            ...commission,
+            employee_name: employeeMap[commission.collector_user_id]
+          }));
+        }
+      }
+      
+      setCommissions(commissionsWithEmployees);
     } catch (err: any) {
       toast({ kind: "error", title: "Error", message: err.message || "Failed to fetch commissions" });
     } finally {
@@ -56,7 +82,7 @@ export default function CommissionsPage() {
   async function approveCommission(commissionId: string) {
     try {
       const { error } = await supabase
-        .from('staff_commconst {issions')
+        .from('staff_commissions')
         .update({
           status: 'approved',
           approved_by_user_id: user?.id,
@@ -259,7 +285,7 @@ export default function CommissionsPage() {
                           <User className="w-5 h-5 text-gray-400 mr-2" />
                           <div>
                             <div className="text-sm font-medium text-gray-900">
-                              {commission.collector_user_id || 'Unknown Collector'}
+                              {commission.employee_name || commission.collector_user_id || 'Unknown Collector'}
                             </div>
                             <div className="text-xs text-gray-500">Collected by: {commission.collector_user_id || 'Unknown'}</div>
                           </div>
