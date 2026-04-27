@@ -261,29 +261,29 @@ export default function CommissionsPage() {
                             <div className="text-sm font-medium text-gray-900">
                               {commission.collector_user_id || 'Unknown Collector'}
                             </div>
-                            <div className="text-xs text-gray-500">Collected by: {commission.collection?.collected_by_user?.email}</div>
+                            <div className="text-xs text-gray-500">Collected by: {commission.collector_user_id || 'Unknown'}</div>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {commission.collection?.family?.head_name}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {commission.collection?.family?.family_code}
-                          </div>
+                            <div className="text-sm font-medium text-gray-900">
+                              Collection ID: {commission.collection_id || 'No collection ID'}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              Amount: Rs. {(commission.amount || 0).toLocaleString()}
+                            </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        Rs. {commission.collection_amount.toLocaleString()}
+                        Rs. {(commission.amount || 0).toLocaleString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          Rs. {commission.commission_amount.toLocaleString()}
+                          Rs. {(commission.amount || 0).toLocaleString()}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {commission.commission_percent}%
+                          Commission
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -318,7 +318,7 @@ export default function CommissionsPage() {
                             </>
                           )}
                           <button
-                            onClick={() => openPayoutModal(commission.staff_user_id)}
+                            onClick={() => openPayoutModal(commission.collector_user_id)}
                             className="text-blue-600 hover:text-blue-900"
                             title="Pay Commission"
                           >
