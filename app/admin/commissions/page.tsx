@@ -42,7 +42,7 @@ export default function CommissionsPage() {
         query = query.eq('status', filter);
       }
 
-       data, error } = await query.order('created_at', { ascending: false });
+       const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
       setCommissions(data || []);
