@@ -17,6 +17,8 @@ function InviteRegisterContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -120,7 +122,26 @@ function InviteRegisterContent() {
 
       console.log('DEBUG: Creating user role for masjid:', invitation.masjid_id);
       
-      // Step 2: Insert into user_roles (critical step)
+      // Step 2: Insert into user_profiles (new step)
+      const { error: userProfileError } = await supabase
+        .from('user_profiles')
+        .insert([
+          {
+            id: data.user.id,
+            masjid_id: invitation.masjid_id,
+            full_name: fullName,
+            phone: phone || null,
+            role: invitation.role,
+            email: invitation.email
+          }
+        ]);
+
+      if (userProfileError) {
+        console.error('Failed to create user profile:', userProfileError);
+        // Don't fail registration, just log error
+      }
+
+      // Step 3: Insert into user_roles (critical step)
       const roleMap: { [key: string]: string } = {
         'co admin': 'co_admin',
         'co_admin': 'co_admin',
@@ -155,8 +176,8 @@ function InviteRegisterContent() {
         return;
       }
 
-      // Step 3: Create collector profile (always runs)
-      const { error: profileError } = await supabase
+      // Step 4: Create collector profile (always runs)
+      const { error: collectorProfileError } = await supabase
         .from('subscription_collector_profiles')
         .upsert({
           masjid_id: invitation.masjid_id,
@@ -166,9 +187,9 @@ function InviteRegisterContent() {
           onConflict: 'masjid_id,user_id'
         });
 
-      if (profileError) {
-        console.error('Failed to create collector profile:', profileError);
-        // Don't fail registration, just log the error
+      if (collectorProfileError) {
+        console.error('Failed to create collector profile:', collectorProfileError);
+        // Don't fail registration, just log error
       }
 
       // Step 4: Update invitation status to accepted
@@ -250,6 +271,33 @@ function InviteRegisterContent() {
               <p className="text-sm text-emerald-700">
                 <strong>பங்கு:</strong> {invitation.role === 'co_admin' ? 'இணை நிர்வாகி' : 'ஊழியர்'}
               </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                முழு பெயர் *
+              </label>
+              <input
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="Enter your full name"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                தொலைப்பு எண் (விரும்பம்)
+              </label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="Enter your phone number"
+              />
             </div>
 
             <div>

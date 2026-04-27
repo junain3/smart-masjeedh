@@ -46,51 +46,30 @@ export default function CommissionsPage() {
 
       if (error) throw error;
       
-      // Fetch employees through subscription_collector_profiles mapping
+      // Fetch user profiles for collector names
       const commissions = data || [];
       const uniqueCollectorIds = [...new Set(commissions.map(c => c.collector_user_id).filter(Boolean))];
       
       let commissionsWithEmployees = commissions;
       
       if (uniqueCollectorIds.length > 0) {
-        // Step 1: Fetch subscription_collector_profiles
-        const { data: profiles, error: profileError } = await supabase
-          .from('subscription_collector_profiles')
-          .select('user_id, collector_employee_id')
-          .in('user_id', uniqueCollectorIds);
+        // Step 1: Fetch user_profiles
+        const { data: userProfiles, error: userProfileError } = await supabase
+          .from('user_profiles')
+          .select('id, full_name')
+          .in('id', uniqueCollectorIds);
           
-        if (!profileError && profiles) {
-          const profileMap = profiles.reduce((map, profile) => {
-            map[profile.user_id] = profile.collector_employee_id;
+        if (!userProfileError && userProfiles) {
+          const userProfileMap = userProfiles.reduce((map, profile) => {
+            map[profile.id] = profile.full_name;
             return map;
           }, {} as Record<string, string>);
           
-          // Step 2: Get unique employee IDs
-          const uniqueEmployeeIds = [...new Set(Object.values(profileMap).filter(Boolean))];
-          
-          if (uniqueEmployeeIds.length > 0) {
-            // Step 3: Fetch employees
-            const { data: employees, error: employeeError } = await supabase
-              .from('employees')
-              .select('id, name')
-              .in('id', uniqueEmployeeIds);
-              
-            if (!employeeError && employees) {
-              const employeeMap = employees.reduce((map, emp) => {
-                map[emp.id] = emp.name;
-                return map;
-              }, {} as Record<string, string>);
-              
-              // Step 4: Map commissions with employee names
-              commissionsWithEmployees = commissions.map(commission => {
-                const employeeId = profileMap[commission.collector_user_id];
-                return {
-                  ...commission,
-                  employee_name: employeeMap[employeeId] || commission.collector_user_id
-                };
-              });
-            }
-          }
+          // Step 2: Map commissions with user profile names
+          commissionsWithEmployees = commissions.map(commission => ({
+            ...commission,
+            employee_name: userProfileMap[commission.collector_user_id] || commission.collector_user_id
+          }));
         }
       }
       
