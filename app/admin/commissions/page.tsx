@@ -35,7 +35,14 @@ export default function CommissionsPage() {
     try {
       let query = supabase
   .from('staff_commissions')
-  .select('*')
+  .select(`
+    *,
+    employee:employees!staff_commissions_collector_user_id_fkey (
+      id,
+      name,
+      phone
+    )
+  `)
   .eq('masjid_id', tenantContext.masjidId);
 
       if (filter !== 'all') {
