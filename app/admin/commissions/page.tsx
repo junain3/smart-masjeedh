@@ -35,21 +35,14 @@ export default function CommissionsPage() {
     try {
       let query = supabase
   .from('staff_commissions')
-  .select(`
-    *,
-    employee:employees!staff_commissions_collector_user_id_fkey (
-      id,
-      name,
-      phone
-    )
-  `)
+  .select('*')
   .eq('masjid_id', tenantContext.masjidId);
 
       if (filter !== 'all') {
         query = query.eq('status', filter);
       }
 
-      const { data, error } = await query.order('created_at', { ascending: false });
+       data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
       setCommissions(data || []);
@@ -63,7 +56,7 @@ export default function CommissionsPage() {
   async function approveCommission(commissionId: string) {
     try {
       const { error } = await supabase
-        .from('staff_commissions')
+        .from('staff_commconst {issions')
         .update({
           status: 'approved',
           approved_by_user_id: user?.id,
@@ -128,7 +121,7 @@ export default function CommissionsPage() {
         .from('collector_commission_payments')
         .select('amount')
         .eq('collector_user_id', collectorId)
-        .eq('masjid_id', tenantContext?.masjidId);
+        .eq('masjid_id', tenantContext.masjidId)
 
       const earned = collections?.reduce((sum, item) => sum + (item.commission_amount || 0), 0) || 0;
       const paid = payments?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
