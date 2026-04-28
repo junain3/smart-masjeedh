@@ -70,7 +70,7 @@ export default function StaffPage() {
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [activeView, setActiveView] = useState<'all' | 'staff' | 'admins'>('all');
+  const [activeTab, setActiveTab] = useState<'administrators' | 'employees'>('employees');
 
   // Form states
   const [name, setName] = useState("");
@@ -831,23 +831,42 @@ export default function StaffPage() {
     return labels[key] || key;
   };
 
+  // Classification logic for administrators vs employees
+  const classifiedStaff = useMemo(() => {
+    const administrators: Staff[] = [];
+    const employees: Staff[] = [];
+
+    staff.forEach(staffMember => {
+      // Salary-based classification:
+      // Only salary === 0 → Administrator
+      // salary > 0 → Employee
+      // salary undefined/null → Employee (default)
+      
+      const salary = Number(staffMember.basic_salary ?? -1);
+
+      if (salary === 0) {
+        administrators.push(staffMember);
+      } else {
+        employees.push(staffMember);
+      }
+    });
+
+    return { administrators, employees };
+  }, [staff]);
+
   const filteredStaff = useMemo(() => {
-    let filtered = staff.filter(staffMember => {
+    const { administrators, employees } = classifiedStaff;
+    const sourceList = activeTab === 'administrators' ? administrators : employees;
+    
+    let filtered = sourceList.filter(staffMember => {
       const matchesSearch = staffMember.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            staffMember.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            staffMember.phone.includes(searchQuery);
       return matchesSearch;
     });
 
-    // Filter by view type
-    if (activeView === 'staff') {
-      filtered = filtered.filter(s => s.role === 'staff' || s.role === 'editor');
-    } else if (activeView === 'admins') {
-      filtered = filtered.filter(s => s.role === 'super_admin' || s.role === 'co_admin');
-    }
-
     return filtered;
-  }, [staff, searchQuery, activeView]);
+  }, [classifiedStaff, activeTab, searchQuery]);
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -1066,20 +1085,44 @@ export default function StaffPage() {
             />
           </div>
 
-          {/* Staff List */}
+          {/* Staff Tabs */}
           <div className="bg-white rounded-3xl border border-neutral-200 overflow-hidden">
             <div className="p-6 border-b border-neutral-200">
-              <h2 className="text-lg font-black text-neutral-900">Staff Members</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-black text-neutral-900">Staff Management</h2>
+                <div className="flex bg-neutral-100 rounded-xl p-1">
+                  <button
+                    onClick={() => setActiveTab('administrators')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === 'administrators'
+                        ? 'bg-white text-neutral-900 shadow-sm'
+                        : 'text-neutral-600 hover:text-neutral-900'
+                    }`}
+                  >
+                    Administrators ({classifiedStaff.administrators.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('employees')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === 'employees'
+                        ? 'bg-white text-neutral-900 shadow-sm'
+                        : 'text-neutral-600 hover:text-neutral-900'
+                    }`}
+                  >
+                    Employees ({classifiedStaff.employees.length})
+                  </button>
+                </div>
+              </div>
             </div>
             
             {filteredStaff.length === 0 ? (
               <div className="p-12 text-center">
                 <Users className="w-16 h-16 mx-auto mb-4 text-neutral-300" />
                 <h3 className="text-lg font-semibold text-neutral-900 mb-2">
-                  {searchQuery ? "No staff found" : "No staff members"}
+                  {searchQuery ? `No ${activeTab} found` : `No ${activeTab}`}
                 </h3>
                 <p className="text-sm text-neutral-600">
-                  {searchQuery ? "Try a different search term" : "Add your first staff member to get started"}
+                  {searchQuery ? "Try a different search term" : `Add your first ${activeTab.slice(0, -1)} to get started`}
                 </p>
               </div>
             ) : (
@@ -1090,8 +1133,12 @@ export default function StaffPage() {
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Staff Member</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Contact</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Role</th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Basic Salary</th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Pending Balance</th>
+                      {activeTab === 'employees' && (
+                        <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Basic Salary</th>
+                      )}
+                      {activeTab === 'employees' && (
+                        <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Collection Access</th>
+                      )}
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Status</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Actions</th>
                     </tr>
@@ -1122,7 +1169,16 @@ export default function StaffPage() {
                               <Users className="w-5 h-5 text-emerald-600" />
                             </div>
                             <div className="ml-4">
-                              <div className="text-sm font-medium text-neutral-900">{staffMember.name}</div>
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  router.push(`/staff/employees/${staffMember.user_id || staffMember.id}`);
+                                }}
+                                className="text-sm font-medium text-emerald-600 hover:text-emerald-800 text-left"
+                              >
+                                {staffMember.name}
+                              </button>
                               <div className="text-xs text-neutral-500">ID: {staffMember.id}</div>
                             </div>
                           </div>
@@ -1136,24 +1192,34 @@ export default function StaffPage() {
                             {staffMember.role.replace('_', ' ')}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-900">
-                          Rs. {staffMember.basic_salary.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center mr-3">
-                              <Wallet className="w-4 h-4 text-emerald-600" />
-                            </div>
-                            <div>
-                              <div className="text-sm font-medium text-emerald-700">
-                                Rs. {(staffBalances[staffMember.user_id || ''] || 0).toLocaleString()}
+                        {activeTab === 'employees' && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-900">
+                            Rs. {staffMember.basic_salary.toLocaleString()}
+                          </td>
+                        )}
+                        {activeTab === 'employees' && (
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center mr-3">
+                                <Wallet className="w-4 h-4 text-emerald-600" />
                               </div>
-                              <div className="text-xs text-neutral-500">
-                                Available Commission
+                              <div>
+                                <div className="text-sm font-medium text-emerald-700">
+                                  {staffMember.permissions?.subscriptions_collect ? (
+                                    <span className="text-green-600">
+                                      {(staffMember.commission_rate || 0)}% Commission
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-500">No Access</span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-neutral-500">
+                                  Rs. {(staffBalances[staffMember.user_id || ''] || 0).toLocaleString()} Balance
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
+                        )}
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(staffMember.status)}`}>
                             {staffMember.status}
