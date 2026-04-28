@@ -33,6 +33,7 @@ export type Staff = {
   phone: string;
   role: "super_admin" | "co_admin" | "staff" | "editor";
   basic_salary: number;
+  salary_amount?: number;
   status: "active" | "inactive";
   created_at: string;
   masjid_id: string;
@@ -836,13 +837,13 @@ export default function StaffPage() {
     const administrators: Staff[] = [];
     const employees: Staff[] = [];
 
-    staff.forEach(staffMember => {
+    (staff || []).forEach(staffMember => {
       // Salary-based classification:
       // Only salary === 0 → Administrator
       // salary > 0 → Employee
       // salary undefined/null → Employee (default)
       
-      const salary = Number(staffMember.basic_salary ?? -1);
+      const salary = Number((staffMember.salary_amount ?? staffMember.basic_salary) ?? -1);
 
       if (salary === 0) {
         administrators.push(staffMember);
@@ -858,7 +859,7 @@ export default function StaffPage() {
     const { administrators, employees } = classifiedStaff;
     const sourceList = activeTab === 'administrators' ? administrators : employees;
     
-    let filtered = sourceList.filter(staffMember => {
+    let filtered = (sourceList || []).filter(staffMember => {
       const matchesSearch = staffMember.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            staffMember.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            staffMember.phone.includes(searchQuery);
@@ -1144,7 +1145,7 @@ export default function StaffPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200">
-                    {filteredStaff.map((staffMember) => {
+                    {(filteredStaff || []).map((staffMember) => {
                       console.log("DEBUG STAFF:", {
                         name: staffMember.name,
                         email: staffMember.email,
@@ -1194,7 +1195,7 @@ export default function StaffPage() {
                         </td>
                         {activeTab === 'employees' && (
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-900">
-                            Rs. {staffMember.basic_salary.toLocaleString()}
+                            Rs. {(staffMember.salary_amount ?? staffMember.basic_salary ?? 0).toLocaleString()}
                           </td>
                         )}
                         {activeTab === 'employees' && (
