@@ -279,7 +279,6 @@ export default function StaffPage() {
             name: name,
             email: hasAppAccess() ? email : null,
             phone_number: phone,
-            designation: role,
             salary_type: "monthly",
             salary_amount: parseFloat(basicSalary),
             status: status
