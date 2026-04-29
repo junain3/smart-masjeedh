@@ -277,10 +277,9 @@ export default function StaffPage() {
           .insert({
             masjid_id: ctx.masjidId,
             name: name,
-            phone_number: phone,
-            salary_type: "monthly",
-            salary_amount: parseFloat(basicSalary),
-            status: status
+            phone: phone,
+            role: role,
+            monthly_salary: parseFloat(basicSalary)
           })
           .select()
           .single();
@@ -328,16 +327,16 @@ export default function StaffPage() {
           id: insertedStaff.id, // Use real Supabase UUID
           employee_id: insertedStaff.id, // Set employee_id for navigation
           name: insertedStaff.name,
-          email: insertedStaff.email,
-          phone: insertedStaff.phone_number,
-          role: insertedStaff.designation,
-          basic_salary: insertedStaff.salary_amount,
-          status: insertedStaff.status,
-          created_at: insertedStaff.created_at,
+          email: hasAppAccess() ? email : null, // Email from form, not from DB
+          phone: insertedStaff.phone || '',
+          role: insertedStaff.role || role,
+          basic_salary: insertedStaff.monthly_salary || 0,
+          status: 'active' as "active" | "inactive", // UI fallback
+          created_at: insertedStaff.created_at || new Date().toISOString(),
           masjid_id: insertedStaff.masjid_id,
           user_id: hasAppAccess() ? ctx.userId : null,
           permissions: hasAppAccess() ? permissions : undefined,
-          commission_rate: hasAppAccess() ? (insertedStaff.commission_percent || undefined) : undefined,
+          commission_rate: hasAppAccess() ? (permissions?.subscriptions_collect ? 10 : undefined) : undefined,
           enable_collection: hasAppAccess() ? (permissions?.subscriptions_collect || false) : false
         };
 
