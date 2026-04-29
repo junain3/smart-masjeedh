@@ -282,8 +282,7 @@ export default function StaffPage() {
             designation: role,
             salary_type: "monthly",
             salary_amount: parseFloat(basicSalary),
-            status: status,
-            created_by: ctx.userId
+            status: status
           })
           .select()
           .single();
