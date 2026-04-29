@@ -210,10 +210,28 @@ export default function StaffPage() {
     }
   }
 
+  // Check if app access is required based on role and permissions
+  const hasAppAccess = () => {
+    return role === 'super_admin' || 
+           role === 'co_admin' || 
+           Object.values(permissions).some(permission => permission === true);
+  };
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!supabase) return;
     setSubmitting(true);
+
+    // Validation: Email is required if app access is enabled
+    if (hasAppAccess() && !email.trim()) {
+      toast({ 
+        kind: "error", 
+        title: "Validation Error", 
+        message: "Email is required when app access is enabled" 
+      });
+      setSubmitting(false);
+      return;
+    }
 
     try {
       const ctx = tenantContext || await getTenantContext();
@@ -230,7 +248,10 @@ export default function StaffPage() {
                 phone, 
                 role, 
                 basic_salary: parseFloat(basicSalary), 
-                status 
+                status,
+                permissions: hasAppAccess() ? permissions : undefined,
+                commission_rate: hasAppAccess() ? (permissions?.subscriptions_collect ? 10 : undefined) : undefined,
+                enable_collection: hasAppAccess() ? (permissions?.subscriptions_collect || false) : false
               }
             : s
         ));
@@ -239,24 +260,35 @@ export default function StaffPage() {
         const newStaff: Staff = {
           id: Date.now().toString(),
           name,
-          email,
+          email: hasAppAccess() ? email : null,
           phone,
           role,
           basic_salary: parseFloat(basicSalary),
           status,
           created_at: new Date().toISOString(),
           masjid_id: ctx.masjidId,
-          user_id: ctx.userId,
-          permissions,
-          commission_rate: 10, // Default commission rate
-          enable_collection: permissions?.subscriptions_collect || false
+          user_id: hasAppAccess() ? ctx.userId : null, // Only assign user_id if app access
+          permissions: hasAppAccess() ? permissions : undefined,
+          commission_rate: hasAppAccess() ? (permissions?.subscriptions_collect ? 10 : undefined) : undefined,
+          enable_collection: hasAppAccess() ? (permissions?.subscriptions_collect || false) : false
         };
         setStaff(prev => [...prev, newStaff]);
+
+        // If app access is enabled, we would normally trigger invite/login creation flow
+        // For now, we'll just note this in the success message
+        if (hasAppAccess()) {
+          console.log("App access enabled - would trigger invite flow for:", email);
+        }
       }
 
       setIsModalOpen(false);
       resetForm();
-      toast({ kind: "success", title: "Success", message: `Staff ${editingStaff ? "updated" : "added"} successfully` });
+      const accessMessage = hasAppAccess() ? " with app access" : " without app access";
+      toast({ 
+        kind: "success", 
+        title: "Success", 
+        message: `Staff ${editingStaff ? "updated" : "added"} successfully${accessMessage}` 
+      });
     } catch (err: any) {
       toast({ kind: "error", title: "Error", message: err.message || "Failed to save staff" });
     } finally {
@@ -1513,16 +1545,21 @@ export default function StaffPage() {
 
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-2">
-                  Email
+                  Email {hasAppAccess() && <span className="text-red-500">*</span>}
                 </label>
                 <input
                   type="email"
-                  required
+                  required={hasAppAccess()}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="Enter email address"
+                  placeholder={hasAppAccess() ? "Email required for app access" : "Enter email address (optional)"}
                 />
+                {!hasAppAccess() && (
+                  <p className="text-xs text-neutral-500 mt-1">
+                    Optional: Only required if app access is enabled
+                  </p>
+                )}
               </div>
 
               <div>
