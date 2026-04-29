@@ -28,6 +28,7 @@ type Permissions = {
 
 export type Staff = {
   id: string;
+  employee_id?: string;
   name: string;
   email: string;
   phone: string;
@@ -269,28 +270,57 @@ export default function StaffPage() {
             : s
         ));
       } else {
-        // Create new staff (mock - replace with real DB insert)
+        // Create new staff in employees table
+        const { data: insertedStaff, error: insertError } = await supabase
+          .from("employees")
+          .insert({
+            masjid_id: ctx.masjidId,
+            name: name,
+            email: hasAppAccess() ? email : null,
+            phone_number: phone,
+            designation: role,
+            salary_type: "monthly",
+            salary_amount: parseFloat(basicSalary),
+            commission_percent: hasAppAccess() && permissions?.subscriptions_collect ? 10 : 0,
+            status: status,
+            created_by: ctx.userId
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          throw insertError;
+        }
+
+        if (!insertedStaff) {
+          throw new Error("Failed to create staff record");
+        }
+
+        // Convert to Staff type and add to local state
         const newStaff: Staff = {
-          id: Date.now().toString(),
-          name,
-          email: hasAppAccess() ? email : null,
-          phone,
-          role,
-          basic_salary: parseFloat(basicSalary),
-          status,
-          created_at: new Date().toISOString(),
-          masjid_id: ctx.masjidId,
-          user_id: hasAppAccess() ? ctx.userId : null, // Only assign user_id if app access
+          id: insertedStaff.id, // Use real Supabase UUID
+          employee_id: insertedStaff.id, // Set employee_id for navigation
+          name: insertedStaff.name,
+          email: insertedStaff.email,
+          phone: insertedStaff.phone_number,
+          role: insertedStaff.designation,
+          basic_salary: insertedStaff.salary_amount,
+          status: insertedStaff.status,
+          created_at: insertedStaff.created_at,
+          masjid_id: insertedStaff.masjid_id,
+          user_id: hasAppAccess() ? ctx.userId : null,
           permissions: hasAppAccess() ? permissions : undefined,
-          commission_rate: hasAppAccess() ? (permissions?.subscriptions_collect ? 10 : undefined) : undefined,
+          commission_rate: hasAppAccess() ? (insertedStaff.commission_percent || undefined) : undefined,
           enable_collection: hasAppAccess() ? (permissions?.subscriptions_collect || false) : false
         };
+
+        // Add to local state with real UUID
         setStaff(prev => [...prev, newStaff]);
 
-        // If app access is enabled, we would normally trigger invite/login creation flow
-        // For now, we'll just note this in the success message
+        // If app access is enabled, trigger invite/login creation flow
         if (hasAppAccess()) {
           console.log("App access enabled - would trigger invite flow for:", email);
+          // TODO: Implement actual invite flow here
         }
       }
 
