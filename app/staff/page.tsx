@@ -842,7 +842,7 @@ export default function StaffPage() {
 
     safeStaff.forEach((staffMember) => {
       const salary = Number(
-        (staffMember.salary_amount ?? staffMember.basic_salary ?? -1)
+        ((staffMember.salary_amount ?? staffMember.basic_salary) ?? -1)
       );
 
       if (salary === 0) {
@@ -995,34 +995,24 @@ export default function StaffPage() {
         <div className="px-4 lg:px-6">
           <div className="flex space-x-2 bg-neutral-100 rounded-2xl p-1">
             <button 
-              onClick={() => setActiveView('all')}
+              onClick={() => setActiveTab('administrators')}
               className={`flex-1 py-2 px-4 rounded-xl font-medium transition-colors ${
-                activeView === 'all' 
+                activeTab === 'administrators' 
                   ? 'bg-emerald-600 text-white' 
                   : 'text-neutral-600 hover:text-neutral-900'
               }`}
             >
-              All Staff ({staff.length})
+              Administrators ({classifiedStaff.administrators.length})
             </button>
             <button 
-              onClick={() => setActiveView('staff')}
+              onClick={() => setActiveTab('employees')}
               className={`flex-1 py-2 px-4 rounded-xl font-medium transition-colors ${
-                activeView === 'staff' 
+                activeTab === 'employees' 
                   ? 'bg-emerald-600 text-white' 
                   : 'text-neutral-600 hover:text-neutral-900'
               }`}
             >
-              Staff ({staff.filter(s => s.role === 'staff' || s.role === 'editor').length})
-            </button>
-            <button 
-              onClick={() => setActiveView('admins')}
-              className={`flex-1 py-2 px-4 rounded-xl font-medium transition-colors ${
-                activeView === 'admins' 
-                  ? 'bg-emerald-600 text-white' 
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
-            >
-              Admins ({staff.filter(s => s.role === 'super_admin' || s.role === 'co_admin').length})
+              Employees ({classifiedStaff.employees.length})
             </button>
           </div>
         </div>
@@ -1195,7 +1185,7 @@ export default function StaffPage() {
                         </td>
                         {activeTab === 'employees' && (
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-900">
-                            Rs. {Number(staffMember.salary_amount ?? staffMember.basic_salary ?? 0 || 0).toLocaleString()}
+                            Rs. {Number(((staffMember.salary_amount ?? staffMember.basic_salary) ?? 0) || 0).toLocaleString()}
                           </td>
                         )}
                         {activeTab === 'employees' && (
