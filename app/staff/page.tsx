@@ -1164,9 +1164,9 @@ export default function StaffPage() {
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  router.push(`/staff/employees/${staffMember.user_id || staffMember.id || ''}`);
+                                  router.push(`/staff/employees/${staffMember.id || staffMember.user_id || ''}`);
                                 }}
-                                className="text-sm font-medium text-emerald-600 hover:text-emerald-800 text-left"
+                                className="text-sm font-medium text-emerald-600 hover:text-emerald-800 hover:underline text-left cursor-pointer"
                               >
                                 {staffMember.name || 'Unknown'}
                               </button>
