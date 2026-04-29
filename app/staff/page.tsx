@@ -29,6 +29,7 @@ type Permissions = {
 export type Staff = {
   id: string;
   employee_id?: string;
+  auth_user_id?: string;
   name: string;
   email: string;
   phone: string;
@@ -281,7 +282,6 @@ export default function StaffPage() {
             designation: role,
             salary_type: "monthly",
             salary_amount: parseFloat(basicSalary),
-            commission_percent: hasAppAccess() && permissions?.subscriptions_collect ? 10 : 0,
             status: status,
             created_by: ctx.userId
           })
@@ -294,6 +294,36 @@ export default function StaffPage() {
 
         if (!insertedStaff) {
           throw new Error("Failed to create staff record");
+        }
+
+        // If collection access is enabled, create subscription collector profile
+        // Only if staff has valid auth user (requires app login)
+        if (hasAppAccess() && permissions?.subscriptions_collect) {
+          // Check if staff has auth user (requires email and app access)
+          if (!email || !hasAppAccess()) {
+            toast({
+              kind: "warning",
+              title: "Collection Access",
+              message: "Collection access requires app login"
+            });
+          } else {
+            // For now, we need to create the auth user first or get existing auth user
+            // TODO: Implement user creation/invite flow to get staff auth user_id
+            // For now, skip collector profile creation until auth user exists
+            
+            console.log("Collection access enabled - waiting for auth user creation for:", email);
+            
+            // Future implementation:
+            // 1. Create/invite auth user for staff
+            // 2. Get the auth user_id
+            // 3. Create collector profile with staff's auth user_id
+            
+            toast({
+              kind: "info",
+              title: "Collection Access",
+              message: "Staff user account will be created to enable collection access"
+            });
+          }
         }
 
         // Convert to Staff type and add to local state
