@@ -653,7 +653,7 @@ export default function StaffPage() {
     }
 
     // Additional safety check
-    if (staffMember.name.toLowerCase().includes('admin') || staffMember.email.includes('admin')) {
+    if ((staffMember.name || '').toLowerCase().includes('admin') || (staffMember.email || '').includes('admin')) {
       toast({ 
         kind: "error", 
         title: "ACCESS DENIED", 
@@ -832,18 +832,18 @@ export default function StaffPage() {
     return labels[key] || key;
   };
 
+  // Protect staff before useMemo
+  const safeStaff = Array.isArray(staff) ? staff : [];
+
   // Classification logic for administrators vs employees
   const classifiedStaff = useMemo(() => {
     const administrators: Staff[] = [];
     const employees: Staff[] = [];
 
-    (staff || []).forEach(staffMember => {
-      // Salary-based classification:
-      // Only salary === 0 → Administrator
-      // salary > 0 → Employee
-      // salary undefined/null → Employee (default)
-      
-      const salary = Number((staffMember.salary_amount ?? staffMember.basic_salary) ?? -1);
+    safeStaff.forEach((staffMember) => {
+      const salary = Number(
+        (staffMember.salary_amount ?? staffMember.basic_salary ?? -1)
+      );
 
       if (salary === 0) {
         administrators.push(staffMember);
@@ -853,21 +853,26 @@ export default function StaffPage() {
     });
 
     return { administrators, employees };
-  }, [staff]);
+  }, [safeStaff]);
 
   const filteredStaff = useMemo(() => {
-    const { administrators, employees } = classifiedStaff;
-    const sourceList = activeTab === 'administrators' ? administrators : employees;
-    
-    let filtered = (sourceList || []).filter(staffMember => {
-      const matchesSearch = staffMember.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           staffMember.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           staffMember.phone.includes(searchQuery);
-      return matchesSearch;
-    });
+  const sourceList =
+    activeTab === 'administrators'
+      ? classifiedStaff?.administrators || []
+      : classifiedStaff?.employees || [];
 
-    return filtered;
-  }, [classifiedStaff, activeTab, searchQuery]);
+  return sourceList.filter((staffMember) => {
+    const name = String(staffMember?.name || '');
+    const email = String(staffMember?.email || '');
+    const phone = String(staffMember?.phone || '');
+
+    return (
+      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      phone.includes(searchQuery)
+    );
+  });
+}, [classifiedStaff, activeTab, searchQuery]);
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -907,6 +912,8 @@ export default function StaffPage() {
   if (!tenantContext?.permissions?.staff_management) {
     return <div>Access Denied</div>;
   }
+
+  if (!safeStaff) return null;
 
   return (
     <div className="min-h-screen bg-neutral-50 flex">
@@ -1051,7 +1058,7 @@ export default function StaffPage() {
                 <div>
                   <p className="text-sm text-neutral-600 mb-1">Total Salary</p>
                   <p className="text-2xl font-black text-neutral-900">
-                    Rs. {staff.reduce((sum, s) => sum + s.basic_salary, 0).toLocaleString()}
+                    Rs. {Number(staff.reduce((sum, s) => sum + (s.basic_salary || 0), 0) || 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center">
@@ -1116,7 +1123,7 @@ export default function StaffPage() {
               </div>
             </div>
             
-            {filteredStaff.length === 0 ? (
+            {(!filteredStaff || filteredStaff.length === 0) ? (
               <div className="p-12 text-center">
                 <Users className="w-16 h-16 mx-auto mb-4 text-neutral-300" />
                 <h3 className="text-lg font-semibold text-neutral-900 mb-2">
@@ -1145,14 +1152,7 @@ export default function StaffPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200">
-                    {(filteredStaff || []).map((staffMember) => {
-                      console.log("DEBUG STAFF:", {
-                        name: staffMember.name,
-                        email: staffMember.email,
-                        role: staffMember.role,
-                        user_id: staffMember.user_id
-                      });
-                      
+                    {Array.isArray(filteredStaff) && filteredStaff.map((staffMember) => {
                       return (
                       <tr 
                         key={staffMember.id} 
@@ -1174,28 +1174,28 @@ export default function StaffPage() {
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  router.push(`/staff/employees/${staffMember.user_id || staffMember.id}`);
+                                  router.push(`/staff/employees/${staffMember.user_id || staffMember.id || ''}`);
                                 }}
                                 className="text-sm font-medium text-emerald-600 hover:text-emerald-800 text-left"
                               >
-                                {staffMember.name}
+                                {staffMember.name || 'Unknown'}
                               </button>
-                              <div className="text-xs text-neutral-500">ID: {staffMember.id}</div>
+                              <div className="text-xs text-neutral-500">ID: {staffMember.id || 'Unknown'}</div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-neutral-900">{staffMember.email}</div>
-                          <div className="text-xs text-neutral-500">{staffMember.phone}</div>
+                          <div className="text-sm text-neutral-900">{staffMember.email || 'No email'}</div>
+                          <div className="text-xs text-neutral-500">{staffMember.phone || 'No phone'}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(staffMember.role)}`}>
-                            {staffMember.role.replace('_', ' ')}
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(staffMember.role || 'staff')}`}>
+                            {(staffMember.role || 'staff').replace('_', ' ')}
                           </span>
                         </td>
                         {activeTab === 'employees' && (
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-900">
-                            Rs. {(staffMember.salary_amount ?? staffMember.basic_salary ?? 0).toLocaleString()}
+                            Rs. {Number(staffMember.salary_amount ?? staffMember.basic_salary ?? 0 || 0).toLocaleString()}
                           </td>
                         )}
                         {activeTab === 'employees' && (
@@ -1215,15 +1215,15 @@ export default function StaffPage() {
                                   )}
                                 </div>
                                 <div className="text-xs text-neutral-500">
-                                  Rs. {(staffBalances[staffMember.user_id || ''] || 0).toLocaleString()} Balance
+                                  Rs. {Number(staffBalances[staffMember.user_id || ''] || 0).toLocaleString()} Balance
                                 </div>
                               </div>
                             </div>
                           </td>
                         )}
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(staffMember.status)}`}>
-                            {staffMember.status}
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(staffMember.status || 'active')}`}>
+                            {staffMember.status || 'active'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
