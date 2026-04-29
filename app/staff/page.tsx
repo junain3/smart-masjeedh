@@ -43,6 +43,19 @@ export type Staff = {
   enable_collection?: boolean;
 };
 
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const a = parts[0]?.[0] || "?";
+  const b = parts.length > 1 ? parts[parts.length - 1]?.[0] : "";
+  return (a + b).toUpperCase();
+}
+
+// Helper function to validate UUID
+function isUuid(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+}
+
 export default function StaffPage() {
   const router = useRouter();
   const { toast, confirm } = useAppToast();
@@ -1178,13 +1191,7 @@ export default function StaffPage() {
                       return (
                       <tr 
                         key={staffMember.id} 
-                        className="hover:bg-neutral-50 cursor-pointer"
-                        onClick={(e) => {
-                          console.log("DEBUG: Table row clicked for:", staffMember.name);
-                          e.preventDefault();
-                          e.stopPropagation();
-                          openStaffProfile(staffMember);
-                        }}
+                        className="hover:bg-neutral-50"
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
@@ -1196,7 +1203,29 @@ export default function StaffPage() {
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  router.push(`/staff/employees/${staffMember.id || staffMember.user_id || ''}`);
+                                  
+                                  // Choose detailId in priority order
+                                  let detailId = null;
+                                  
+                                  if (staffMember.employee_id && isUuid(staffMember.employee_id)) {
+                                    detailId = staffMember.employee_id;
+                                  } else if (staffMember.id && isUuid(staffMember.id)) {
+                                    detailId = staffMember.id;
+                                  } else if (staffMember.user_id && isUuid(staffMember.user_id)) {
+                                    detailId = staffMember.user_id;
+                                  } else if (staffMember.auth_user_id && isUuid(staffMember.auth_user_id)) {
+                                    detailId = staffMember.auth_user_id;
+                                  }
+                                  
+                                  if (detailId) {
+                                    router.push(`/staff/employees/${detailId}`);
+                                  } else {
+                                    toast({
+                                      kind: "error",
+                                      title: "Access Error",
+                                      message: "Staff detail is not available for this record"
+                                    });
+                                  }
                                 }}
                                 className="text-sm font-medium text-emerald-600 hover:text-emerald-800 hover:underline text-left cursor-pointer"
                               >

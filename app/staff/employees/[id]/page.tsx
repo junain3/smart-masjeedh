@@ -83,7 +83,8 @@ export default function EmployeeProfilePage() {
 
       let loaded: Employee | null = null;
 
-      // Prefer employees table (full details) when available
+      // Try to load by multiple UUID fields in priority order
+      // 1. Try employees.id = id
       const { data: empRow, error: empErr } = await supabase
         .from("employees")
         .select("id, masjid_id, name, role, address, phone, photo_url, monthly_salary")
@@ -94,7 +95,7 @@ export default function EmployeeProfilePage() {
       if (!empErr && empRow) {
         loaded = empRow as any;
       } else {
-        // fallback to user_roles based employee listing
+        // 2. Try user_roles.user_id = id
         const { data: roleRow, error: roleErr } = await supabase
           .from("user_roles")
           .select("user_id, masjid_id, role, email")
@@ -102,20 +103,43 @@ export default function EmployeeProfilePage() {
           .eq("masjid_id", ctx.masjidId)
           .maybeSingle();
 
-        if (roleErr) throw roleErr;
-        if (!roleRow) throw new Error("Employee not found");
-        const email = (roleRow as any).email as string | null;
-        const display = email ? email.split("@")[0] : (roleRow as any).user_id;
-        loaded = {
-          id: (roleRow as any).user_id,
-          masjid_id: (roleRow as any).masjid_id,
-          name: display,
-          role: (roleRow as any).role || "staff",
-          address: "",
-          phone: "",
-          photo_url: null,
-          monthly_salary: null,
-        };
+        if (!roleErr && roleRow) {
+          const email = (roleRow as any).email as string | null;
+          const display = email ? email.split("@")[0] : (roleRow as any).user_id;
+          loaded = {
+            id: (roleRow as any).user_id,
+            masjid_id: (roleRow as any).masjid_id,
+            name: display,
+            role: (roleRow as any).role || "staff",
+            address: "",
+            phone: "",
+            photo_url: null,
+            monthly_salary: null,
+          };
+        } else {
+          // 3. Try user_profiles.id = id
+          const { data: profileRow, error: profileErr } = await supabase
+            .from("user_profiles")
+            .select("id, masjid_id, full_name, email, phone, photo_url")
+            .eq("id", employeeId)
+            .eq("masjid_id", ctx.masjidId)
+            .maybeSingle();
+
+          if (!profileErr && profileRow) {
+            loaded = {
+              id: (profileRow as any).id,
+              masjid_id: (profileRow as any).masjid_id,
+              name: (profileRow as any).full_name || "Unknown",
+              role: "staff",
+              address: "",
+              phone: (profileRow as any).phone || "",
+              photo_url: (profileRow as any).photo_url,
+              monthly_salary: null,
+            };
+          } else {
+            throw new Error("Staff member not found");
+          }
+        }
       }
 
       setEmployee(loaded);
