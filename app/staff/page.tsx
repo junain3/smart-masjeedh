@@ -277,7 +277,6 @@ export default function StaffPage() {
           .insert({
             masjid_id: ctx.masjidId,
             name: name,
-            email: hasAppAccess() ? email : null,
             phone_number: phone,
             salary_type: "monthly",
             salary_amount: parseFloat(basicSalary),
