@@ -185,9 +185,40 @@ export default function StaffPage() {
         return;
       }
 
-      // Auto-add current user as Super Admin if no staff exists
-      const mockStaff: Staff[] = staff.length === 0 ? [
-        {
+      // Fetch real staff from employees table
+      const { data: employees, error: fetchError } = await supabase
+        .from("employees")
+        .select('id, masjid_id, name, phone, role, monthly_salary, created_at, address, photo_url')
+        .eq("masjid_id", ctx.masjidId)
+        .order("created_at", { ascending: false });
+
+      if (fetchError) {
+        console.error("Fetch error:", fetchError);
+        throw fetchError;
+      }
+
+      // Map employee rows to UI Staff objects
+      const staffList: Staff[] = (employees || []).map((row: any) => ({
+        id: row.id,
+        employee_id: row.id,
+        name: row.name || 'Unknown',
+        phone: row.phone || '',
+        role: row.role || 'staff',
+        basic_salary: Number(row.monthly_salary || 0),
+        status: 'active' as "active" | "inactive", // UI fallback
+        created_at: row.created_at,
+        masjid_id: row.masjid_id,
+        user_id: null, // Will be set separately for app access
+        email: null, // Will be set separately for app access
+        permissions: undefined, // Will be set separately for app access
+        commission_rate: undefined, // Will be set separately for app access
+        enable_collection: false // Will be set separately for app access
+      }));
+
+      // Add current user as Super Admin if they don't exist in employees
+      const currentUserInEmployees = staffList.some(s => s.user_id === ctx.userId);
+      if (!currentUserInEmployees && user) {
+        const superAdmin: Staff = {
           id: ctx.userId || "current_user",
           name: user?.name || user?.email || "Super Admin",
           email: user?.email || "admin@mjm.com",
@@ -210,10 +241,11 @@ export default function StaffPage() {
           },
           commission_rate: 0,
           enable_collection: false
-        }
-      ] : [];
+        };
+        staffList.push(superAdmin);
+      }
       
-      setStaff(mockStaff);
+      setStaff(staffList);
       
       // Fetch staff balances after staff data is loaded
       fetchStaffBalances();
@@ -942,9 +974,7 @@ export default function StaffPage() {
     const employees: Staff[] = [];
 
     safeStaff.forEach((staffMember) => {
-      const salary = Number(
-        ((staffMember.salary_amount ?? staffMember.basic_salary) ?? -1)
-      );
+      const salary = Number(staffMember.basic_salary || 0);
 
       if (salary === 0) {
         administrators.push(staffMember);
