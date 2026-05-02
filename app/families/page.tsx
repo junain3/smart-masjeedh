@@ -21,6 +21,18 @@ type Family = {
   subscription_amount?: number;
   opening_balance?: number;
   is_widow_head?: boolean;
+  // New fields for enhanced data collection
+  house_type?: 'own' | 'rent';
+  has_toilet?: boolean;
+  special_needs_details?: string;
+  foreign_members_details?: string;
+  health_details?: string;
+  has_car?: boolean;
+  has_three_wheeler?: boolean;
+  has_van?: boolean;
+  has_lorry?: boolean;
+  has_tractor?: boolean;
+  extra_notes?: string;
 };
 
 const dummyFamilies: Family[] = [
@@ -72,6 +84,22 @@ export default function FamiliesPage() {
   const [openingBalance, setOpeningBalance] = useState("");
   const [isWidowHead, setIsWidowHead] = useState(false);
   const [isLive, setIsLive] = useState(false);
+  
+  // New fields for enhanced data collection
+  const [houseType, setHouseType] = useState<"own" | "rent" | "">("");
+  const [hasToilet, setHasToilet] = useState(false);
+  const [specialNeedsDetails, setSpecialNeedsDetails] = useState("");
+  const [foreignMembersDetails, setForeignMembersDetails] = useState("");
+  const [healthDetails, setHealthDetails] = useState("");
+  const [hasCar, setHasCar] = useState(false);
+  const [hasThreeWheeler, setHasThreeWheeler] = useState(false);
+  const [hasVan, setHasVan] = useState(false);
+  const [hasLorry, setHasLorry] = useState(false);
+  const [hasTractor, setHasTractor] = useState(false);
+  const [extraNotes, setExtraNotes] = useState("");
+  
+  // Step management for 3-step form
+  const [currentStep, setCurrentStep] = useState(1);
   const [families, setFamilies] = useState<Family[]>([]);
   const [isFetching, setIsFetching] = useState(false);
   const [editingFamily, setEditingFamily] = useState<Family | null>(null);
@@ -113,7 +141,22 @@ export default function FamiliesPage() {
       setSubscriptionAmount(editingFamily.subscription_amount?.toString() || "");
       setOpeningBalance(editingFamily.opening_balance?.toString() || "");
       setIsWidowHead(editingFamily.is_widow_head || false);
+      
+      // Set new fields
+      setHouseType(editingFamily.house_type || "");
+      setHasToilet(editingFamily.has_toilet || false);
+      setSpecialNeedsDetails(editingFamily.special_needs_details || "");
+      setForeignMembersDetails(editingFamily.foreign_members_details || "");
+      setHealthDetails(editingFamily.health_details || "");
+      setHasCar(editingFamily.has_car || false);
+      setHasThreeWheeler(editingFamily.has_three_wheeler || false);
+      setHasVan(editingFamily.has_van || false);
+      setHasLorry(editingFamily.has_lorry || false);
+      setHasTractor(editingFamily.has_tractor || false);
+      setExtraNotes(editingFamily.extra_notes || "");
+      
       setIsOpen(true);
+      setCurrentStep(1); // Reset to first step when editing
     }
   }, [editingFamily]);
 
@@ -227,7 +270,19 @@ export default function FamiliesPage() {
             phone,
             subscription_amount: parseFloat(subscriptionAmount) || 0,
             opening_balance: parseFloat(openingBalance) || 0,
-            is_widow_head: isWidowHead
+            is_widow_head: isWidowHead,
+            // New fields
+            house_type: houseType || null,
+            has_toilet: hasToilet,
+            special_needs_details: specialNeedsDetails || null,
+            foreign_members_details: foreignMembersDetails || null,
+            health_details: healthDetails || null,
+            has_car: hasCar,
+            has_three_wheeler: hasThreeWheeler,
+            has_van: hasVan,
+            has_lorry: hasLorry,
+            has_tractor: hasTractor,
+            extra_notes: extraNotes || null
           })
           .eq("id", editingFamily.id)
           .eq("masjid_id", tenantContext.masjidId);
@@ -247,6 +302,18 @@ export default function FamiliesPage() {
               subscription_amount: parseFloat(subscriptionAmount) || 0,
               opening_balance: parseFloat(openingBalance) || 0,
               is_widow_head: isWidowHead,
+              // New fields
+              house_type: houseType || null,
+              has_toilet: hasToilet,
+              special_needs_details: specialNeedsDetails || null,
+              foreign_members_details: foreignMembersDetails || null,
+              health_details: healthDetails || null,
+              has_car: hasCar,
+              has_three_wheeler: hasThreeWheeler,
+              has_van: hasVan,
+              has_lorry: hasLorry,
+              has_tractor: hasTractor,
+              extra_notes: extraNotes || null,
               user_id: authUserId, // Use authenticated user ID
               masjid_id: tenantContext.masjidId // Include masjid ID
             }
@@ -309,6 +376,18 @@ export default function FamiliesPage() {
     setSubscriptionAmount("");
     setOpeningBalance("");
     setIsWidowHead(false);
+    setHouseType("");
+    setHasToilet(false);
+    setSpecialNeedsDetails("");
+    setForeignMembersDetails("");
+    setHealthDetails("");
+    setHasCar(false);
+    setHasThreeWheeler(false);
+    setHasVan(false);
+    setHasLorry(false);
+    setHasTractor(false);
+    setExtraNotes("");
+    setCurrentStep(1);
     setEditingFamily(null);
   };
 
@@ -781,77 +860,94 @@ export default function FamiliesPage() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            
+
+            {/* Step Indicator */}
+            <div className="flex items-center justify-center mb-8">
+              <div className="flex items-center space-x-2">
+                {[1, 2, 3].map((step) => (
+                  <div key={step} className="flex items-center">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${
+                        currentStep === step
+                          ? 'bg-emerald-500 text-white'
+                          : step < currentStep
+                          ? 'bg-emerald-100 text-emerald-600'
+                          : 'bg-slate-100 text-slate-400'
+                      }`}
+                    >
+                      {step}
+                    </div>
+                    {step < 3 && (
+                      <div
+                        className={`w-8 h-0.5 ${
+                          step < currentStep ? 'bg-emerald-500' : 'bg-slate-200'
+                        }`}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.name}</label>
-                <input
-                  type="text"
-                  value={headName}
-                  onChange={(event) => setHeadName(event.target.value)}
-                  className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                  placeholder="Full Name"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.address}</label>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={(event) => setAddress(event.target.value)}
-                  className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                  placeholder="Complete Address"
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.phone}</label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(event) => setPhone(event.target.value)}
-                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                    placeholder="07XXXXXXXX"
-                    required
-                  />
+            {/* Step 1: Basic Family Details */}
+            {currentStep === 1 && (
+              <div className="space-y-5">
+                <div className="text-center mb-6">
+                  <h3 className="text-lg font-black text-slate-900">Basic Family Details</h3>
+                  <p className="text-xs text-slate-500 mt-1">Enter essential family information</p>
                 </div>
+                
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Family Code</label>
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.name}</label>
                   <input
                     type="text"
-                    value={familyCode}
-                    onChange={(event) => setFamilyCode(event.target.value)}
+                    value={headName}
+                    onChange={(event) => setHeadName(event.target.value)}
                     className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                    placeholder="M01"
+                    placeholder="Full Name"
                     required
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+                
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.annual_fee}</label>
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.address}</label>
                   <input
-                    type="number"
-                    value={subscriptionAmount}
-                    onChange={(event) => setSubscriptionAmount(event.target.value)}
+                    type="text"
+                    value={address}
+                    onChange={(event) => setAddress(event.target.value)}
                     className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                    placeholder="0.00"
+                    placeholder="Complete Address"
+                    required
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.opening_balance}</label>
-                  <input
-                    type="number"
-                    value={openingBalance}
-                    onChange={(event) => setOpeningBalance(event.target.value)}
-                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                    placeholder="0.00"
-                  />
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.phone}</label>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(event) => setPhone(event.target.value)}
+                      className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                      placeholder="Phone Number"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.family_code}</label>
+                    <input
+                      type="text"
+                      value={familyCode}
+                      onChange={(event) => setFamilyCode(event.target.value)}
+                      className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                      placeholder="Family Code"
+                      required
+                    />
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 pt-6">
+                
+                <div className="flex items-center gap-2 pt-4">
                   <input
                     type="checkbox"
                     id="widow_head"
@@ -863,15 +959,197 @@ export default function FamiliesPage() {
                     {t.widow_head}
                   </label>
                 </div>
+                
+                <div className="flex gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsOpen(false)}
+                    className="flex-1 py-4 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(2)}
+                    className="flex-1 py-4 rounded-2xl text-sm font-bold bg-emerald-500 text-white"
+                  >
+                    Next Step
+                  </button>
+                </div>
               </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-emerald-500 text-white py-5 rounded-[1.5rem] font-black text-base shadow-xl shadow-emerald-500/30 hover:bg-emerald-600 active:scale-[0.98] transition-all disabled:opacity-50 mt-4"
-              >
-                {loading ? "SAVING..." : t.save}
-              </button>
-            </form>
+            )}
+
+            {/* Step 2: House & Finance */}
+            {currentStep === 2 && (
+              <div className="space-y-5">
+                <div className="text-center mb-6">
+                  <h3 className="text-lg font-black text-slate-900">House & Finance</h3>
+                  <p className="text-xs text-slate-500 mt-1">Housing and financial information</p>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">House Type</label>
+                  <select
+                    value={houseType}
+                    onChange={(e) => setHouseType(e.target.value as "own" | "rent" | "")}
+                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                  >
+                    <option value="">Select house type</option>
+                    <option value="own">Own</option>
+                    <option value="rent">Rent</option>
+                  </select>
+                </div>
+                
+                <div className="flex items-center gap-2 pt-2">
+                  <input
+                    type="checkbox"
+                    id="has_toilet"
+                    checked={hasToilet}
+                    onChange={(e) => setHasToilet(e.target.checked)}
+                    className="w-5 h-5 accent-emerald-500 rounded-lg"
+                  />
+                  <label htmlFor="has_toilet" className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-tight">
+                    Has Toilet
+                  </label>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.subscription_amount}</label>
+                    <input
+                      type="number"
+                      value={subscriptionAmount}
+                      onChange={(event) => setSubscriptionAmount(event.target.value)}
+                      className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.opening_balance}</label>
+                    <input
+                      type="number"
+                      value={openingBalance}
+                      onChange={(event) => setOpeningBalance(event.target.value)}
+                      className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(1)}
+                    className="flex-1 py-4 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(3)}
+                    className="flex-1 py-4 rounded-2xl text-sm font-bold bg-emerald-500 text-white"
+                  >
+                    Next Step
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Extra Details */}
+            {currentStep === 3 && (
+              <div className="space-y-5">
+                <div className="text-center mb-6">
+                  <h3 className="text-lg font-black text-slate-900">Extra Details</h3>
+                  <p className="text-xs text-slate-500 mt-1">Additional information (optional)</p>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Special Needs Details</label>
+                  <textarea
+                    value={specialNeedsDetails}
+                    onChange={(e) => setSpecialNeedsDetails(e.target.value)}
+                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                    placeholder="Any special needs or accommodations"
+                    rows={2}
+                  />
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Foreign Members Details</label>
+                  <textarea
+                    value={foreignMembersDetails}
+                    onChange={(e) => setForeignMembersDetails(e.target.value)}
+                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                    placeholder="Details about foreign family members"
+                    rows={2}
+                  />
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Health Details</label>
+                  <textarea
+                    value={healthDetails}
+                    onChange={(e) => setHealthDetails(e.target.value)}
+                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                    placeholder="Health-related information"
+                    rows={2}
+                  />
+                </div>
+                
+                <div className="space-y-3">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Vehicles Owned</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { id: 'car', label: 'Car', state: hasCar, setter: setHasCar },
+                      { id: 'three_wheeler', label: 'Three Wheeler', state: hasThreeWheeler, setter: setHasThreeWheeler },
+                      { id: 'van', label: 'Van', state: hasVan, setter: setHasVan },
+                      { id: 'lorry', label: 'Lorry', state: hasLorry, setter: setHasLorry },
+                      { id: 'tractor', label: 'Tractor', state: hasTractor, setter: setHasTractor }
+                    ].map(({ id, label, state, setter }) => (
+                      <div key={id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id={id}
+                          checked={state}
+                          onChange={(e) => setter(e.target.checked)}
+                          className="w-4 h-4 accent-emerald-500 rounded"
+                        />
+                        <label htmlFor={id} className="text-xs text-slate-600">{label}</label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Extra Notes</label>
+                  <textarea
+                    value={extraNotes}
+                    onChange={(e) => setExtraNotes(e.target.value)}
+                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                    placeholder="Any additional notes"
+                    rows={2}
+                  />
+                </div>
+                
+                <div className="flex gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(2)}
+                    className="flex-1 py-4 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 py-4 rounded-2xl text-sm font-bold bg-emerald-500 text-white disabled:opacity-50"
+                  >
+                    {loading ? "SAVING..." : t.save}
+                  </button>
+                </div>
+              </div>
+            )}
+          </form>
           </div>
         </div>
       )}

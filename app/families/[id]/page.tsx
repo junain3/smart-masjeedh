@@ -44,6 +44,11 @@ type Member = {
   phone: string;
   civil_status: string;
   status: string;
+  // New fields for enhanced data collection
+  education?: string;
+  occupation?: string;
+  is_moulavi?: boolean;
+  is_new_muslim?: boolean;
 };
 
 type Family = {
@@ -108,6 +113,12 @@ export default function FamilyDetailsPage() {
   const [phone, setPhone] = useState("");
   const [civilStatus, setCivilStatus] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  
+  // New fields for enhanced data collection
+  const [education, setEducation] = useState("");
+  const [occupation, setOccupation] = useState("");
+  const [isMoulavi, setIsMoulavi] = useState(false);
+  const [isNewMuslim, setIsNewMuslim] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -300,7 +311,12 @@ export default function FamilyDetailsPage() {
     setNic("");
     setPhone("");
     setCivilStatus("");
-    setEditingMember(null);
+    
+    // Reset new fields
+    setEducation("");
+    setOccupation("");
+    setIsMoulavi(false);
+    setIsNewMuslim(false);
   };
 
   const openEditMember = (member: Member) => {
@@ -313,6 +329,13 @@ export default function FamilyDetailsPage() {
     setNic(member.nic || "");
     setPhone(member.phone || "");
     setCivilStatus(member.civil_status || "");
+    
+    // Set new fields
+    setEducation(member.education || "");
+    setOccupation(member.occupation || "");
+    setIsMoulavi(member.is_moulavi || false);
+    setIsNewMuslim(member.is_new_muslim || false);
+    
     setIsModalOpen(true);
   };
 
@@ -397,6 +420,11 @@ export default function FamilyDetailsPage() {
             nic,
             phone,
             civil_status: civilStatus,
+            // New fields
+            education: education || null,
+            occupation: occupation || null,
+            is_moulavi: isMoulavi,
+            is_new_muslim: isNewMuslim,
           })
           .eq("id", editingMember.id)
           .eq("masjid_id", tenantContext.masjidId);
@@ -416,6 +444,11 @@ export default function FamilyDetailsPage() {
             nic,
             phone,
             civil_status: civilStatus,
+            // New fields
+            education: education || null,
+            occupation: occupation || null,
+            is_moulavi: isMoulavi,
+            is_new_muslim: isNewMuslim,
             user_id: user.id,
             masjid_id: tenantContext.masjidId,
           },
@@ -1070,6 +1103,52 @@ export default function FamilyDetailsPage() {
                   <option value="Widowed">{t.widowed}</option>
                   <option value="Other">{t.other}</option>
                 </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Education</label>
+                  <input
+                    type="text"
+                    value={education}
+                    onChange={(e) => setEducation(e.target.value)}
+                    className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
+                    placeholder="e.g. High School, Bachelor's Degree"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Occupation</label>
+                  <input
+                    type="text"
+                    value={occupation}
+                    onChange={(e) => setOccupation(e.target.value)}
+                    className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
+                    placeholder="e.g. Teacher, Engineer, Business"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="is_moulavi"
+                    checked={isMoulavi}
+                    onChange={(e) => setIsMoulavi(e.target.checked)}
+                    className="w-4 h-4 accent-emerald-500 rounded"
+                  />
+                  <label htmlFor="is_moulavi" className="text-xs text-slate-600 font-medium">Moulavi</label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="is_new_muslim"
+                    checked={isNewMuslim}
+                    onChange={(e) => setIsNewMuslim(e.target.checked)}
+                    className="w-4 h-4 accent-emerald-500 rounded"
+                  />
+                  <label htmlFor="is_new_muslim" className="text-xs text-slate-600 font-medium">New Muslim</label>
+                </div>
               </div>
 
               <div className="flex gap-4 pt-4">
