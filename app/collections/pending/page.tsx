@@ -300,33 +300,39 @@ export default function PendingCollectionsPage() {
     setSuccess("");
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
-
-      // Get collection details
-      const { data: collection } = await supabase
-        .from("subscription_collections")
-        .select("*")
-        .eq("id", collectionId)
-        .single();
-
-      if (!collection) throw new Error("Collection not found");
-
-      // Update collection status to accepted
-      const { error: updateError } = await supabase
-        .from("subscription_collections")
-        .update({
-          status: 'accepted',
-          accepted_by_user_id: session.user.id,
-          accepted_at: new Date().toISOString(),
-          accept_date: new Date().toISOString().split('T')[0]
+      // Call the new API endpoint
+      const response = await fetch('/api/collections/approve-single', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          collection_id: collectionId
         })
-        .eq("id", collectionId);
+      });
 
-      if (updateError) throw updateError;
+      const result = await response.json();
 
-      setSuccess("Collection approved successfully!");
-      loadData(); // Refresh data
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError("Authentication required");
+        } else if (response.status === 404) {
+          setError("Collection not found");
+        } else {
+          setError(result.error || "Failed to approve collection");
+        }
+        return;
+      }
+
+      // Handle successful response
+      if (result.alreadyApproved) {
+        setError("Collection already approved");
+      } else if (result.success) {
+        setSuccess("Collection approved and recorded in accounts");
+        loadData(); // Refresh data
+      } else {
+        setError(result.error || "Failed to approve collection");
+      }
     } catch (e: any) {
       setError(e.message || "Failed to approve collection");
     } finally {
