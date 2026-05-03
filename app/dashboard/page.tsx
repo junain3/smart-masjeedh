@@ -19,6 +19,8 @@ import {
   LogOut,
   Menu,
   Settings,
+  Filter,
+  X,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -34,6 +36,25 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [lang, setLang] = useState<Language>("en");
+  
+  // Search state
+  const [searchFilters, setSearchFilters] = useState({
+    gender: [] as string[],
+    ageRange: { min: '', max: '' },
+    birthYear: { min: '', max: '' },
+    civilStatus: [] as string[],
+    isMoulavi: false,
+    isNewMuslim: false,
+    isForeignResident: false,
+    hasSpecialNeeds: false,
+    hasHealthIssue: false,
+    familyIsWidowHead: false,
+  });
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchCount, setSearchCount] = useState(0);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchTotalPages, setSearchTotalPages] = useState(1);
 
   const t = getTranslation(lang);
 
@@ -95,6 +116,98 @@ export default function DashboardPage() {
     } finally {
       router.push("/login");
     }
+  };
+
+  const handleSearch = async () => {
+    if (!authUser) return;
+    
+    setSearchLoading(true);
+    setSearchResults([]);
+    setSearchCount(0);
+    setSearchPage(1);
+    
+    try {
+      // Build filters object for API
+      const filters: any = {};
+      
+      if (searchFilters.gender.length > 0) {
+        filters.gender = searchFilters.gender;
+      }
+      
+      if (searchFilters.ageRange.min || searchFilters.ageRange.max) {
+        filters.ageRange = {
+          min: searchFilters.ageRange.min ? parseInt(searchFilters.ageRange.min) : undefined,
+          max: searchFilters.ageRange.max ? parseInt(searchFilters.ageRange.max) : undefined,
+        };
+      }
+      
+      if (searchFilters.birthYear.min || searchFilters.birthYear.max) {
+        filters.birthYear = {
+          min: searchFilters.birthYear.min ? parseInt(searchFilters.birthYear.min) : undefined,
+          max: searchFilters.birthYear.max ? parseInt(searchFilters.birthYear.max) : undefined,
+        };
+      }
+      
+      if (searchFilters.civilStatus.length > 0) {
+        filters.civilStatus = searchFilters.civilStatus;
+      }
+      
+      if (searchFilters.isMoulavi) filters.isMoulavi = true;
+      if (searchFilters.isNewMuslim) filters.isNewMuslim = true;
+      if (searchFilters.isForeignResident) filters.isForeignResident = true;
+      if (searchFilters.hasSpecialNeeds) filters.hasSpecialNeeds = true;
+      if (searchFilters.hasHealthIssue) filters.hasHealthIssue = true;
+      if (searchFilters.familyIsWidowHead) filters.familyIsWidowHead = true;
+      
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await authUser.session?.access_token}`,
+        },
+        body: JSON.stringify({
+          filters,
+          pagination: { page: 1, limit: 20 },
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setSearchResults(result.data.members);
+        setSearchCount(result.data.count);
+        setSearchTotalPages(result.pagination.totalPages);
+      } else {
+        console.error('Search error:', result.error);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const clearFilters = () => {
+    setSearchFilters({
+      gender: [] as string[],
+      ageRange: { min: '', max: '' },
+      birthYear: { min: '', max: '' },
+      civilStatus: [] as string[],
+      isMoulavi: false,
+      isNewMuslim: false,
+      isForeignResident: false,
+      hasSpecialNeeds: false,
+      hasHealthIssue: false,
+      familyIsWidowHead: false,
+    });
+    setSearchResults([]);
+    setSearchCount(0);
+    setSearchPage(1);
+    setSearchTotalPages(1);
+  };
+
+  const updateFilter = (key: string, value: any) => {
+    setSearchFilters(prev => ({ ...prev, [key]: value }));
   };
 
   const menuItems = [
@@ -242,6 +355,215 @@ return (
                 </h3>
               </Link>
             ))}
+          </div>
+
+          {/* Search & Reports Section */}
+          <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-black text-slate-900">Member Search & Reports</h2>
+              <Filter className="w-5 h-5 text-slate-400" />
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              {/* Filters Column */}
+              <div className="lg:col-span-1 space-y-4">
+                {/* Gender Filters */}
+                <div className="space-y-2">
+                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Gender</h3>
+                  <div className="space-y-2">
+                    {['Male', 'Female'].map(gender => (
+                      <label key={gender} className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          checked={searchFilters.gender.includes(gender)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              updateFilter('gender', [...searchFilters.gender, gender]);
+                            } else {
+                              updateFilter('gender', searchFilters.gender.filter((g: string) => g !== gender));
+                            }
+                          }}
+                          className="w-4 h-4 accent-emerald-500 rounded"
+                        />
+                        <span className="text-sm text-slate-700">{gender}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Age Range */}
+                <div className="space-y-2">
+                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Age Range</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="Min" 
+                      value={searchFilters.ageRange.min}
+                      onChange={(e) => updateFilter('ageRange', { ...searchFilters.ageRange, min: e.target.value })}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                    />
+                    <input 
+                      type="number" 
+                      placeholder="Max" 
+                      value={searchFilters.ageRange.max}
+                      onChange={(e) => updateFilter('ageRange', { ...searchFilters.ageRange, max: e.target.value })}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                    />
+                  </div>
+                </div>
+                
+                {/* Birth Year */}
+                <div className="space-y-2">
+                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Birth Year</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="From" 
+                      value={searchFilters.birthYear.min}
+                      onChange={(e) => updateFilter('birthYear', { ...searchFilters.birthYear, min: e.target.value })}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                    />
+                    <input 
+                      type="number" 
+                      placeholder="To" 
+                      value={searchFilters.birthYear.max}
+                      onChange={(e) => updateFilter('birthYear', { ...searchFilters.birthYear, max: e.target.value })}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                    />
+                  </div>
+                </div>
+                
+                {/* Civil Status */}
+                <div className="space-y-2">
+                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Civil Status</h3>
+                  <div className="space-y-2">
+                    {['Single', 'Married', 'Divorced', 'Widowed', 'Other'].map(status => (
+                      <label key={status} className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          checked={searchFilters.civilStatus.includes(status)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              updateFilter('civilStatus', [...searchFilters.civilStatus, status]);
+                            } else {
+                              updateFilter('civilStatus', searchFilters.civilStatus.filter((s: string) => s !== status));
+                            }
+                          }}
+                          className="w-4 h-4 accent-emerald-500 rounded"
+                        />
+                        <span className="text-sm text-slate-700">{status}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Boolean Filters */}
+                <div className="space-y-2">
+                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Special Categories</h3>
+                  <div className="space-y-2">
+                    {[
+                      { id: 'isMoulavi', label: 'Moulavi' },
+                      { id: 'isNewMuslim', label: 'New Muslim' },
+                      { id: 'isForeignResident', label: 'Foreign Resident' },
+                      { id: 'hasSpecialNeeds', label: 'Has Special Needs' },
+                      { id: 'hasHealthIssue', label: 'Has Health Issue' },
+                      { id: 'familyIsWidowHead', label: 'Family Widow Head' }
+                    ].map(filter => (
+                      <label key={filter.id} className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          checked={searchFilters[filter.id as keyof typeof searchFilters] as boolean}
+                          onChange={(e) => updateFilter(filter.id, e.target.checked)}
+                          className="w-4 h-4 accent-emerald-500 rounded"
+                        />
+                        <span className="text-sm text-slate-700">{filter.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Action Buttons */}
+                <div className="flex gap-2 pt-4">
+                  <button 
+                    onClick={handleSearch}
+                    disabled={searchLoading}
+                    className="flex-1 px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-600 transition-colors"
+                  >
+                    {searchLoading ? 'Searching...' : 'Search'}
+                  </button>
+                  <button 
+                    onClick={clearFilters}
+                    className="flex-1 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              
+              {/* Results Column */}
+              <div className="lg:col-span-3">
+                {/* Results Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-sm text-slate-600">
+                    Found <span className="font-black text-slate-900">{searchCount}</span> members
+                  </div>
+                  {searchTotalPages > 1 && (
+                    <div className="text-sm text-slate-600">
+                      Page <span className="font-black text-slate-900">{searchPage}</span> of <span className="font-black text-slate-900">{searchTotalPages}</span>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Results Table */}
+                <div className="bg-slate-50 rounded-xl overflow-hidden">
+                  {searchLoading ? (
+                    <div className="p-8 text-center text-slate-400">
+                      <p className="text-sm font-bold uppercase tracking-widest">Searching...</p>
+                    </div>
+                  ) : searchResults.length === 0 && searchCount === 0 ? (
+                    <div className="p-8 text-center text-slate-400">
+                      <Search className="w-12 h-12 mx-auto mb-4 text-slate-300" />
+                      <p className="text-sm font-bold uppercase tracking-widest">No search performed yet</p>
+                      <p className="text-xs mt-2">Apply filters and click Search to see results</p>
+                    </div>
+                  ) : searchResults.length === 0 && searchCount > 0 ? (
+                    <div className="p-8 text-center text-slate-400">
+                      <p className="text-sm font-bold uppercase tracking-widest">No results found</p>
+                      <p className="text-xs mt-2">Try adjusting your filters</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-slate-100 border-b border-slate-200">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Name</th>
+                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Family</th>
+                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Gender</th>
+                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Age</th>
+                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Status</th>
+                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Phone</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {searchResults.map((member: any) => (
+                            <tr key={member.id} className="hover:bg-white transition-colors">
+                              <td className="px-4 py-3 text-sm font-medium text-slate-900">{member.name}</td>
+                              <td className="px-4 py-3 text-sm text-slate-600">{member.family_code}</td>
+                              <td className="px-4 py-3 text-sm text-slate-600">{member.gender}</td>
+                              <td className="px-4 py-3 text-sm text-slate-600">
+                                {member.dob ? new Date().getFullYear() - new Date(member.dob).getFullYear() : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-slate-600">{member.civil_status || '-'}</td>
+                              <td className="px-4 py-3 text-sm text-slate-600">{member.phone || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </main>
       </div>
