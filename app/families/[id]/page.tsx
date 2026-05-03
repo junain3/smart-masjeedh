@@ -49,6 +49,14 @@ type Member = {
   occupation?: string;
   is_moulavi?: boolean;
   is_new_muslim?: boolean;
+  // Person-specific fields moved from family level
+  is_foreign_resident?: boolean;
+  foreign_country?: string;
+  foreign_contact?: string;
+  has_special_needs?: boolean;
+  special_needs_details?: string;
+  has_health_issue?: boolean;
+  health_details?: string;
 };
 
 type Family = {
@@ -119,6 +127,15 @@ export default function FamilyDetailsPage() {
   const [occupation, setOccupation] = useState("");
   const [isMoulavi, setIsMoulavi] = useState(false);
   const [isNewMuslim, setIsNewMuslim] = useState(false);
+  
+  // Person-specific fields moved from family level
+  const [isForeignResident, setIsForeignResident] = useState(false);
+  const [foreignCountry, setForeignCountry] = useState("");
+  const [foreignContact, setForeignContact] = useState("");
+  const [hasSpecialNeeds, setHasSpecialNeeds] = useState(false);
+  const [specialNeedsDetails, setSpecialNeedsDetails] = useState("");
+  const [hasHealthIssue, setHasHealthIssue] = useState(false);
+  const [healthDetails, setHealthDetails] = useState("");
 
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -317,6 +334,15 @@ export default function FamilyDetailsPage() {
     setOccupation("");
     setIsMoulavi(false);
     setIsNewMuslim(false);
+    
+    // Reset person-specific fields
+    setIsForeignResident(false);
+    setForeignCountry("");
+    setForeignContact("");
+    setHasSpecialNeeds(false);
+    setSpecialNeedsDetails("");
+    setHasHealthIssue(false);
+    setHealthDetails("");
   };
 
   const openEditMember = (member: Member) => {
@@ -335,6 +361,15 @@ export default function FamilyDetailsPage() {
     setOccupation(member.occupation || "");
     setIsMoulavi(member.is_moulavi || false);
     setIsNewMuslim(member.is_new_muslim || false);
+    
+    // Set person-specific fields
+    setIsForeignResident(member.is_foreign_resident || false);
+    setForeignCountry(member.foreign_country || "");
+    setForeignContact(member.foreign_contact || "");
+    setHasSpecialNeeds(member.has_special_needs || false);
+    setSpecialNeedsDetails(member.special_needs_details || "");
+    setHasHealthIssue(member.has_health_issue || false);
+    setHealthDetails(member.health_details || "");
     
     setIsModalOpen(true);
   };
@@ -425,6 +460,14 @@ export default function FamilyDetailsPage() {
             occupation: occupation || null,
             is_moulavi: isMoulavi,
             is_new_muslim: isNewMuslim,
+            // Person-specific fields
+            is_foreign_resident: isForeignResident,
+            foreign_country: foreignCountry || null,
+            foreign_contact: foreignContact || null,
+            has_special_needs: hasSpecialNeeds,
+            special_needs_details: specialNeedsDetails || null,
+            has_health_issue: hasHealthIssue,
+            health_details: healthDetails || null,
           })
           .eq("id", editingMember.id)
           .eq("masjid_id", tenantContext.masjidId);
@@ -449,6 +492,14 @@ export default function FamilyDetailsPage() {
             occupation: occupation || null,
             is_moulavi: isMoulavi,
             is_new_muslim: isNewMuslim,
+            // Person-specific fields
+            is_foreign_resident: isForeignResident,
+            foreign_country: foreignCountry || null,
+            foreign_contact: foreignContact || null,
+            has_special_needs: hasSpecialNeeds,
+            special_needs_details: specialNeedsDetails || null,
+            has_health_issue: hasHealthIssue,
+            health_details: healthDetails || null,
             user_id: user.id,
             masjid_id: tenantContext.masjidId,
           },
@@ -1148,6 +1199,109 @@ export default function FamilyDetailsPage() {
                     className="w-4 h-4 accent-emerald-500 rounded"
                   />
                   <label htmlFor="is_new_muslim" className="text-xs text-slate-600 font-medium">New Muslim</label>
+                </div>
+              </div>
+
+              {/* Foreign Resident Section */}
+              <div className="border-t border-slate-100 pt-4 mt-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="is_foreign_resident"
+                      checked={isForeignResident}
+                      onChange={(e) => setIsForeignResident(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-500 rounded"
+                    />
+                    <label htmlFor="is_foreign_resident" className="text-xs text-slate-600 font-medium">Foreign Resident</label>
+                  </div>
+                  
+                  {isForeignResident && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 animate-in fade-in duration-300">
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Country</label>
+                        <input
+                          type="text"
+                          value={foreignCountry}
+                          onChange={(e) => setForeignCountry(e.target.value)}
+                          className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
+                          placeholder="Country name"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Contact Details</label>
+                        <input
+                          type="text"
+                          value={foreignContact}
+                          onChange={(e) => setForeignContact(e.target.value)}
+                          className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
+                          placeholder="Contact information"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Special Needs Section */}
+              <div className="border-t border-slate-100 pt-4 mt-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="has_special_needs"
+                      checked={hasSpecialNeeds}
+                      onChange={(e) => setHasSpecialNeeds(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-500 rounded"
+                    />
+                    <label htmlFor="has_special_needs" className="text-xs text-slate-600 font-medium">Has Special Needs</label>
+                  </div>
+                  
+                  {hasSpecialNeeds && (
+                    <div className="mt-3 animate-in fade-in duration-300">
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Special Needs Details</label>
+                        <textarea
+                          value={specialNeedsDetails}
+                          onChange={(e) => setSpecialNeedsDetails(e.target.value)}
+                          className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
+                          placeholder="Describe special needs or accommodations"
+                          rows={2}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Health Section */}
+              <div className="border-t border-slate-100 pt-4 mt-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="has_health_issue"
+                      checked={hasHealthIssue}
+                      onChange={(e) => setHasHealthIssue(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-500 rounded"
+                    />
+                    <label htmlFor="has_health_issue" className="text-xs text-slate-600 font-medium">Has Health Issue</label>
+                  </div>
+                  
+                  {hasHealthIssue && (
+                    <div className="mt-3 animate-in fade-in duration-300">
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Health Details</label>
+                        <textarea
+                          value={healthDetails}
+                          onChange={(e) => setHealthDetails(e.target.value)}
+                          className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
+                          placeholder="Health-related information"
+                          rows={2}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

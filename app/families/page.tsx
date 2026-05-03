@@ -1063,39 +1063,7 @@ export default function FamiliesPage() {
                   <p className="text-xs text-slate-500 mt-1">Additional information (optional)</p>
                 </div>
                 
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Special Needs Details</label>
-                  <textarea
-                    value={specialNeedsDetails}
-                    onChange={(e) => setSpecialNeedsDetails(e.target.value)}
-                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                    placeholder="Any special needs or accommodations"
-                    rows={2}
-                  />
-                </div>
-                
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Foreign Members Details</label>
-                  <textarea
-                    value={foreignMembersDetails}
-                    onChange={(e) => setForeignMembersDetails(e.target.value)}
-                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                    placeholder="Details about foreign family members"
-                    rows={2}
-                  />
-                </div>
-                
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Health Details</label>
-                  <textarea
-                    value={healthDetails}
-                    onChange={(e) => setHealthDetails(e.target.value)}
-                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                    placeholder="Health-related information"
-                    rows={2}
-                  />
-                </div>
-                
+                                
                 <div className="space-y-3">
                   <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Vehicles Owned</label>
                   <div className="grid grid-cols-2 gap-3">
