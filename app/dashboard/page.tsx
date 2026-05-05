@@ -55,6 +55,7 @@ export default function DashboardPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchPage, setSearchPage] = useState(1);
   const [searchTotalPages, setSearchTotalPages] = useState(1);
+  const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
 
   const t = getTranslation(lang);
 
@@ -291,11 +292,18 @@ return (
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder={t.search}
+                    placeholder={t.search_placeholder}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    onFocus={() => setIsAdvancedSearchOpen(true)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   />
+                  <button
+                    onClick={() => setIsAdvancedSearchOpen(!isAdvancedSearchOpen)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-emerald-600 transition-colors"
+                  >
+                    <Filter className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -323,6 +331,202 @@ return (
               />
             </div>
           </div>
+
+          {/* Advanced Search Panel */}
+          {isAdvancedSearchOpen && (
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 mb-6 animate-in slide-in-from-top duration-300">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-black text-slate-900">Advanced Search</h3>
+                <button
+                  onClick={() => setIsAdvancedSearchOpen(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Gender Filters */}
+                <div className="space-y-2">
+                  <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">Gender</h4>
+                  <div className="space-y-2">
+                    {['Male', 'Female'].map(gender => (
+                      <label key={gender} className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          checked={searchFilters.gender.includes(gender)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              updateFilter('gender', [...searchFilters.gender, gender]);
+                            } else {
+                              updateFilter('gender', searchFilters.gender.filter((g: string) => g !== gender));
+                            }
+                          }}
+                          className="w-4 h-4 accent-emerald-500 rounded"
+                        />
+                        <span className="text-sm text-slate-700">{gender}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Age Range */}
+                <div className="space-y-2">
+                  <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">Age Range</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="Min" 
+                      value={searchFilters.ageRange.min}
+                      onChange={(e) => updateFilter('ageRange', { ...searchFilters.ageRange, min: e.target.value })}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                    />
+                    <input 
+                      type="number" 
+                      placeholder="Max" 
+                      value={searchFilters.ageRange.max}
+                      onChange={(e) => updateFilter('ageRange', { ...searchFilters.ageRange, max: e.target.value })}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                    />
+                  </div>
+                </div>
+                
+                {/* Birth Year */}
+                <div className="space-y-2">
+                  <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">Birth Year</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="From" 
+                      value={searchFilters.birthYear.min}
+                      onChange={(e) => updateFilter('birthYear', { ...searchFilters.birthYear, min: e.target.value })}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                    />
+                    <input 
+                      type="number" 
+                      placeholder="To" 
+                      value={searchFilters.birthYear.max}
+                      onChange={(e) => updateFilter('birthYear', { ...searchFilters.birthYear, max: e.target.value })}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                    />
+                  </div>
+                </div>
+                
+                {/* Civil Status */}
+                <div className="space-y-2">
+                  <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">Civil Status</h4>
+                  <div className="space-y-2">
+                    {['Single', 'Married', 'Divorced', 'Widowed', 'Other'].map(status => (
+                      <label key={status} className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          checked={searchFilters.civilStatus.includes(status)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              updateFilter('civilStatus', [...searchFilters.civilStatus, status]);
+                            } else {
+                              updateFilter('civilStatus', searchFilters.civilStatus.filter((s: string) => s !== status));
+                            }
+                          }}
+                          className="w-4 h-4 accent-emerald-500 rounded"
+                        />
+                        <span className="text-sm text-slate-700">{status}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Boolean Filters */}
+                <div className="space-y-2">
+                  <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">Special Categories</h4>
+                  <div className="space-y-2">
+                    {[
+                      { id: 'isMoulavi', label: 'Moulavi' },
+                      { id: 'isNewMuslim', label: 'New Muslim' },
+                      { id: 'isForeignResident', label: 'Foreign Resident' },
+                      { id: 'hasSpecialNeeds', label: 'Has Special Needs' },
+                      { id: 'hasHealthIssue', label: 'Has Health Issue' },
+                      { id: 'familyIsWidowHead', label: 'Family Widow Head' }
+                    ].map(filter => (
+                      <label key={filter.id} className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          checked={searchFilters[filter.id as keyof typeof searchFilters] as boolean}
+                          onChange={(e) => updateFilter(filter.id, e.target.checked)}
+                          className="w-4 h-4 accent-emerald-500 rounded"
+                        />
+                        <span className="text-sm text-slate-700">{filter.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-4 border-t border-slate-100">
+                <button 
+                  onClick={handleSearch}
+                  disabled={searchLoading}
+                  className="flex-1 px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-600 transition-colors"
+                >
+                  {searchLoading ? 'Searching...' : 'Search'}
+                </button>
+                <button 
+                  onClick={clearFilters}
+                  className="flex-1 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors"
+                >
+                  Clear Filters
+                </button>
+              </div>
+              
+              {/* Results */}
+              {searchResults.length > 0 && (
+                <div className="border-t border-slate-100 pt-4 mt-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-sm text-slate-600">
+                      Found <span className="font-black text-slate-900">{searchCount}</span> members
+                    </div>
+                    {searchTotalPages > 1 && (
+                      <div className="text-sm text-slate-600">
+                        Page <span className="font-black text-slate-900">{searchPage}</span> of <span className="font-black text-slate-900">{searchTotalPages}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="bg-slate-50 rounded-xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-slate-100 border-b border-slate-200">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Name</th>
+                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Family</th>
+                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Gender</th>
+                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Age</th>
+                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Status</th>
+                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Phone</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {searchResults.map((member: any) => (
+                            <tr key={member.id} className="hover:bg-white transition-colors">
+                              <td className="px-4 py-3 text-sm font-medium text-slate-900">{member.name}</td>
+                              <td className="px-4 py-3 text-sm text-slate-600">{member.family_code}</td>
+                              <td className="px-4 py-3 text-sm text-slate-600">{member.gender}</td>
+                              <td className="px-4 py-3 text-sm text-slate-600">
+                                {member.dob ? new Date().getFullYear() - new Date(member.dob).getFullYear() : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-slate-600">{member.civil_status || '-'}</td>
+                              <td className="px-4 py-3 text-sm text-slate-600">{member.phone || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div className="bg-white border-2 border-emerald-200 rounded-2xl p-6 text-center">
@@ -355,215 +559,6 @@ return (
                 </h3>
               </Link>
             ))}
-          </div>
-
-          {/* Search & Reports Section */}
-          <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-black text-slate-900">Member Search & Reports</h2>
-              <Filter className="w-5 h-5 text-slate-400" />
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              {/* Filters Column */}
-              <div className="lg:col-span-1 space-y-4">
-                {/* Gender Filters */}
-                <div className="space-y-2">
-                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Gender</h3>
-                  <div className="space-y-2">
-                    {['Male', 'Female'].map(gender => (
-                      <label key={gender} className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          checked={searchFilters.gender.includes(gender)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              updateFilter('gender', [...searchFilters.gender, gender]);
-                            } else {
-                              updateFilter('gender', searchFilters.gender.filter((g: string) => g !== gender));
-                            }
-                          }}
-                          className="w-4 h-4 accent-emerald-500 rounded"
-                        />
-                        <span className="text-sm text-slate-700">{gender}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Age Range */}
-                <div className="space-y-2">
-                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Age Range</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input 
-                      type="number" 
-                      placeholder="Min" 
-                      value={searchFilters.ageRange.min}
-                      onChange={(e) => updateFilter('ageRange', { ...searchFilters.ageRange, min: e.target.value })}
-                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
-                    />
-                    <input 
-                      type="number" 
-                      placeholder="Max" 
-                      value={searchFilters.ageRange.max}
-                      onChange={(e) => updateFilter('ageRange', { ...searchFilters.ageRange, max: e.target.value })}
-                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
-                    />
-                  </div>
-                </div>
-                
-                {/* Birth Year */}
-                <div className="space-y-2">
-                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Birth Year</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input 
-                      type="number" 
-                      placeholder="From" 
-                      value={searchFilters.birthYear.min}
-                      onChange={(e) => updateFilter('birthYear', { ...searchFilters.birthYear, min: e.target.value })}
-                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
-                    />
-                    <input 
-                      type="number" 
-                      placeholder="To" 
-                      value={searchFilters.birthYear.max}
-                      onChange={(e) => updateFilter('birthYear', { ...searchFilters.birthYear, max: e.target.value })}
-                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
-                    />
-                  </div>
-                </div>
-                
-                {/* Civil Status */}
-                <div className="space-y-2">
-                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Civil Status</h3>
-                  <div className="space-y-2">
-                    {['Single', 'Married', 'Divorced', 'Widowed', 'Other'].map(status => (
-                      <label key={status} className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          checked={searchFilters.civilStatus.includes(status)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              updateFilter('civilStatus', [...searchFilters.civilStatus, status]);
-                            } else {
-                              updateFilter('civilStatus', searchFilters.civilStatus.filter((s: string) => s !== status));
-                            }
-                          }}
-                          className="w-4 h-4 accent-emerald-500 rounded"
-                        />
-                        <span className="text-sm text-slate-700">{status}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Boolean Filters */}
-                <div className="space-y-2">
-                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Special Categories</h3>
-                  <div className="space-y-2">
-                    {[
-                      { id: 'isMoulavi', label: 'Moulavi' },
-                      { id: 'isNewMuslim', label: 'New Muslim' },
-                      { id: 'isForeignResident', label: 'Foreign Resident' },
-                      { id: 'hasSpecialNeeds', label: 'Has Special Needs' },
-                      { id: 'hasHealthIssue', label: 'Has Health Issue' },
-                      { id: 'familyIsWidowHead', label: 'Family Widow Head' }
-                    ].map(filter => (
-                      <label key={filter.id} className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          checked={searchFilters[filter.id as keyof typeof searchFilters] as boolean}
-                          onChange={(e) => updateFilter(filter.id, e.target.checked)}
-                          className="w-4 h-4 accent-emerald-500 rounded"
-                        />
-                        <span className="text-sm text-slate-700">{filter.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Action Buttons */}
-                <div className="flex gap-2 pt-4">
-                  <button 
-                    onClick={handleSearch}
-                    disabled={searchLoading}
-                    className="flex-1 px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-600 transition-colors"
-                  >
-                    {searchLoading ? 'Searching...' : 'Search'}
-                  </button>
-                  <button 
-                    onClick={clearFilters}
-                    className="flex-1 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-              
-              {/* Results Column */}
-              <div className="lg:col-span-3">
-                {/* Results Header */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="text-sm text-slate-600">
-                    Found <span className="font-black text-slate-900">{searchCount}</span> members
-                  </div>
-                  {searchTotalPages > 1 && (
-                    <div className="text-sm text-slate-600">
-                      Page <span className="font-black text-slate-900">{searchPage}</span> of <span className="font-black text-slate-900">{searchTotalPages}</span>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Results Table */}
-                <div className="bg-slate-50 rounded-xl overflow-hidden">
-                  {searchLoading ? (
-                    <div className="p-8 text-center text-slate-400">
-                      <p className="text-sm font-bold uppercase tracking-widest">Searching...</p>
-                    </div>
-                  ) : searchResults.length === 0 && searchCount === 0 ? (
-                    <div className="p-8 text-center text-slate-400">
-                      <Search className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-                      <p className="text-sm font-bold uppercase tracking-widest">No search performed yet</p>
-                      <p className="text-xs mt-2">Apply filters and click Search to see results</p>
-                    </div>
-                  ) : searchResults.length === 0 && searchCount > 0 ? (
-                    <div className="p-8 text-center text-slate-400">
-                      <p className="text-sm font-bold uppercase tracking-widest">No results found</p>
-                      <p className="text-xs mt-2">Try adjusting your filters</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-slate-100 border-b border-slate-200">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Name</th>
-                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Family</th>
-                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Gender</th>
-                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Age</th>
-                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Status</th>
-                            <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">Phone</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200">
-                          {searchResults.map((member: any) => (
-                            <tr key={member.id} className="hover:bg-white transition-colors">
-                              <td className="px-4 py-3 text-sm font-medium text-slate-900">{member.name}</td>
-                              <td className="px-4 py-3 text-sm text-slate-600">{member.family_code}</td>
-                              <td className="px-4 py-3 text-sm text-slate-600">{member.gender}</td>
-                              <td className="px-4 py-3 text-sm text-slate-600">
-                                {member.dob ? new Date().getFullYear() - new Date(member.dob).getFullYear() : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-slate-600">{member.civil_status || '-'}</td>
-                              <td className="px-4 py-3 text-sm text-slate-600">{member.phone || '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
           </div>
         </main>
       </div>
