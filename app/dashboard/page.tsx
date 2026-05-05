@@ -292,18 +292,11 @@ return (
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder={t.search_placeholder}
+                    placeholder={t.search}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    onFocus={() => setIsAdvancedSearchOpen(true)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   />
-                  <button
-                    onClick={() => setIsAdvancedSearchOpen(!isAdvancedSearchOpen)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-emerald-600 transition-colors"
-                  >
-                    <Filter className="w-4 h-4" />
-                  </button>
                 </div>
               </div>
             </div>
@@ -327,8 +320,17 @@ return (
               <input
                 type="text"
                 placeholder={t.search_placeholder}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setIsAdvancedSearchOpen(true)}
                 className="w-full pl-12 pr-4 py-4 bg-white border-2 border-gray-200 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               />
+              <button
+                onClick={() => setIsAdvancedSearchOpen(prev => !prev)}
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-emerald-600 transition-colors"
+              >
+                <Filter className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
