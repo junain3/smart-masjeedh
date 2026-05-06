@@ -487,7 +487,10 @@ export default function HomePage() {
 
   // Smart Reports functions
   const generateQuickReport = async (reportType: string) => {
-    if (!tenantContext?.masjidId) return;
+    if (!tenantContext?.masjidId) {
+      toast({ kind: "error", title: "Error", message: "Masjid context not available" });
+      return;
+    }
     
     setReportGenerating(true);
     try {
@@ -548,7 +551,10 @@ export default function HomePage() {
   };
 
   const generateAdvancedReport = async () => {
-    if (!tenantContext?.masjidId) return;
+    if (!tenantContext?.masjidId) {
+      toast({ kind: "error", title: "Error", message: "Masjid context not available" });
+      return;
+    }
     
     setReportGenerating(true);
     try {
