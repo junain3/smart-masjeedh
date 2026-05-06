@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download, HomeIcon, User, Calendar, Briefcase, Settings, LogOut, MoreHorizontal, Shield, Wallet, HelpCircle, Menu } from "lucide-react";
+import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download, HomeIcon, User, Calendar, Briefcase, Settings, LogOut, MoreHorizontal, Shield, Wallet, HelpCircle, Menu, Filter } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
@@ -106,6 +106,24 @@ export default function HomePage() {
   const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [submittingService, setSubmittingService] = useState(false);
   const searchRequestSeq = useRef(0);
+
+  // Smart Filter state
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  const [searchFilters, setSearchFilters] = useState({
+    gender: [] as string[],
+    ageRange: { min: '', max: '' },
+    birthYear: { min: '', max: '' },
+    civilStatus: [] as string[],
+    isMoulavi: false,
+    isNewMuslim: false,
+    isForeignResident: false,
+    hasSpecialNeeds: false,
+    hasHealthIssue: false,
+    familyIsWidowHead: false,
+  });
+  const [filterSearchResults, setFilterSearchResults] = useState<any[]>([]);
+  const [filterSearchCount, setFilterSearchCount] = useState(0);
+  const [filterSearchLoading, setFilterSearchLoading] = useState(false);
 
   // Format date: "25 February 2026 at 6:43"
   const formatDate = useMemo(() => (date: Date) => {
@@ -474,6 +492,81 @@ export default function HomePage() {
     await runSearch(searchQuery);
   };
 
+  // Smart Filter functions
+  const handleFilterSearch = async () => {
+    if (!supabase || !tenantContext?.masjidId) return;
+    
+    setFilterSearchLoading(true);
+    try {
+      const filters: any = {};
+      
+      // Build filters object from state
+      if (searchFilters.gender.length > 0) {
+        filters.gender = searchFilters.gender;
+      }
+      if (searchFilters.ageRange.min || searchFilters.ageRange.max) {
+        filters.ageRange = searchFilters.ageRange;
+      }
+      if (searchFilters.birthYear.min || searchFilters.birthYear.max) {
+        filters.birthYear = searchFilters.birthYear;
+      }
+      if (searchFilters.civilStatus.length > 0) {
+        filters.civilStatus = searchFilters.civilStatus;
+      }
+      if (searchFilters.isMoulavi) filters.isMoulavi = true;
+      if (searchFilters.isNewMuslim) filters.isNewMuslim = true;
+      if (searchFilters.isForeignResident) filters.isForeignResident = true;
+      if (searchFilters.hasSpecialNeeds) filters.hasSpecialNeeds = true;
+      if (searchFilters.hasHealthIssue) filters.hasHealthIssue = true;
+      if (searchFilters.familyIsWidowHead) filters.familyIsWidowHead = true;
+
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filters,
+          page: 1,
+          limit: 10
+        })
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Search failed');
+      }
+
+      setFilterSearchResults(result.members || []);
+      setFilterSearchCount(result.count || 0);
+    } catch (error: any) {
+      console.error('Filter search error:', error);
+      toast({ kind: "error", title: "Search Error", message: error.message || "Failed to search members" });
+    } finally {
+      setFilterSearchLoading(false);
+    }
+  };
+
+  const clearFilters = () => {
+    setSearchFilters({
+      gender: [],
+      ageRange: { min: '', max: '' },
+      birthYear: { min: '', max: '' },
+      civilStatus: [],
+      isMoulavi: false,
+      isNewMuslim: false,
+      isForeignResident: false,
+      hasSpecialNeeds: false,
+      hasHealthIssue: false,
+      familyIsWidowHead: false,
+    });
+    setFilterSearchResults([]);
+    setFilterSearchCount(0);
+  };
+
+  const updateFilter = (key: string, value: any) => {
+    setSearchFilters(prev => ({ ...prev, [key]: value }));
+  };
+
   const fetchActiveServices = async () => {
     if (!supabase) return;
     const ctx = tenantContext || await getTenantContext();
@@ -687,9 +780,16 @@ export default function HomePage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setIsFilterSheetOpen(true)}
               placeholder={t.search_placeholder}
-              className="app-input pl-12 font-bold text-sm md:text-base"
+              className="app-input pl-12 pr-12 font-bold text-sm md:text-base"
             />
+            <button
+              onClick={() => setIsFilterSheetOpen(true)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-neutral-400 hover:text-emerald-600 transition-colors"
+            >
+              <Filter className="h-4 w-4" />
+            </button>
           </div>
 
           {/* Menu Grid - Responsive Circular Icons */}
@@ -719,6 +819,194 @@ export default function HomePage() {
               <MoreHorizontal className="w-6 h-6 text-emerald-700" />
             </div>
           </div>
+
+          {/* Filter Sheet */}
+          {isFilterSheetOpen && (
+            <div className="fixed inset-0 z-50 flex flex-col bg-black/50 backdrop-blur-sm">
+              {/* Overlay */}
+              <div 
+                className="flex-1"
+                onClick={() => setIsFilterSheetOpen(false)}
+              />
+              
+              {/* Bottom Sheet */}
+              <div className="bg-white rounded-t-3xl shadow-2xl max-h-[80vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
+                {/* Header */}
+                <div className="sticky top-0 bg-white border-b border-neutral-200 px-6 py-4 flex items-center justify-between">
+                  <h3 className="text-lg font-black text-neutral-900">Smart Filters</h3>
+                  <button
+                    onClick={() => setIsFilterSheetOpen(false)}
+                    className="p-2 text-neutral-400 hover:text-neutral-600 transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Filter Content */}
+                <div className="p-6 space-y-6">
+                  {/* Gender Filters */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Gender</h4>
+                    <div className="flex flex-wrap gap-3">
+                      {['Male', 'Female'].map(gender => (
+                        <label key={gender} className="flex items-center gap-2 px-4 py-2 bg-neutral-50 border border-neutral-200 rounded-full cursor-pointer hover:bg-emerald-50 transition-colors">
+                          <input 
+                            type="checkbox" 
+                            checked={searchFilters.gender.includes(gender)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                updateFilter('gender', [...searchFilters.gender, gender]);
+                              } else {
+                                updateFilter('gender', searchFilters.gender.filter((g: string) => g !== gender));
+                              }
+                            }}
+                            className="sr-only"
+                          />
+                          <span className="text-sm text-neutral-700">{gender}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Age Range */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Age Range</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input 
+                        type="number" 
+                        placeholder="Min Age" 
+                        value={searchFilters.ageRange.min}
+                        onChange={(e) => updateFilter('ageRange', { ...searchFilters.ageRange, min: e.target.value })}
+                        className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                      />
+                      <input 
+                        type="number" 
+                        placeholder="Max Age" 
+                        value={searchFilters.ageRange.max}
+                        onChange={(e) => updateFilter('ageRange', { ...searchFilters.ageRange, max: e.target.value })}
+                        className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                      />
+                    </div>
+                  </div>
+
+                  {/* Birth Year */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Birth Year</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input 
+                        type="number" 
+                        placeholder="From Year" 
+                        value={searchFilters.birthYear.min}
+                        onChange={(e) => updateFilter('birthYear', { ...searchFilters.birthYear, min: e.target.value })}
+                        className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                      />
+                      <input 
+                        type="number" 
+                        placeholder="To Year" 
+                        value={searchFilters.birthYear.max}
+                        onChange={(e) => updateFilter('birthYear', { ...searchFilters.birthYear, max: e.target.value })}
+                        className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                      />
+                    </div>
+                  </div>
+
+                  {/* Civil Status */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Civil Status</h4>
+                    <div className="flex flex-wrap gap-3">
+                      {['Single', 'Married', 'Divorced', 'Widowed', 'Other'].map(status => (
+                        <label key={status} className="flex items-center gap-2 px-4 py-2 bg-neutral-50 border border-neutral-200 rounded-full cursor-pointer hover:bg-emerald-50 transition-colors">
+                          <input 
+                            type="checkbox" 
+                            checked={searchFilters.civilStatus.includes(status)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                updateFilter('civilStatus', [...searchFilters.civilStatus, status]);
+                              } else {
+                                updateFilter('civilStatus', searchFilters.civilStatus.filter((s: string) => s !== status));
+                              }
+                            }}
+                            className="sr-only"
+                          />
+                          <span className="text-sm text-neutral-700">{status}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Special Categories */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Special Categories</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { id: 'isMoulavi', label: 'Moulavi' },
+                        { id: 'isNewMuslim', label: 'New Muslim' },
+                        { id: 'isForeignResident', label: 'Foreign Resident' },
+                        { id: 'hasSpecialNeeds', label: 'Special Needs' },
+                        { id: 'hasHealthIssue', label: 'Health Issue' },
+                        { id: 'familyIsWidowHead', label: 'Widow Family' }
+                      ].map(filter => (
+                        <label key={filter.id} className="flex items-center gap-2 px-4 py-2 bg-neutral-50 border border-neutral-200 rounded-full cursor-pointer hover:bg-emerald-50 transition-colors">
+                          <input 
+                            type="checkbox" 
+                            checked={searchFilters[filter.id as keyof typeof searchFilters] as boolean}
+                            onChange={(e) => updateFilter(filter.id, e.target.checked)}
+                            className="sr-only"
+                          />
+                          <span className="text-sm text-neutral-700">{filter.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 pt-4 border-t border-neutral-200">
+                    <button 
+                      onClick={clearFilters}
+                      className="flex-1 px-6 py-3 bg-neutral-100 text-neutral-600 rounded-full text-sm font-bold hover:bg-neutral-200 transition-colors"
+                    >
+                      Clear Filters
+                    </button>
+                    <button 
+                      onClick={handleFilterSearch}
+                      disabled={filterSearchLoading}
+                      className="flex-1 px-6 py-3 bg-emerald-500 text-white rounded-full text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-600 transition-colors"
+                    >
+                      {filterSearchLoading ? 'Searching...' : 'Apply Filters'}
+                    </button>
+                  </div>
+
+                  {/* Search Results */}
+                  {filterSearchResults.length > 0 && (
+                    <div className="border-t border-neutral-200 pt-4 mt-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="text-sm text-neutral-600">
+                          Found <span className="font-black text-neutral-900">{filterSearchCount}</span> members
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {filterSearchResults.map((member: any) => (
+                          <div key={member.id} className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg hover:bg-white transition-colors">
+                            <div className="flex-1">
+                              <p className="font-black text-neutral-900 text-sm">{member.name}</p>
+                              <p className="text-xs text-neutral-600">{member.family_code} • {member.gender} • {member.civil_status || 'N/A'}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs text-neutral-600">
+                                {member.dob ? new Date().getFullYear() - new Date(member.dob).getFullYear() : '-'} years
+                              </p>
+                              <p className="text-xs text-neutral-500">{member.phone || 'No phone'}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </main>
