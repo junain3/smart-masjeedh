@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download, HomeIcon, User, Calendar, Briefcase, Settings, LogOut, MoreHorizontal, Shield, Wallet, HelpCircle, Menu, Filter } from "lucide-react";
+import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download, HomeIcon, User, Calendar, Briefcase, Settings, LogOut, MoreHorizontal, Shield, Wallet, HelpCircle, Menu, Filter, Users2, UserCheck, Heart, Globe, AlertCircle, Stethoscope } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
@@ -107,23 +107,16 @@ export default function HomePage() {
   const [submittingService, setSubmittingService] = useState(false);
   const searchRequestSeq = useRef(0);
 
-  // Smart Filter state
-  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
-  const [searchFilters, setSearchFilters] = useState({
-    gender: [] as string[],
+  // Smart Reports state
+  const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
+  const [reportGenerating, setReportGenerating] = useState(false);
+  const [reportResults, setReportResults] = useState<any[]>([]);
+  const [reportCount, setReportCount] = useState(0);
+  const [advancedFilters, setAdvancedFilters] = useState({
     ageRange: { min: '', max: '' },
     birthYear: { min: '', max: '' },
-    civilStatus: [] as string[],
-    isMoulavi: false,
-    isNewMuslim: false,
-    isForeignResident: false,
-    hasSpecialNeeds: false,
-    hasHealthIssue: false,
-    familyIsWidowHead: false,
+    civilStatus: ''
   });
-  const [filterSearchResults, setFilterSearchResults] = useState<any[]>([]);
-  const [filterSearchCount, setFilterSearchCount] = useState(0);
-  const [filterSearchLoading, setFilterSearchLoading] = useState(false);
 
   // Format date: "25 February 2026 at 6:43"
   const formatDate = useMemo(() => (date: Date) => {
@@ -492,33 +485,41 @@ export default function HomePage() {
     await runSearch(searchQuery);
   };
 
-  // Smart Filter functions
-  const handleFilterSearch = async () => {
-    if (!supabase || !tenantContext?.masjidId) return;
+  // Smart Reports functions
+  const generateQuickReport = async (reportType: string) => {
+    if (!tenantContext?.masjidId) return;
     
-    setFilterSearchLoading(true);
+    setReportGenerating(true);
     try {
-      const filters: any = {};
+      let filters: any = {};
       
-      // Build filters object from state
-      if (searchFilters.gender.length > 0) {
-        filters.gender = searchFilters.gender;
+      // Map report type to filters
+      switch (reportType) {
+        case 'male':
+          filters.gender = ['Male'];
+          break;
+        case 'female':
+          filters.gender = ['Female'];
+          break;
+        case 'widows':
+          filters.familyIsWidowHead = true;
+          break;
+        case 'moulavi':
+          filters.isMoulavi = true;
+          break;
+        case 'newMuslims':
+          filters.isNewMuslim = true;
+          break;
+        case 'foreignResidents':
+          filters.isForeignResident = true;
+          break;
+        case 'specialNeeds':
+          filters.hasSpecialNeeds = true;
+          break;
+        case 'healthIssues':
+          filters.hasHealthIssue = true;
+          break;
       }
-      if (searchFilters.ageRange.min || searchFilters.ageRange.max) {
-        filters.ageRange = searchFilters.ageRange;
-      }
-      if (searchFilters.birthYear.min || searchFilters.birthYear.max) {
-        filters.birthYear = searchFilters.birthYear;
-      }
-      if (searchFilters.civilStatus.length > 0) {
-        filters.civilStatus = searchFilters.civilStatus;
-      }
-      if (searchFilters.isMoulavi) filters.isMoulavi = true;
-      if (searchFilters.isNewMuslim) filters.isNewMuslim = true;
-      if (searchFilters.isForeignResident) filters.isForeignResident = true;
-      if (searchFilters.hasSpecialNeeds) filters.hasSpecialNeeds = true;
-      if (searchFilters.hasHealthIssue) filters.hasHealthIssue = true;
-      if (searchFilters.familyIsWidowHead) filters.familyIsWidowHead = true;
 
       const response = await fetch('/api/search', {
         method: 'POST',
@@ -536,35 +537,68 @@ export default function HomePage() {
         throw new Error(result.error || 'Search failed');
       }
 
-      setFilterSearchResults(result.members || []);
-      setFilterSearchCount(result.count || 0);
+      setReportResults(result.members || []);
+      setReportCount(result.count || 0);
     } catch (error: any) {
-      console.error('Filter search error:', error);
-      toast({ kind: "error", title: "Search Error", message: error.message || "Failed to search members" });
+      console.error('Quick report error:', error);
+      toast({ kind: "error", title: "Report Error", message: error.message || "Failed to generate report" });
     } finally {
-      setFilterSearchLoading(false);
+      setReportGenerating(false);
     }
   };
 
-  const clearFilters = () => {
-    setSearchFilters({
-      gender: [],
-      ageRange: { min: '', max: '' },
-      birthYear: { min: '', max: '' },
-      civilStatus: [],
-      isMoulavi: false,
-      isNewMuslim: false,
-      isForeignResident: false,
-      hasSpecialNeeds: false,
-      hasHealthIssue: false,
-      familyIsWidowHead: false,
-    });
-    setFilterSearchResults([]);
-    setFilterSearchCount(0);
+  const generateAdvancedReport = async () => {
+    if (!tenantContext?.masjidId) return;
+    
+    setReportGenerating(true);
+    try {
+      const filters: any = {};
+      
+      // Build filters from advanced inputs
+      if (advancedFilters.ageRange.min || advancedFilters.ageRange.max) {
+        filters.ageRange = advancedFilters.ageRange;
+      }
+      if (advancedFilters.birthYear.min || advancedFilters.birthYear.max) {
+        filters.birthYear = advancedFilters.birthYear;
+      }
+      if (advancedFilters.civilStatus) {
+        filters.civilStatus = [advancedFilters.civilStatus];
+      }
+
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filters,
+          page: 1,
+          limit: 10
+        })
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Search failed');
+      }
+
+      setReportResults(result.members || []);
+      setReportCount(result.count || 0);
+    } catch (error: any) {
+      console.error('Advanced report error:', error);
+      toast({ kind: "error", title: "Report Error", message: error.message || "Failed to generate report" });
+    } finally {
+      setReportGenerating(false);
+    }
   };
 
-  const updateFilter = (key: string, value: any) => {
-    setSearchFilters(prev => ({ ...prev, [key]: value }));
+  const clearReports = () => {
+    setAdvancedFilters({
+      ageRange: { min: '', max: '' },
+      birthYear: { min: '', max: '' },
+      civilStatus: ''
+    });
+    setReportResults([]);
+    setReportCount(0);
   };
 
   const fetchActiveServices = async () => {
@@ -780,12 +814,12 @@ export default function HomePage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => setIsFilterSheetOpen(true)}
+              onFocus={() => setIsReportsModalOpen(true)}
               placeholder={t.search_placeholder}
               className="app-input pl-12 pr-12 font-bold text-sm md:text-base"
             />
             <button
-              onClick={() => setIsFilterSheetOpen(true)}
+              onClick={() => setIsReportsModalOpen(true)}
               className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-neutral-400 hover:text-emerald-600 transition-colors"
             >
               <Filter className="h-4 w-4" />
@@ -820,173 +854,184 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Filter Sheet */}
-          {isFilterSheetOpen && (
+          {/* Smart Reports Modal */}
+          {isReportsModalOpen && (
             <div className="fixed inset-0 z-50 flex flex-col bg-black/50 backdrop-blur-sm">
               {/* Overlay */}
               <div 
                 className="flex-1"
-                onClick={() => setIsFilterSheetOpen(false)}
+                onClick={() => setIsReportsModalOpen(false)}
               />
               
-              {/* Bottom Sheet */}
-              <div className="bg-white rounded-t-3xl shadow-2xl max-h-[80vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
+              {/* Modal */}
+              <div className="bg-white rounded-t-3xl shadow-2xl max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
                 {/* Header */}
                 <div className="sticky top-0 bg-white border-b border-neutral-200 px-6 py-4 flex items-center justify-between">
-                  <h3 className="text-lg font-black text-neutral-900">Smart Filters</h3>
+                  <h3 className="text-lg font-black text-neutral-900">Smart Reports</h3>
                   <button
-                    onClick={() => setIsFilterSheetOpen(false)}
+                    onClick={() => setIsReportsModalOpen(false)}
                     className="p-2 text-neutral-400 hover:text-neutral-600 transition-colors"
                   >
                     <X className="h-5 w-5" />
                   </button>
                 </div>
 
-                {/* Filter Content */}
+                {/* Content */}
                 <div className="p-6 space-y-6">
-                  {/* Gender Filters */}
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Gender</h4>
-                    <div className="flex flex-wrap gap-3">
-                      {['Male', 'Female'].map(gender => (
-                        <label key={gender} className="flex items-center gap-2 px-4 py-2 bg-neutral-50 border border-neutral-200 rounded-full cursor-pointer hover:bg-emerald-50 transition-colors">
+                  {/* Quick Reports */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Quick Reports</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      <button
+                        onClick={() => generateQuickReport('male')}
+                        disabled={reportGenerating}
+                        className="flex flex-col items-center justify-center p-6 bg-emerald-50 border-2 border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                      >
+                        <Users2 className="w-8 h-8 text-emerald-700 mb-2" />
+                        <span className="text-sm font-black text-neutral-900">Male Members</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => generateQuickReport('female')}
+                        disabled={reportGenerating}
+                        className="flex flex-col items-center justify-center p-6 bg-emerald-50 border-2 border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                      >
+                        <User className="w-8 h-8 text-emerald-700 mb-2" />
+                        <span className="text-sm font-black text-neutral-900">Female Members</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => generateQuickReport('widows')}
+                        disabled={reportGenerating}
+                        className="flex flex-col items-center justify-center p-6 bg-emerald-50 border-2 border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                      >
+                        <Heart className="w-8 h-8 text-emerald-700 mb-2" />
+                        <span className="text-sm font-black text-neutral-900">Widows</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => generateQuickReport('moulavi')}
+                        disabled={reportGenerating}
+                        className="flex flex-col items-center justify-center p-6 bg-emerald-50 border-2 border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                      >
+                        <UserCheck className="w-8 h-8 text-emerald-700 mb-2" />
+                        <span className="text-sm font-black text-neutral-900">Moulavi</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => generateQuickReport('newMuslims')}
+                        disabled={reportGenerating}
+                        className="flex flex-col items-center justify-center p-6 bg-emerald-50 border-2 border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                      >
+                        <Globe className="w-8 h-8 text-emerald-700 mb-2" />
+                        <span className="text-sm font-black text-neutral-900">New Muslims</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => generateQuickReport('foreignResidents')}
+                        disabled={reportGenerating}
+                        className="flex flex-col items-center justify-center p-6 bg-emerald-50 border-2 border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                      >
+                        <Globe className="w-8 h-8 text-emerald-700 mb-2" />
+                        <span className="text-sm font-black text-neutral-900">Foreign Residents</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => generateQuickReport('specialNeeds')}
+                        disabled={reportGenerating}
+                        className="flex flex-col items-center justify-center p-6 bg-emerald-50 border-2 border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                      >
+                        <AlertCircle className="w-8 h-8 text-emerald-700 mb-2" />
+                        <span className="text-sm font-black text-neutral-900">Special Needs</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => generateQuickReport('healthIssues')}
+                        disabled={reportGenerating}
+                        className="flex flex-col items-center justify-center p-6 bg-emerald-50 border-2 border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                      >
+                        <Stethoscope className="w-8 h-8 text-emerald-700 mb-2" />
+                        <span className="text-sm font-black text-neutral-900">Health Issues</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Advanced Filters */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Advanced Filters</h4>
+                    <div className="space-y-4">
+                      {/* Age Range */}
+                      <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-2">Age Range</label>
+                        <div className="grid grid-cols-2 gap-3">
                           <input 
-                            type="checkbox" 
-                            checked={searchFilters.gender.includes(gender)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                updateFilter('gender', [...searchFilters.gender, gender]);
-                              } else {
-                                updateFilter('gender', searchFilters.gender.filter((g: string) => g !== gender));
-                              }
-                            }}
-                            className="sr-only"
+                            type="number" 
+                            placeholder="Min Age" 
+                            value={advancedFilters.ageRange.min}
+                            onChange={(e) => setAdvancedFilters(prev => ({ ...prev, ageRange: { ...prev.ageRange, min: e.target.value } }))}
+                            className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
                           />
-                          <span className="text-sm text-neutral-700">{gender}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Age Range */}
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Age Range</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <input 
-                        type="number" 
-                        placeholder="Min Age" 
-                        value={searchFilters.ageRange.min}
-                        onChange={(e) => updateFilter('ageRange', { ...searchFilters.ageRange, min: e.target.value })}
-                        className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
-                      />
-                      <input 
-                        type="number" 
-                        placeholder="Max Age" 
-                        value={searchFilters.ageRange.max}
-                        onChange={(e) => updateFilter('ageRange', { ...searchFilters.ageRange, max: e.target.value })}
-                        className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
-                      />
-                    </div>
-                  </div>
-
-                  {/* Birth Year */}
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Birth Year</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <input 
-                        type="number" 
-                        placeholder="From Year" 
-                        value={searchFilters.birthYear.min}
-                        onChange={(e) => updateFilter('birthYear', { ...searchFilters.birthYear, min: e.target.value })}
-                        className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
-                      />
-                      <input 
-                        type="number" 
-                        placeholder="To Year" 
-                        value={searchFilters.birthYear.max}
-                        onChange={(e) => updateFilter('birthYear', { ...searchFilters.birthYear, max: e.target.value })}
-                        className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
-                      />
-                    </div>
-                  </div>
-
-                  {/* Civil Status */}
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Civil Status</h4>
-                    <div className="flex flex-wrap gap-3">
-                      {['Single', 'Married', 'Divorced', 'Widowed', 'Other'].map(status => (
-                        <label key={status} className="flex items-center gap-2 px-4 py-2 bg-neutral-50 border border-neutral-200 rounded-full cursor-pointer hover:bg-emerald-50 transition-colors">
                           <input 
-                            type="checkbox" 
-                            checked={searchFilters.civilStatus.includes(status)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                updateFilter('civilStatus', [...searchFilters.civilStatus, status]);
-                              } else {
-                                updateFilter('civilStatus', searchFilters.civilStatus.filter((s: string) => s !== status));
-                              }
-                            }}
-                            className="sr-only"
+                            type="number" 
+                            placeholder="Max Age" 
+                            value={advancedFilters.ageRange.max}
+                            onChange={(e) => setAdvancedFilters(prev => ({ ...prev, ageRange: { ...prev.ageRange, max: e.target.value } }))}
+                            className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
                           />
-                          <span className="text-sm text-neutral-700">{status}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
+                        </div>
+                      </div>
 
-                  {/* Special Categories */}
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Special Categories</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      {[
-                        { id: 'isMoulavi', label: 'Moulavi' },
-                        { id: 'isNewMuslim', label: 'New Muslim' },
-                        { id: 'isForeignResident', label: 'Foreign Resident' },
-                        { id: 'hasSpecialNeeds', label: 'Special Needs' },
-                        { id: 'hasHealthIssue', label: 'Health Issue' },
-                        { id: 'familyIsWidowHead', label: 'Widow Family' }
-                      ].map(filter => (
-                        <label key={filter.id} className="flex items-center gap-2 px-4 py-2 bg-neutral-50 border border-neutral-200 rounded-full cursor-pointer hover:bg-emerald-50 transition-colors">
+                      {/* Birth Year */}
+                      <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-2">Birth Year</label>
+                        <div className="grid grid-cols-2 gap-3">
                           <input 
-                            type="checkbox" 
-                            checked={searchFilters[filter.id as keyof typeof searchFilters] as boolean}
-                            onChange={(e) => updateFilter(filter.id, e.target.checked)}
-                            className="sr-only"
+                            type="number" 
+                            placeholder="From Year" 
+                            value={advancedFilters.birthYear.min}
+                            onChange={(e) => setAdvancedFilters(prev => ({ ...prev, birthYear: { ...prev.birthYear, min: e.target.value } }))}
+                            className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
                           />
-                          <span className="text-sm text-neutral-700">{filter.label}</span>
-                        </label>
-                      ))}
+                          <input 
+                            type="number" 
+                            placeholder="To Year" 
+                            value={advancedFilters.birthYear.max}
+                            onChange={(e) => setAdvancedFilters(prev => ({ ...prev, birthYear: { ...prev.birthYear, max: e.target.value } }))}
+                            className="px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" 
+                          />
+                        </div>
+                      </div>
+
+                      {/* Civil Status */}
+                      <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-2">Civil Status</label>
+                        <select
+                          value={advancedFilters.civilStatus}
+                          onChange={(e) => setAdvancedFilters(prev => ({ ...prev, civilStatus: e.target.value }))}
+                          className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                        >
+                          <option value="">Select Status</option>
+                          <option value="Single">Single</option>
+                          <option value="Married">Married</option>
+                          <option value="Divorced">Divorced</option>
+                          <option value="Widowed">Widowed</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex gap-3 pt-4 border-t border-neutral-200">
-                    <button 
-                      onClick={clearFilters}
-                      className="flex-1 px-6 py-3 bg-neutral-100 text-neutral-600 rounded-full text-sm font-bold hover:bg-neutral-200 transition-colors"
-                    >
-                      Clear Filters
-                    </button>
-                    <button 
-                      onClick={handleFilterSearch}
-                      disabled={filterSearchLoading}
-                      className="flex-1 px-6 py-3 bg-emerald-500 text-white rounded-full text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-600 transition-colors"
-                    >
-                      {filterSearchLoading ? 'Searching...' : 'Apply Filters'}
-                    </button>
-                  </div>
-
-                  {/* Search Results */}
-                  {filterSearchResults.length > 0 && (
+                  {/* Results */}
+                  {reportResults.length > 0 && (
                     <div className="border-t border-neutral-200 pt-4 mt-4">
                       <div className="flex items-center justify-between mb-4">
                         <div className="text-sm text-neutral-600">
-                          Found <span className="font-black text-neutral-900">{filterSearchCount}</span> members
+                          Found <span className="font-black text-neutral-900">{reportCount}</span> members
                         </div>
                       </div>
                       
                       <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {filterSearchResults.map((member: any) => (
+                        {reportResults.map((member: any) => (
                           <div key={member.id} className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg hover:bg-white transition-colors">
                             <div className="flex-1">
                               <p className="font-black text-neutral-900 text-sm">{member.name}</p>
@@ -1003,6 +1048,29 @@ export default function HomePage() {
                       </div>
                     </div>
                   )}
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 pt-4 border-t border-neutral-200">
+                    <button 
+                      onClick={generateAdvancedReport}
+                      disabled={reportGenerating}
+                      className="flex-1 px-6 py-3 bg-emerald-500 text-white rounded-full text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-600 transition-colors"
+                    >
+                      {reportGenerating ? 'Generating...' : 'Generate Report'}
+                    </button>
+                    <button 
+                      onClick={clearReports}
+                      className="flex-1 px-6 py-3 bg-neutral-100 text-neutral-600 rounded-full text-sm font-bold hover:bg-neutral-200 transition-colors"
+                    >
+                      Clear
+                    </button>
+                    <button 
+                      onClick={() => setIsReportsModalOpen(false)}
+                      className="flex-1 px-6 py-3 bg-neutral-50 text-neutral-600 rounded-full text-sm font-bold hover:bg-neutral-100 transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
