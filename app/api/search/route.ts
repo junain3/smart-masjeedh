@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { NextResponse } from 'next/server';
 
 interface SearchFilters {
@@ -73,10 +73,6 @@ const calculateDateRangeFromBirthYear = (birthYear: { min?: number; max?: number
 
 export async function POST(request: Request) {
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
 
     const body: SearchRequest = await request.json();
     const { filters = {}, pagination = {} } = body;
