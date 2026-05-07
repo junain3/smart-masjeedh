@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/utils/supabase/server';
 import { NextResponse } from 'next/server';
 
 interface SearchFilters {
@@ -73,6 +73,10 @@ const calculateDateRangeFromBirthYear = (birthYear: { min?: number; max?: number
 
 export async function POST(request: Request) {
   try {
+    // Create server-side Supabase client with cookie access
+    const supabase = createClient();
+    
+    console.log('DEBUG: Server-side Supabase client created');
 
     const body: SearchRequest = await request.json();
     const { filters = {}, pagination = {} } = body;
@@ -80,8 +84,16 @@ export async function POST(request: Request) {
     const limit = Math.min(pagination.limit || 20, 100); // Max 100 results
     const offset = (page - 1) * limit;
 
-    // Get user from session (like working API routes)
+    // Get user from session
+    console.log('DEBUG: Attempting to get session...');
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    console.log('DEBUG: Session result:', { 
+      hasSession: !!session, 
+      hasUser: !!session?.user, 
+      userId: session?.user?.id,
+      sessionError: sessionError?.message 
+    });
     
     if (sessionError || !session?.user) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
