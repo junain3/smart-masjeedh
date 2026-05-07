@@ -80,24 +80,19 @@ export async function POST(request: Request) {
     const limit = Math.min(pagination.limit || 20, 100); // Max 100 results
     const offset = (page - 1) * limit;
 
-    // Get user and masjid context from auth header
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader) {
-      return NextResponse.json({ error: 'Authorization required' }, { status: 401 });
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    // Get user from session (like working API routes)
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    if (sessionError || !session?.user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    // Get user's masjid_id from user metadata or user_roles
+    // Get user role and masjid context
     const { data: userData, error: userError } = await supabase
       .from('user_roles')
       .select('masjid_id')
-      .eq('user_id', user.id)
+      .eq('auth_user_id', session.user.id)
+      .eq('verified', true)
       .single();
 
     if (userError || !userData?.masjid_id) {
