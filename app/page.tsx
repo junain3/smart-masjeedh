@@ -525,9 +525,10 @@ export default function HomePage() {
       }
 
       const response = await fetch('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
           filters,
           page: 1,
           limit: 10
@@ -572,9 +573,10 @@ export default function HomePage() {
       }
 
       const response = await fetch('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
           filters,
           page: 1,
           limit: 10
