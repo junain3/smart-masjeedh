@@ -524,16 +524,23 @@ export default function HomePage() {
           break;
       }
 
-      const response = await fetch('/api/search', {
+      const {
+  data: { session },
+} = await supabase.auth.getSession();
+
+const response = await fetch('/api/search', {
   method: 'POST',
   credentials: 'include',
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${session?.access_token}`,
+  },
   body: JSON.stringify({
-          filters,
-          page: 1,
-          limit: 10
-        })
-      });
+    filters,
+    page: 1,
+    limit: 10,
+  }),
+});
 
       const result = await response.json();
       
@@ -572,16 +579,23 @@ export default function HomePage() {
         filters.civilStatus = [advancedFilters.civilStatus];
       }
 
-      const response = await fetch('/api/search', {
+     const {
+  data: { session },
+} = await supabase.auth.getSession();
+
+const response = await fetch('/api/search', {
   method: 'POST',
   credentials: 'include',
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${session?.access_token}`,
+  },
   body: JSON.stringify({
-          filters,
-          page: 1,
-          limit: 10
-        })
-      });
+    filters,
+    page: 1,
+    limit: 10,
+  }),
+});
 
       const result = await response.json();
       
