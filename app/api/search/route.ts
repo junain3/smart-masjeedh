@@ -84,26 +84,40 @@ export async function POST(request: Request) {
     const limit = Math.min(pagination.limit || 20, 100); // Max 100 results
     const offset = (page - 1) * limit;
 
-    // Get user from session
-    console.log('DEBUG: Attempting to get session...');
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    console.log('DEBUG: Session result:', { 
-      hasSession: !!session, 
-      hasUser: !!session?.user, 
-      userId: session?.user?.id,
-      sessionError: sessionError?.message 
-    });
-    
-    if (sessionError || !session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
+   const authHeader = request.headers.get('authorization');
+
+if (!authHeader?.startsWith('Bearer ')) {
+  return NextResponse.json(
+    { error: 'Authorization required' },
+    { status: 401 }
+  );
+}
+
+const token = authHeader.replace('Bearer ', '');
+
+const {
+  data: { user },
+  error: authError,
+} = await supabase.auth.getUser(token);
+
+console.log('SEARCH AUTH DEBUG', {
+  hasToken: !!token,
+  userId: user?.id,
+  authError: authError?.message,
+});
+
+if (authError || !user) {
+  return NextResponse.json(
+    { error: 'Authentication required' },
+    { status: 401 }
+  );
+}
 
     // Get user role and masjid context
     const { data: userData, error: userError } = await supabase
       .from('user_roles')
       .select('masjid_id')
-      .eq('auth_user_id', session.user.id)
+      .eq('auth_user_id', user.id)
       .eq('verified', true)
       .single();
 
