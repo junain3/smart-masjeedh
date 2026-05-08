@@ -44,12 +44,10 @@ const calculateAgeRangeFromDob = (ageRange: { min?: number; max?: number }) => {
   let youngestAllowedDob: Date | null = null;
   
   if (ageRange.max) {
-    // For age max, calculate oldest allowed DOB (oldest person)
     oldestAllowedDob = new Date(today.getFullYear() - ageRange.max, today.getMonth(), today.getDate());
   }
   
   if (ageRange.min) {
-    // For age min, calculate youngest allowed DOB (youngest person)
     youngestAllowedDob = new Date(today.getFullYear() - ageRange.min, today.getMonth(), today.getDate());
   }
   
@@ -61,11 +59,11 @@ const calculateDateRangeFromBirthYear = (birthYear: { min?: number; max?: number
   let maxDob: Date | null = null;
   
   if (birthYear.min) {
-    minDob = new Date(birthYear.min, 0, 1); // Jan 1 of min year
+    minDob = new Date(birthYear.min, 0, 1);
   }
   
   if (birthYear.max) {
-    maxDob = new Date(birthYear.max, 11, 31); // Dec 31 of max year
+    maxDob = new Date(birthYear.max, 11, 31);
   }
   
   return { minDob, maxDob };
@@ -73,55 +71,35 @@ const calculateDateRangeFromBirthYear = (birthYear: { min?: number; max?: number
 
 export async function POST(request: Request) {
   try {
-    // Create server-side Supabase client with cookie access
     const supabase = createClient();
     
-    console.log('DEBUG: Server-side Supabase client created');
-
     const body: SearchRequest = await request.json();
     const { filters = {}, pagination = {} } = body;
     const page = pagination.page || 1;
-    const limit = Math.min(pagination.limit || 20, 100); // Max 100 results
+    const limit = Math.min(pagination.limit || 20, 100);
     const offset = (page - 1) * limit;
 
-   const authHeader = request.headers.get('authorization');
+    // Get bearer token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Authorization required' }, { status: 401 });
+    }
 
-if (!authHeader?.startsWith('Bearer ')) {
-  return NextResponse.json(
-    { error: 'Authorization required' },
-    { status: 401 }
-  );
-}
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
-const token = authHeader.replace('Bearer ', '');
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
 
-const {
-  data: { user },
-  error: authError,
-} = await supabase.auth.getUser(token);
-
-console.log('SEARCH AUTH DEBUG', {
-  hasToken: !!token,
-  userId: user?.id,
-  authError: authError?.message,
-});
-
-if (authError || !user) {
-  return NextResponse.json(
-    { error: 'Authentication required' },
-    { status: 401 }
-  );
-}
-
-    // Get user role and masjid context
+    // Get user's masjid_id from user_roles
     const { data: userData, error: userError } = await supabase
       .from('user_roles')
       .select('masjid_id')
       .eq('auth_user_id', user.id)
-      .eq('verified', true)
-      .single();
+      .maybeSingle();
 
-    if (userError || !userData?.masjid_id) {
+    if (!userData?.masjid_id) {
       return NextResponse.json({ error: 'Masjid context not found' }, { status: 400 });
     }
 
@@ -170,14 +148,11 @@ if (authError || !user) {
       const { oldestAllowedDob, youngestAllowedDob } = calculateAgeRangeFromDob(filters.ageRange);
       
       if (oldestAllowedDob && youngestAllowedDob) {
-        // Both min and max age specified
         query = query.gte('dob', oldestAllowedDob.toISOString().split('T')[0])
                       .lte('dob', youngestAllowedDob.toISOString().split('T')[0]);
       } else if (oldestAllowedDob) {
-        // Only max age specified (age >= X)
         query = query.gte('dob', oldestAllowedDob.toISOString().split('T')[0]);
       } else if (youngestAllowedDob) {
-        // Only min age specified (age <= X)
         query = query.lte('dob', youngestAllowedDob.toISOString().split('T')[0]);
       }
     }
@@ -239,17 +214,41 @@ if (authError || !user) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Extract families from the nested data
+    // Extract families from nested data
     const families = new Map();
-    const members = (data || []).map(member => {
+    const rows = (data || []) as any[];
+    const members = rows.map(member => {
       const family = member.families;
       if (family && !families.has(family.family_code)) {
         families.set(family.family_code, family);
       }
       
-      // Remove nested families from member object
-      const { families: _, ...memberWithoutFamily } = member;
-      return memberWithoutFamily;
+      // Build member object without nested families
+      return {
+        id: member.id,
+        name: member.name,
+        relationship: member.relationship,
+        dob: member.dob,
+        gender: member.gender,
+        civil_status: member.civil_status,
+        phone: member.phone,
+        education: member.education,
+        occupation: member.occupation,
+        is_moulavi: member.is_moulavi,
+        is_new_muslim: member.is_new_muslim,
+        is_foreign_resident: member.is_foreign_resident,
+        foreign_country: member.foreign_country,
+        foreign_contact: member.foreign_contact,
+        has_special_needs: member.has_special_needs,
+        special_needs_details: member.special_needs_details,
+        has_health_issue: member.has_health_issue,
+        health_details: member.health_details,
+        family_id: member.family_id,
+        family_code: family?.family_code || '',
+        head_name: family?.head_name || '',
+        address: family?.address || '',
+        family_phone: family?.phone || ''
+      };
     });
 
     const totalPages = Math.ceil((count || 0) / limit);
