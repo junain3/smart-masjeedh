@@ -20,6 +20,7 @@ interface SearchRequest {
     page?: number;
     limit?: number;
   };
+  masjidId?: string;
 }
 
 interface SearchResponse {
@@ -78,6 +79,10 @@ export async function POST(request: Request) {
     const page = pagination.page || 1;
     const limit = Math.min(pagination.limit || 20, 100);
     const offset = (page - 1) * limit;
+    
+    // Check if frontend provided masjidId
+    const frontendMasjidId = body.masjidId;
+    console.log('SEARCH FRONTEND DEBUG:', { frontendMasjidId });
 
     // Get bearer token from Authorization header
     const authHeader = request.headers.get('authorization');
@@ -92,18 +97,59 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    // Get user's masjid_id from user_roles
-    const { data: userData, error: userError } = await supabase
-      .from('user_roles')
-      .select('masjid_id')
-      .eq('auth_user_id', user.id)
-      .maybeSingle();
+    // Get user's masjid_id from user_roles - support both auth_user_id and user_id
+    console.log('SEARCH USER DEBUG:', { userId: user.id });
+    
+    let masjidId: string;
+    
+    // If frontend provided masjidId, verify user has access to it
+    if (frontendMasjidId) {
+      console.log('SEARCH USER DEBUG: Verifying frontend masjidId...');
+      const { data: verification, error: verifyError } = await supabase
+        .from('user_roles')
+        .select('masjid_id')
+        .or(`auth_user_id.eq.${user.id},user_id.eq.${user.id}`)
+        .eq('masjid_id', frontendMasjidId)
+        .maybeSingle();
+        
+      if (verification?.masjid_id) {
+        masjidId = frontendMasjidId;
+        console.log('SEARCH USER DEBUG: Frontend masjidId verified');
+      } else {
+        return NextResponse.json({ error: 'Invalid masjid context' }, { status: 403 });
+      }
+    } else {
+      // Try auth_user_id first (most common pattern)
+      let { data: userData, error: userError } = await supabase
+        .from('user_roles')
+        .select('masjid_id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
 
-    if (!userData?.masjid_id) {
-      return NextResponse.json({ error: 'Masjid context not found' }, { status: 400 });
+      // If not found, try user_id (admin pattern)
+      if (!userData && userError) {
+        console.log('SEARCH USER DEBUG: Trying user_id field instead...');
+        const result = await supabase
+          .from('user_roles')
+          .select('masjid_id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        userData = result.data;
+        userError = result.error;
+      }
+
+      if (!userData?.masjid_id) {
+        return NextResponse.json({ error: 'Masjid context not found' }, { status: 400 });
+      }
+      
+      masjidId = userData.masjid_id;
     }
 
-    const masjidId = userData.masjid_id;
+    console.log('SEARCH USER DEBUG:', { 
+      userId: user.id, 
+      finalMasjidId: masjidId,
+      frontendMasjidId 
+    });
 
     // Build query with dynamic filters
     let query = supabase
