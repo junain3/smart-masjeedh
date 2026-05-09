@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 interface SearchFilters {
@@ -74,6 +75,12 @@ export async function POST(request: Request) {
   try {
     const supabase = createClient();
     
+    // Create admin client for user_roles lookup (bypasses RLS)
+    const adminSupabase = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
     const body: SearchRequest = await request.json();
     const { filters = {}, pagination = {} } = body;
     const page = pagination.page || 1;
@@ -93,7 +100,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    const { data: roleData, error: roleError } = await supabase
+    // Use admin client for user_roles lookup (bypasses RLS)
+    const { data: roleData, error: roleError } = await adminSupabase
   .from('user_roles')
   .select('masjid_id, role, email')
   .or(`auth_user_id.eq.${user.id},user_id.eq.${user.id},email.eq.${user.email}`)
