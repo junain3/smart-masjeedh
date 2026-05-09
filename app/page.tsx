@@ -557,12 +557,27 @@ const response = await fetch('/api/search', {
 
       const result = await response.json();
       
+      console.log('QUICK REPORT RESPONSE:', {
+        ok: response.ok,
+        status: response.status,
+        result,
+        hasMembers: !!result.members,
+        membersCount: result.members?.length,
+        hasCount: !!result.count,
+        count: result.count
+      });
+      
       if (!response.ok) {
         throw new Error(result.error || 'Search failed');
       }
 
       setReportResults(result.members || []);
       setReportCount(result.count || 0);
+      
+      console.log('QUICK REPORT STATE UPDATE:', {
+        reportResultsSet: result.members || [],
+        reportCountSet: result.count || 0
+      });
     } catch (error: any) {
       console.error('Quick report error:', error);
       toast({ kind: "error", title: "Report Error", message: error.message || "Failed to generate report" });
@@ -625,12 +640,27 @@ const response = await fetch('/api/search', {
 
       const result = await response.json();
       
+      console.log('ADVANCED REPORT RESPONSE:', {
+        ok: response.ok,
+        status: response.status,
+        result,
+        hasMembers: !!result.members,
+        membersCount: result.members?.length,
+        hasCount: !!result.count,
+        count: result.count
+      });
+      
       if (!response.ok) {
         throw new Error(result.error || 'Search failed');
       }
 
       setReportResults(result.members || []);
       setReportCount(result.count || 0);
+      
+      console.log('ADVANCED REPORT STATE UPDATE:', {
+        reportResultsSet: result.members || [],
+        reportCountSet: result.count || 0
+      });
     } catch (error: any) {
       console.error('Advanced report error:', error);
       toast({ kind: "error", title: "Report Error", message: error.message || "Failed to generate report" });
@@ -1070,14 +1100,37 @@ const response = await fetch('/api/search', {
                   </div>
 
                   {/* Results */}
-                  {reportResults.length > 0 && (
-                    <div className="border-t border-neutral-200 pt-4 mt-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="text-sm text-neutral-600">
-                          Found <span className="font-black text-neutral-900">{reportCount}</span> members
-                        </div>
+                  <div className="border-t border-neutral-200 pt-4 mt-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="text-sm text-neutral-600">
+                        {reportGenerating ? (
+                          <span>Generating report...</span>
+                        ) : (
+                          <>
+                            Found <span className="font-black text-neutral-900">{reportCount}</span> members
+                          </>
+                        )}
                       </div>
-                      
+                    </div>
+                    
+                    {/* Loading State */}
+                    {reportGenerating && (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+                        <span className="ml-3 text-sm text-neutral-600">Loading report data...</span>
+                      </div>
+                    )}
+                    
+                    {/* No Results State */}
+                    {!reportGenerating && reportResults.length === 0 && (
+                      <div className="text-center py-8">
+                        <p className="text-neutral-500 text-sm">No members found for this report criteria.</p>
+                        <p className="text-neutral-400 text-xs mt-2">Try adjusting the filters or report type.</p>
+                      </div>
+                    )}
+                    
+                    {/* Results List */}
+                    {!reportGenerating && reportResults.length > 0 && (
                       <div className="space-y-2 max-h-60 overflow-y-auto">
                         {reportResults.map((member: any) => (
                           <div key={member.id} className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg hover:bg-white transition-colors">
@@ -1094,8 +1147,8 @@ const response = await fetch('/api/search', {
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   {/* Action Buttons */}
                   <div className="flex gap-3 pt-4 border-t border-neutral-200">
