@@ -93,99 +93,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    // Get user's masjid_id directly from user_roles table (database as single source of truth)
-    console.log('SEARCH USER DEBUG:', { userId: user.id, userEmail: user.email });
-    
-    let masjidId: string;
-    let foundRole: any = null;
-    
-    // Try auth_user_id first (most common pattern)
-    console.log('SEARCH USER DEBUG: Trying auth_user_id lookup...');
-    let { data: userData, error: userError } = await supabase
-      .from('user_roles')
-      .select('masjid_id, role, email, verified, status')
-      .eq('auth_user_id', user.id)
-      .maybeSingle();
+    const { data: roleData, error: roleError } = await supabase
+  .from('user_roles')
+  .select('masjid_id, role, email')
+  .or(`auth_user_id.eq.${user.id},user_id.eq.${user.id},email.eq.${user.email}`)
+  .eq('status', 'active')
+  .maybeSingle();
 
-    console.log('SEARCH AUTH_USER_ID RESULT:', { 
-      userData, 
-      userError: userError?.message,
-      hasMasjidId: !!userData?.masjid_id
-    });
+console.log('SEARCH ROLE LOOKUP:', {
+  userId: user.id,
+  email: user.email,
+  roleData,
+  roleError
+});
 
-    if (userData?.masjid_id) {
-      foundRole = userData;
-      console.log('SEARCH USER DEBUG: Found role via auth_user_id');
-    }
+if (roleError || !roleData?.masjid_id) {
+  return NextResponse.json(
+    { error: 'Masjid context not found' },
+    { status: 403 }
+  );
+}
 
-    // If not found, try user_id (admin pattern)
-    if (!foundRole) {
-      console.log('SEARCH USER DEBUG: Trying user_id field...');
-      const result = await supabase
-        .from('user_roles')
-        .select('masjid_id, role, email, verified, status')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
-      console.log('SEARCH USER_ID RESULT:', { 
-        data: result.data, 
-        error: result.error?.message,
-        hasMasjidId: !!result.data?.masjid_id
-      });
-      
-      if (result.data?.masjid_id) {
-        foundRole = result.data;
-        console.log('SEARCH USER DEBUG: Found role via user_id');
-      }
-    }
+const resolvedMasjidId = roleData.masjid_id;
 
-    // If still not found, try email with verified and status conditions
-    if (!foundRole && user.email) {
-      console.log('SEARCH USER DEBUG: Trying email lookup...');
-      const emailResult = await supabase
-        .from('user_roles')
-        .select('masjid_id, role, email, verified, status')
-        .eq('email', user.email)
-        .eq('verified', true)
-        .eq('status', 'active')
-        .maybeSingle();
-      
-      console.log('SEARCH EMAIL RESULT:', { 
-        data: emailResult.data, 
-        error: emailResult.error?.message,
-        hasMasjidId: !!emailResult.data?.masjid_id
-      });
-      
-      if (emailResult.data?.masjid_id) {
-        foundRole = emailResult.data;
-        console.log('SEARCH USER DEBUG: Found role via email');
-      }
-    }
-
-    console.log('SEARCH FINAL ROLE CHECK:', { 
-      foundRole: !!foundRole,
-      foundMasjidId: foundRole?.masjid_id,
-      allLookupsFailed: !foundRole?.masjid_id
-    });
-
-    if (!foundRole?.masjid_id) {
-      return NextResponse.json({ error: 'Masjid context not found' }, { status: 400 });
-    }
-    
-    masjidId = foundRole.masjid_id;
-
-    console.log('SEARCH FINAL USER DEBUG:', { 
-      userId: user.id, 
-      userEmail: user.email,
-      finalMasjidId: masjidId,
-      foundRole: {
-        masjid_id: foundRole?.masjid_id,
-        role: foundRole?.role,
-        email: foundRole?.email,
-        verified: foundRole?.verified,
-        status: foundRole?.status
-      }
-    });
+console.log('SEARCH RESOLVED MASJID:', {
+  resolvedMasjidId
+});
 
     // Build query with dynamic filters
     let query = supabase
