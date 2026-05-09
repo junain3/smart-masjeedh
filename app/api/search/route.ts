@@ -120,12 +120,15 @@ if (roleError || !roleData?.masjid_id) {
     { status: 403 }
   );
 }
+if (roleError || !roleData?.masjid_id) {
+  return NextResponse.json(
+    { error: 'Masjid context not found' },
+    { status: 403 }
+  );
+}
 
-const resolvedMasjidId = roleData.masjid_id;
+const masjidId = roleData.masjid_id;
 
-console.log('SEARCH RESOLVED MASJID:', {
-  resolvedMasjidId
-});
 
     // Build query with dynamic filters
     let query = supabase
