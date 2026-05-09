@@ -97,7 +97,6 @@ export async function POST(request: Request) {
   .from('user_roles')
   .select('masjid_id, role, email')
   .or(`auth_user_id.eq.${user.id},user_id.eq.${user.id},email.eq.${user.email}`)
-  .eq('status', 'active')
   .maybeSingle();
 
 console.log('SEARCH ROLE LOOKUP:', {
