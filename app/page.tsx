@@ -528,6 +528,23 @@ export default function HomePage() {
   data: { session },
 } = await supabase.auth.getSession();
 
+// Debug logs
+console.log('FRONTEND SEARCH DEBUG (Quick Report):', {
+  currentUser: session?.user,
+  tenantContextMasjidId: tenantContext?.masjidId,
+  hasAuthorization: !!session?.access_token,
+  filters
+});
+
+const requestBody = {
+  filters,
+  page: 1,
+  limit: 10,
+  masjidId: tenantContext?.masjidId
+};
+
+console.log('FRONTEND REQUEST BODY (Quick Report):', requestBody);
+
 const response = await fetch('/api/search', {
   method: 'POST',
   credentials: 'include',
@@ -535,11 +552,7 @@ const response = await fetch('/api/search', {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${session?.access_token}`,
   },
-  body: JSON.stringify({
-    filters,
-    page: 1,
-    limit: 10,
-  }),
+  body: JSON.stringify(requestBody),
 });
 
       const result = await response.json();
@@ -583,6 +596,23 @@ const response = await fetch('/api/search', {
   data: { session },
 } = await supabase.auth.getSession();
 
+// Debug logs
+console.log('FRONTEND SEARCH DEBUG (Advanced Report):', {
+  currentUser: session?.user,
+  tenantContextMasjidId: tenantContext?.masjidId,
+  hasAuthorization: !!session?.access_token,
+  filters
+});
+
+const requestBody = {
+  filters,
+  page: 1,
+  limit: 10,
+  masjidId: tenantContext?.masjidId
+};
+
+console.log('FRONTEND REQUEST BODY (Advanced Report):', requestBody);
+
 const response = await fetch('/api/search', {
   method: 'POST',
   credentials: 'include',
@@ -590,11 +620,7 @@ const response = await fetch('/api/search', {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${session?.access_token}`,
   },
-  body: JSON.stringify({
-    filters,
-    page: 1,
-    limit: 10,
-  }),
+  body: JSON.stringify(requestBody),
 });
 
       const result = await response.json();

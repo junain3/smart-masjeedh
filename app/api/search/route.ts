@@ -86,12 +86,31 @@ export async function POST(request: Request) {
 
     // Get bearer token from Authorization header
     const authHeader = request.headers.get('authorization');
+    console.log('SEARCH AUTH HEADER DEBUG:', { 
+      hasAuthHeader: !!authHeader,
+      authHeaderStart: authHeader?.substring(0, 20) + '...',
+      startsWithBearer: authHeader?.startsWith('Bearer ')
+    });
+    
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Authorization required' }, { status: 401 });
     }
 
     const token = authHeader.replace('Bearer ', '');
+    console.log('SEARCH TOKEN DEBUG:', { 
+      hasToken: !!token,
+      tokenLength: token?.length,
+      tokenStart: token?.substring(0, 10) + '...'
+    });
+    
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    console.log('SEARCH USER AUTH DEBUG:', { 
+      authError: authError?.message,
+      hasUser: !!user,
+      userId: user?.id,
+      userEmail: user?.email
+    });
 
     if (authError || !user) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -122,11 +141,18 @@ export async function POST(request: Request) {
       }
     } else {
       // Try auth_user_id first (most common pattern)
+      console.log('SEARCH USER DEBUG: Trying auth_user_id lookup...');
       let { data: userData, error: userError } = await supabase
         .from('user_roles')
         .select('masjid_id, role, email, verified, status')
         .eq('auth_user_id', user.id)
         .maybeSingle();
+
+      console.log('SEARCH AUTH_USER_ID RESULT:', { 
+        userData, 
+        userError: userError?.message,
+        hasMasjidId: !!userData?.masjid_id
+      });
 
       if (userData?.masjid_id) {
         foundRole = userData;
@@ -141,6 +167,13 @@ export async function POST(request: Request) {
           .select('masjid_id, role, email, verified, status')
           .eq('user_id', user.id)
           .maybeSingle();
+        
+        console.log('SEARCH USER_ID RESULT:', { 
+          data: result.data, 
+          error: result.error?.message,
+          hasMasjidId: !!result.data?.masjid_id
+        });
+        
         if (result.data?.masjid_id) {
           foundRole = result.data;
           console.log('SEARCH USER DEBUG: Found role via user_id');
@@ -157,11 +190,24 @@ export async function POST(request: Request) {
           .eq('verified', true)
           .eq('status', 'active')
           .maybeSingle();
+        
+        console.log('SEARCH EMAIL RESULT:', { 
+          data: emailResult.data, 
+          error: emailResult.error?.message,
+          hasMasjidId: !!emailResult.data?.masjid_id
+        });
+        
         if (emailResult.data?.masjid_id) {
           foundRole = emailResult.data;
           console.log('SEARCH USER DEBUG: Found role via email');
         }
       }
+
+      console.log('SEARCH FINAL ROLE CHECK:', { 
+        foundRole: !!foundRole,
+        foundMasjidId: foundRole?.masjid_id,
+        allLookupsFailed: !foundRole?.masjid_id
+      });
 
       if (!foundRole?.masjid_id) {
         return NextResponse.json({ error: 'Masjid context not found' }, { status: 400 });
