@@ -124,19 +124,54 @@ export async function POST(request: Request) {
     
     // If frontend provided masjidId, verify user has access to it
     if (frontendMasjidId) {
-      console.log('SEARCH USER DEBUG: Verifying frontend masjidId...');
+      console.log('SEARCH MASJID VERIFICATION DEBUG:', {
+        frontendMasjidId,
+        frontendMasjidIdType: typeof frontendMasjidId,
+        frontendMasjidIdTrimmed: frontendMasjidId?.trim(),
+        userId: user.id,
+        userEmail: user.email
+      });
+      
       const { data: verification, error: verifyError } = await supabase
         .from('user_roles')
-        .select('masjid_id')
+        .select('masjid_id, role, email, verified, status')
         .or(`auth_user_id.eq.${user.id},user_id.eq.${user.id},email.eq.${user.email}`)
         .eq('masjid_id', frontendMasjidId)
         .maybeSingle();
+        
+      console.log('SEARCH MASJID VERIFICATION RESULT:', {
+        verification,
+        verifyError: verifyError?.message,
+        matchedMasjidId: verification?.masjid_id,
+        matchedRole: verification?.role,
+        matchedEmail: verification?.email,
+        matchedStatus: verification?.status,
+        matchedVerified: verification?.verified,
+        types: {
+          frontendMasjidId: typeof frontendMasjidId,
+          dbMasjidId: typeof verification?.masjid_id
+        }
+      });
         
       if (verification?.masjid_id) {
         masjidId = frontendMasjidId;
         foundRole = verification;
         console.log('SEARCH USER DEBUG: Frontend masjidId verified');
       } else {
+        console.log('SEARCH MASJID MISMATCH ANALYSIS:', {
+          error: 'Frontend masjidId does not match user_roles.masjid_id',
+          frontendValue: frontendMasjidId,
+          frontendValueTrimmed: frontendMasjidId?.trim(),
+          userId: user.id,
+          userEmail: user.email,
+          verificationError: verifyError?.message,
+          possibleCauses: [
+            'Frontend tenantContext has stale/wrong masjidId',
+            'User roles table has wrong masjid_id for this user',
+            'Type mismatch (string vs uuid)',
+            'Whitespace or null value issues'
+          ]
+        });
         return NextResponse.json({ error: 'Invalid masjid context' }, { status: 403 });
       }
     } else {
@@ -216,7 +251,28 @@ export async function POST(request: Request) {
       masjidId = foundRole.masjid_id;
     }
 
-    console.log('SEARCH USER DEBUG:', { 
+    // FALLBACK: If frontend verification failed, try to get masjid_id directly from user_roles
+    if (!masjidId && frontendMasjidId) {
+      console.log('SEARCH FALLBACK: Frontend verification failed, trying direct lookup...');
+      const { data: fallbackRole, error: fallbackError } = await supabase
+        .from('user_roles')
+        .select('masjid_id, role, email, verified, status')
+        .or(`auth_user_id.eq.${user.id},user_id.eq.${user.id},email.eq.${user.email}`)
+        .maybeSingle();
+      
+      console.log('SEARCH FALLBACK RESULT:', {
+        fallbackRole,
+        fallbackError: fallbackError?.message,
+        hasMasjidId: !!fallbackRole?.masjid_id
+      });
+      
+      if (fallbackRole?.masjid_id) {
+        masjidId = fallbackRole.masjid_id;
+        console.log('SEARCH FALLBACK: Using database masjid_id instead of frontend verification');
+      }
+    }
+
+    console.log('SEARCH FINAL USER DEBUG:', { 
       userId: user.id, 
       userEmail: user.email,
       finalMasjidId: masjidId,
@@ -227,7 +283,8 @@ export async function POST(request: Request) {
         email: foundRole?.email,
         verified: foundRole?.verified,
         status: foundRole?.status
-      }
+      },
+      usedFallback: !foundRole && !!masjidId
     });
 
     // Build query with dynamic filters
