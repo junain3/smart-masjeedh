@@ -158,7 +158,7 @@ const masjidId = roleData.masjid_id;
           head_name,
           is_widow_head,
           address,
-          phone as family_phone
+          family_phone:phone
         )
       `, { count: 'exact' })
       .eq('masjid_id', masjidId);
