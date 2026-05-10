@@ -561,23 +561,23 @@ const response = await fetch('/api/search', {
         ok: response.ok,
         status: response.status,
         result,
-        hasMembers: !!result.members,
-        membersCount: result.members?.length,
-        hasCount: !!result.count,
-        count: result.count
+        hasMembers: !!result.data?.members,
+        membersCount: result.data?.members?.length,
+        hasCount: !!result.data?.count,
+        count: result.data?.count
       });
       
       if (!response.ok) {
         throw new Error(result.error || 'Search failed');
       }
 
-      setReportResults(result.members || []);
-      setReportCount(result.count || 0);
+      setReportResults(result.data?.members || [])
+setReportCount(result.data?.count || 0)
       
       console.log('QUICK REPORT STATE UPDATE:', {
-        reportResultsSet: result.members || [],
-        reportCountSet: result.count || 0
-      });
+  reportResultsSet: result.data?.members || [],
+  reportCountSet: result.data?.count || 0
+});
     } catch (error: any) {
       console.error('Quick report error:', error);
       toast({ kind: "error", title: "Report Error", message: error.message || "Failed to generate report" });
@@ -641,25 +641,25 @@ const response = await fetch('/api/search', {
       const result = await response.json();
       
       console.log('ADVANCED REPORT RESPONSE:', {
-        ok: response.ok,
-        status: response.status,
-        result,
-        hasMembers: !!result.members,
-        membersCount: result.members?.length,
-        hasCount: !!result.count,
-        count: result.count
-      });
+  ok: response.ok,
+  status: response.status,
+  result,
+  hasMembers: !!result.data?.members,
+  membersCount: result.data?.members?.length,
+  hasCount: !!result.data?.count,
+  count: result.data?.count
+});
       
       if (!response.ok) {
         throw new Error(result.error || 'Search failed');
       }
 
-      setReportResults(result.members || []);
-      setReportCount(result.count || 0);
+      setReportResults(result.data?.members || [])
+setReportCount(result.data?.count || 0)
       
       console.log('ADVANCED REPORT STATE UPDATE:', {
-        reportResultsSet: result.members || [],
-        reportCountSet: result.count || 0
+        reportResultsSet: result.data?.members || [],
+        reportCountSet: result.data?.count || 0
       });
     } catch (error: any) {
       console.error('Advanced report error:', error);
