@@ -854,7 +854,10 @@ export default function FamiliesPage() {
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-xl font-black text-slate-900">{t.add_new_family}</h2>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={() => {
+                  resetForm();
+                  setIsOpen(false);
+                }}
                 className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600"
               >
                 <X className="h-5 w-5" />
