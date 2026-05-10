@@ -76,30 +76,33 @@ export default function FamiliesPage() {
   }
 
   const [isOpen, setIsOpen] = useState(false);
-  const [headName, setHeadName] = useState("");
-  const [address, setAddress] = useState("");
-  const [phone, setPhone] = useState("");
-  const [familyCode, setFamilyCode] = useState("");
-  const [subscriptionAmount, setSubscriptionAmount] = useState("");
-  const [openingBalance, setOpeningBalance] = useState("");
-  const [isWidowHead, setIsWidowHead] = useState(false);
+  // Create initial form state object
+  const initialFormState = {
+    headName: "",
+    address: "",
+    phone: "",
+    familyCode: "",
+    subscriptionAmount: "",
+    openingBalance: "",
+    isWidowHead: false,
+    houseType: "" as "own" | "rent" | "",
+    hasToilet: false,
+    specialNeedsDetails: "",
+    foreignMembersDetails: "",
+    healthDetails: "",
+    hasCar: false,
+    hasThreeWheeler: false,
+    hasVan: false,
+    hasLorry: false,
+    hasTractor: false,
+    extraNotes: "",
+    currentStep: 1
+  };
+
+  // Use initialFormState in useState
+  const [formData, setFormData] = useState(initialFormState);
+  
   const [isLive, setIsLive] = useState(false);
-  
-  // New fields for enhanced data collection
-  const [houseType, setHouseType] = useState<"own" | "rent" | "">("");
-  const [hasToilet, setHasToilet] = useState(false);
-  const [specialNeedsDetails, setSpecialNeedsDetails] = useState("");
-  const [foreignMembersDetails, setForeignMembersDetails] = useState("");
-  const [healthDetails, setHealthDetails] = useState("");
-  const [hasCar, setHasCar] = useState(false);
-  const [hasThreeWheeler, setHasThreeWheeler] = useState(false);
-  const [hasVan, setHasVan] = useState(false);
-  const [hasLorry, setHasLorry] = useState(false);
-  const [hasTractor, setHasTractor] = useState(false);
-  const [extraNotes, setExtraNotes] = useState("");
-  
-  // Step management for 3-step form
-  const [currentStep, setCurrentStep] = useState(1);
   const [families, setFamilies] = useState<Family[]>([]);
   const [isFetching, setIsFetching] = useState(false);
   const [editingFamily, setEditingFamily] = useState<Family | null>(null);
@@ -134,29 +137,29 @@ export default function FamiliesPage() {
 
   useEffect(() => {
     if (editingFamily) {
-      setHeadName(editingFamily.head_name);
-      setAddress(editingFamily.address);
-      setPhone(editingFamily.phone);
-      setFamilyCode(editingFamily.family_code);
-      setSubscriptionAmount(editingFamily.subscription_amount?.toString() || "");
-      setOpeningBalance(editingFamily.opening_balance?.toString() || "");
-      setIsWidowHead(editingFamily.is_widow_head || false);
-      
-      // Set new fields
-      setHouseType(editingFamily.house_type || "");
-      setHasToilet(editingFamily.has_toilet || false);
-      setSpecialNeedsDetails(editingFamily.special_needs_details || "");
-      setForeignMembersDetails(editingFamily.foreign_members_details || "");
-      setHealthDetails(editingFamily.health_details || "");
-      setHasCar(editingFamily.has_car || false);
-      setHasThreeWheeler(editingFamily.has_three_wheeler || false);
-      setHasVan(editingFamily.has_van || false);
-      setHasLorry(editingFamily.has_lorry || false);
-      setHasTractor(editingFamily.has_tractor || false);
-      setExtraNotes(editingFamily.extra_notes || "");
+      setFormData({
+        headName: editingFamily.head_name,
+        address: editingFamily.address,
+        phone: editingFamily.phone,
+        familyCode: editingFamily.family_code,
+        subscriptionAmount: editingFamily.subscription_amount?.toString() || "",
+        openingBalance: editingFamily.opening_balance?.toString() || "",
+        isWidowHead: editingFamily.is_widow_head || false,
+        houseType: editingFamily.house_type || "",
+        hasToilet: editingFamily.has_toilet || false,
+        specialNeedsDetails: editingFamily.special_needs_details || "",
+        foreignMembersDetails: editingFamily.foreign_members_details || "",
+        healthDetails: editingFamily.health_details || "",
+        hasCar: editingFamily.has_car || false,
+        hasThreeWheeler: editingFamily.has_three_wheeler || false,
+        hasVan: editingFamily.has_van || false,
+        hasLorry: editingFamily.has_lorry || false,
+        hasTractor: editingFamily.has_tractor || false,
+        extraNotes: editingFamily.extra_notes || "",
+        currentStep: 1
+      });
       
       setIsOpen(true);
-      setCurrentStep(1); // Reset to first step when editing
     }
   }, [editingFamily]);
 
@@ -180,15 +183,15 @@ export default function FamiliesPage() {
       if (match) {
         const prefix = match[1];
         const num = parseInt(match[2]);
-        setFamilyCode(`${prefix}${(num + 1).toString().padStart(match[2].length, '0')}`);
+        setFormData(prev => ({ ...prev, familyCode: `${prefix}${(num + 1).toString().padStart(match[2].length, '0')}` }));
       } else {
         // Fallback if format is different
-        setFamilyCode("");
+        setFormData(prev => ({ ...prev, familyCode: "" }));
       }
     } else if (isOpen && !isLive) {
-      setFamilyCode("FM-01");
+      setFormData(prev => ({ ...prev, familyCode: "FM-01" }));
     }
-  }, [isOpen, families, isLive]);
+  }, [isOpen, families, isLive, editingFamily]);
 
   async function fetchFamilies() {
     try {
@@ -264,25 +267,25 @@ export default function FamiliesPage() {
         const { error } = await supabase
           .from("families")
           .update({
-            family_code: familyCode,
-            head_name: headName,
-            address,
-            phone,
-            subscription_amount: parseFloat(subscriptionAmount) || 0,
-            opening_balance: parseFloat(openingBalance) || 0,
-            is_widow_head: isWidowHead,
+            family_code: formData.familyCode,
+            head_name: formData.headName,
+            address: formData.address,
+            phone: formData.phone,
+            subscription_amount: parseFloat(formData.subscriptionAmount) || 0,
+            opening_balance: parseFloat(formData.openingBalance) || 0,
+            is_widow_head: formData.isWidowHead,
             // New fields
-            house_type: houseType || null,
-            has_toilet: hasToilet,
-            special_needs_details: specialNeedsDetails || null,
-            foreign_members_details: foreignMembersDetails || null,
-            health_details: healthDetails || null,
-            has_car: hasCar,
-            has_three_wheeler: hasThreeWheeler,
-            has_van: hasVan,
-            has_lorry: hasLorry,
-            has_tractor: hasTractor,
-            extra_notes: extraNotes || null
+            house_type: formData.houseType || null,
+            has_toilet: formData.hasToilet,
+            special_needs_details: formData.specialNeedsDetails || null,
+            foreign_members_details: formData.foreignMembersDetails || null,
+            health_details: formData.healthDetails || null,
+            has_car: formData.hasCar,
+            has_three_wheeler: formData.hasThreeWheeler,
+            has_van: formData.hasVan,
+            has_lorry: formData.hasLorry,
+            has_tractor: formData.hasTractor,
+            extra_notes: formData.extraNotes || null
           })
           .eq("id", editingFamily.id)
           .eq("masjid_id", tenantContext.masjidId);
@@ -295,25 +298,25 @@ export default function FamiliesPage() {
           .from("families")
           .insert([
             {
-              family_code: familyCode,
-              head_name: headName,
-              address,
-              phone,
-              subscription_amount: parseFloat(subscriptionAmount) || 0,
-              opening_balance: parseFloat(openingBalance) || 0,
-              is_widow_head: isWidowHead,
+              family_code: formData.familyCode,
+              head_name: formData.headName,
+              address: formData.address,
+              phone: formData.phone,
+              subscription_amount: parseFloat(formData.subscriptionAmount) || 0,
+              opening_balance: parseFloat(formData.openingBalance) || 0,
+              is_widow_head: formData.isWidowHead,
               // New fields
-              house_type: houseType || null,
-              has_toilet: hasToilet,
-              special_needs_details: specialNeedsDetails || null,
-              foreign_members_details: foreignMembersDetails || null,
-              health_details: healthDetails || null,
-              has_car: hasCar,
-              has_three_wheeler: hasThreeWheeler,
-              has_van: hasVan,
-              has_lorry: hasLorry,
-              has_tractor: hasTractor,
-              extra_notes: extraNotes || null,
+              house_type: formData.houseType || null,
+              has_toilet: formData.hasToilet,
+              special_needs_details: formData.specialNeedsDetails || null,
+              foreign_members_details: formData.foreignMembersDetails || null,
+              health_details: formData.healthDetails || null,
+              has_car: formData.hasCar,
+              has_three_wheeler: formData.hasThreeWheeler,
+              has_van: formData.hasVan,
+              has_lorry: formData.hasLorry,
+              has_tractor: formData.hasTractor,
+              extra_notes: formData.extraNotes || null,
               user_id: authUserId, // Use authenticated user ID
               masjid_id: tenantContext.masjidId // Include masjid ID
             }
@@ -336,8 +339,8 @@ export default function FamiliesPage() {
             // Create head member only if doesn't exist
             const { error: memberInsertError } = await supabase.from("members").insert([{
               family_id: newFamilyId,
-              name: headName,              // Keep for future compatibility
-              full_name: headName,        // Add for database NOT NULL constraint
+              name: formData.headName,              // Keep for future compatibility
+              full_name: formData.headName,        // Add for database NOT NULL constraint
               relationship: "Head",
               civil_status: "",
               user_id: authUserId,
@@ -369,25 +372,7 @@ export default function FamiliesPage() {
   }
 
   const resetForm = () => {
-    setHeadName("");
-    setAddress("");
-    setPhone("");
-    setFamilyCode("");
-    setSubscriptionAmount("");
-    setOpeningBalance("");
-    setIsWidowHead(false);
-    setHouseType("");
-    setHasToilet(false);
-    setSpecialNeedsDetails("");
-    setForeignMembersDetails("");
-    setHealthDetails("");
-    setHasCar(false);
-    setHasThreeWheeler(false);
-    setHasVan(false);
-    setHasLorry(false);
-    setHasTractor(false);
-    setExtraNotes("");
-    setCurrentStep(1);
+    setFormData(initialFormState);
     setEditingFamily(null);
   };
 
@@ -854,7 +839,10 @@ export default function FamiliesPage() {
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-xl font-black text-slate-900">{t.add_new_family}</h2>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={() => {
+                  resetForm();
+                  setIsOpen(false);
+                }}
                 className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600"
               >
                 <X className="h-5 w-5" />
@@ -963,7 +951,10 @@ export default function FamiliesPage() {
                 <div className="flex gap-4">
                   <button
                     type="button"
-                    onClick={() => setIsOpen(false)}
+                    onClick={() => {
+                      resetForm();
+                      setIsOpen(false);
+                    }}
                     className="flex-1 py-4 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600"
                   >
                     Cancel
