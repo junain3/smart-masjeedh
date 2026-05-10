@@ -995,7 +995,25 @@ export default function FamiliesPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCurrentStep(2)}
+                    onClick={() => {
+                      if (!headName.trim()) {
+                        setErrorMessage("Family head name is required.");
+                        return;
+                      }
+                      if (!address.trim()) {
+                        setErrorMessage("Address is required.");
+                        return;
+                      }
+                      if (!phone.trim()) {
+                        setErrorMessage("Phone number is required.");
+                        return;
+                      }
+                      if (!familyCode.trim()) {
+                        setErrorMessage("Family code is required.");
+                        return;
+                      }
+                      setCurrentStep(2);
+                    }}
                     className="flex-1 py-4 rounded-2xl text-sm font-bold bg-emerald-500 text-white"
                   >
                     Next Step
