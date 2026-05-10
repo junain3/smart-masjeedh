@@ -259,6 +259,25 @@ export default function FamiliesPage() {
       const canMembers = isAdmin || tenantContext.permissions?.members !== false;
       if (!canMembers) throw new Error("Access denied");
 
+      // Client-side validation for required fields
+      if (!headName.trim()) {
+        setErrorMessage("Family head name is required.");
+        setLoading(false);
+        return;
+      }
+      
+      if (!phone.trim()) {
+        setErrorMessage("Phone number is required.");
+        setLoading(false);
+        return;
+      }
+      
+      if (!familyCode.trim()) {
+        setErrorMessage("Family code is required.");
+        setLoading(false);
+        return;
+      }
+
       if (editingFamily) {
         // Update existing
         const { error } = await supabase
