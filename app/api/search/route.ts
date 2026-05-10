@@ -24,6 +24,39 @@ interface SearchRequest {
   masjidId?: string;
 }
 
+interface FamilyData {
+  family_code: string;
+  head_name: string;
+  is_widow_head: boolean;
+  address: string;
+  family_phone: string;
+  masjid_id: string;
+}
+
+interface MemberWithFamily {
+  id: string;
+  name: string;
+  relationship: string;
+  dob: string;
+  gender: string;
+  civil_status: string;
+  phone: string;
+  education: string;
+  occupation: string;
+  is_moulavi: boolean;
+  is_new_muslim: boolean;
+  is_foreign_resident: boolean;
+  foreign_country: string;
+  foreign_contact: string;
+  has_special_needs: boolean;
+  special_needs_details: string;
+  has_health_issue: boolean;
+  health_details: string;
+  masjid_id: string;
+  family_id: string;
+  families: FamilyData;
+}
+
 interface SearchResponse {
   success: boolean;
   data: {
@@ -129,6 +162,8 @@ if (roleError || !roleData?.masjid_id) {
 
 const masjidId = roleData.masjid_id;
 
+    console.log('SEARCH FILTERS:', filters);
+    console.log('RESOLVED MASJID:', masjidId);
 
     // Build query with dynamic filters
     let query = supabase
@@ -152,13 +187,15 @@ const masjidId = roleData.masjid_id;
         special_needs_details,
         has_health_issue,
         health_details,
+        masjid_id,
         family_id,
         families!inner (
           family_code,
           head_name,
           is_widow_head,
           address,
-          family_phone:phone
+          family_phone:phone,
+          masjid_id
         )
       `, { count: 'exact' })
       .eq('masjid_id', masjidId);
@@ -231,8 +268,51 @@ const masjidId = roleData.masjid_id;
       .order('name', { ascending: true })
       .range(offset, offset + limit - 1);
 
+    console.log('FINAL QUERY CONDITIONS:', {
+      gender: filters.gender,
+      civilStatus: filters.civilStatus,
+      ageRange: filters.ageRange,
+      birthYear: filters.birthYear,
+      isMoulavi: filters.isMoulavi,
+      isNewMuslim: filters.isNewMuslim,
+      isForeignResident: filters.isForeignResident,
+      hasSpecialNeeds: filters.hasSpecialNeeds,
+      hasHealthIssue: filters.hasHealthIssue,
+      familyIsWidowHead: filters.familyIsWidowHead,
+      masjidId: masjidId
+    });
+
+    // Check if any members exist for this masjid (bypassing filters)
+    const { data: masjidCheck, error: checkError } = await supabase
+      .from('members')
+      .select('id, name, masjid_id')
+      .eq('masjid_id', masjidId)
+      .limit(5);
+
+    console.log('MASJID MEMBERS CHECK:', {
+      masjidId,
+      checkError: checkError?.message,
+      membersFound: masjidCheck?.length || 0,
+      sampleMembers: masjidCheck?.map(m => ({ id: m.id, name: m.name, masjid_id: m.masjid_id }))
+    });
+
     // Execute query
-    const { data, error, count } = await query;
+    const { data, error, count } = await query as { data: MemberWithFamily[] | null, error: any, count: number | null };
+
+    console.log('RAW MEMBERS RESULT:', {
+      dataLength: data?.length,
+      count,
+      error: error?.message,
+      firstMember: data?.[0],
+      sampleMember: data?.[0] ? {
+        id: data[0].id,
+        name: data[0].name,
+        gender: data[0].gender,
+        civil_status: data[0].civil_status,
+        masjid_id: data[0]?.masjid_id,
+        family_masjid_id: data[0]?.families?.masjid_id
+      } : null
+    });
 
     if (error) {
       console.error('Search query error:', error);
@@ -254,6 +334,7 @@ const masjidId = roleData.masjid_id;
         name: member.name,
         relationship: member.relationship,
         dob: member.dob,
+        age: member.age,
         gender: member.gender,
         civil_status: member.civil_status,
         phone: member.phone,
@@ -268,17 +349,17 @@ const masjidId = roleData.masjid_id;
         special_needs_details: member.special_needs_details,
         has_health_issue: member.has_health_issue,
         health_details: member.health_details,
+        masjid_id: member.masjid_id,
         family_id: member.family_id,
-        family_code: family?.family_code || '',
-        head_name: family?.head_name || '',
-        address: family?.address || '',
-        family_phone: family?.phone || ''
+        family_code: family?.family_code,
+        family_head_name: family?.head_name,
+        family_is_widow_head: family?.is_widow_head,
+        family_address: family?.address,
+        family_phone: family?.family_phone
       };
     });
-
-    const totalPages = Math.ceil((count || 0) / limit);
-
-    const response: SearchResponse = {
+    
+    const response = {
       success: true,
       data: {
         count: count || 0,
@@ -288,7 +369,7 @@ const masjidId = roleData.masjid_id;
       pagination: {
         page,
         limit,
-        totalPages
+        totalPages: Math.ceil((count || 0) / limit)
       },
       appliedFilters: filters
     };
