@@ -7,6 +7,8 @@ import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit,
 import { supabase } from "@/lib/supabase";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { QrScannerModal } from "@/components/QrScannerModal";
+import QRCode from "qrcode";
+import jsPDF from "jspdf";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import RouteGuard from "@/components/RouteGuard";
@@ -501,6 +503,73 @@ export default function FamiliesPage() {
     return indices
       .map(index => filteredFamilies[index - 1]) // Convert to 0-based
       .filter(family => family !== undefined); // Filter out undefined
+  };
+
+  // Generate QR code as dataURL using canvas
+  const generateQRDataURL = async (text: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      QRCode.toDataURL(text, {
+        width: 200,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        },
+        errorCorrectionLevel: 'H'
+      }, (error, url) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(url);
+        }
+      });
+    });
+  };
+
+  // Test single QR PDF generation
+  const generateSingleQRPDF = async () => {
+    try {
+      const selectedFamilies = getSelectedFamilies();
+      
+      if (selectedFamilies.length === 0) {
+        return;
+      }
+      
+      if (typeof window === 'undefined') {
+        console.error('PDF generation not available in server-side rendering');
+        return;
+      }
+      
+      const family = selectedFamilies[0]; // Use first family for testing
+      const qrValue = `smart-masjeedh:family:${family.id}`;
+      
+      // Generate QR code as dataURL
+      const qrDataURL = await generateQRDataURL(qrValue);
+      
+      // Create new PDF document
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      // Add QR code image
+      doc.addImage(qrDataURL, 'PNG', 50, 50, 50, 50);
+      
+      // Add family code
+      doc.setFontSize(12);
+      doc.text(`Family Code: ${family.family_code}`, 50, 120);
+      
+      // Add family head name
+      doc.text(`Head: ${family.head_name}`, 50, 130);
+      
+      // Save PDF
+      doc.save('test-family-qr.pdf');
+      
+    } catch (error) {
+      console.error('Single QR PDF generation error:', error);
+      alert('PDF generation failed: ' + (error as Error).message);
+    }
   };
 
   const generatePDF = () => {
@@ -1009,6 +1078,13 @@ export default function FamiliesPage() {
                 className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white font-black"
               >
                 Print
+              </button>
+              <button 
+                onClick={generateSingleQRPDF}
+                className="flex-1 py-3 rounded-2xl bg-blue-600 text-white font-black"
+                disabled={getSelectedFamilies().length === 0}
+              >
+                Test Single QR PDF
               </button>
               <button 
                 onClick={() => {
