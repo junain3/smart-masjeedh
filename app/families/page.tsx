@@ -114,6 +114,7 @@ export default function FamiliesPage() {
   const [lang, setLang] = useState<Language>("en");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [step1Errors, setStep1Errors] = useState<{ headName?: string; address?: string; phone?: string }>({});
   const [searchQuery, setSearchQuery] = useState("");
 
   const t = getTranslation(lang);
@@ -925,11 +926,17 @@ export default function FamiliesPage() {
                   <input
                     type="text"
                     value={headName}
-                    onChange={(event) => setHeadName(event.target.value)}
-                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                    onChange={(event) => {
+                      setHeadName(event.target.value);
+                      setStep1Errors(prev => ({ ...prev, headName: undefined }));
+                    }}
+                    className={`w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold ${step1Errors.headName ? 'border-2 border-red-500' : ''}`}
                     placeholder="Full Name"
                     required
                   />
+                  {step1Errors.headName && (
+                    <p className="text-red-500 text-xs mt-1">Required</p>
+                  )}
                 </div>
                 
                 <div className="space-y-1.5">
@@ -937,11 +944,17 @@ export default function FamiliesPage() {
                   <input
                     type="text"
                     value={address}
-                    onChange={(event) => setAddress(event.target.value)}
-                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                    onChange={(event) => {
+                      setAddress(event.target.value);
+                      setStep1Errors(prev => ({ ...prev, address: undefined }));
+                    }}
+                    className={`w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold ${step1Errors.address ? 'border-2 border-red-500' : ''}`}
                     placeholder="Complete Address"
                     required
                   />
+                  {step1Errors.address && (
+                    <p className="text-red-500 text-xs mt-1">Required</p>
+                  )}
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
@@ -950,11 +963,17 @@ export default function FamiliesPage() {
                     <input
                       type="tel"
                       value={phone}
-                      onChange={(event) => setPhone(event.target.value)}
-                      className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                      onChange={(event) => {
+                        setPhone(event.target.value);
+                        setStep1Errors(prev => ({ ...prev, phone: undefined }));
+                      }}
+                      className={`w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold ${step1Errors.phone ? 'border-2 border-red-500' : ''}`}
                       placeholder="Phone Number"
                       required
                     />
+                  {step1Errors.phone && (
+                    <p className="text-red-500 text-xs mt-1">Required</p>
+                  )}
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.family_code}</label>
@@ -996,22 +1015,24 @@ export default function FamiliesPage() {
                   <button
                     type="button"
                     onClick={() => {
+                      const errors: { headName?: string; address?: string; phone?: string } = {};
+                      
                       if (!headName.trim()) {
-                        setErrorMessage("Family head name is required.");
-                        return;
+                        errors.headName = "Required";
                       }
                       if (!address.trim()) {
-                        setErrorMessage("Address is required.");
-                        return;
+                        errors.address = "Required";
                       }
                       if (!phone.trim()) {
-                        setErrorMessage("Phone number is required.");
+                        errors.phone = "Required";
+                      }
+                      
+                      setStep1Errors(errors);
+                      
+                      if (Object.keys(errors).length > 0) {
                         return;
                       }
-                      if (!familyCode.trim()) {
-                        setErrorMessage("Family code is required.");
-                        return;
-                      }
+                      
                       setCurrentStep(2);
                     }}
                     className="flex-1 py-4 rounded-2xl text-sm font-bold bg-emerald-500 text-white"
