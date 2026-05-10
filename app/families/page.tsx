@@ -115,6 +115,10 @@ export default function FamiliesPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [step1Errors, setStep1Errors] = useState<{ headName?: string; address?: string; phone?: string }>({});
+  const [isAllQrModalOpen, setIsAllQrModalOpen] = useState(false);
+  const [qrPrintMode, setQrPrintMode] = useState<"all" | "range" | "specific">("all");
+  const [qrRangeInput, setQrRangeInput] = useState("");
+  const [qrSpecificInput, setQrSpecificInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   const t = getTranslation(lang);
@@ -638,6 +642,14 @@ export default function FamiliesPage() {
             <span className="text-xs font-bold">QR</span>
           </button>
           <button 
+            onClick={() => setIsAllQrModalOpen(true)}
+            className="p-2.5 bg-slate-50 text-emerald-600 rounded-xl hover:bg-emerald-50 active:scale-95 transition-all"
+            title="Print All QR Codes"
+          >
+            <QrCode className="h-4 w-4" />
+            <span className="text-xs font-bold">All QR</span>
+          </button>
+          <button 
             onClick={fetchFamilies}
             disabled={isFetching}
             className="p-2.5 bg-slate-50 text-emerald-600 rounded-xl hover:bg-emerald-100 active:scale-95 transition-all disabled:opacity-50"
@@ -844,6 +856,99 @@ export default function FamiliesPage() {
         onClose={() => setIsScannerOpen(false)}
         onDecodedText={handleQrDecodedText}
       />
+
+      {isAllQrModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-[2rem] p-6 shadow-2xl max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black">Print All QR Codes</h3>
+              <button onClick={() => {
+                setIsAllQrModalOpen(false);
+                setQrPrintMode("all");
+                setQrRangeInput("");
+                setQrSpecificInput("");
+              }} className="p-2 hover:bg-slate-50 rounded-full">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="space-y-3 mb-4">
+              <label className="flex items-center gap-2 text-sm font-bold">
+                <input 
+                  type="radio" 
+                  checked={qrPrintMode === "all"} 
+                  onChange={() => setQrPrintMode("all")}
+                />
+                All families
+              </label>
+              <label className="flex items-center gap-2 text-sm font-bold">
+                <input 
+                  type="radio" 
+                  checked={qrPrintMode === "range"} 
+                  onChange={() => setQrPrintMode("range")}
+                />
+                Range
+              </label>
+              <label className="flex items-center gap-2 text-sm font-bold">
+                <input 
+                  type="radio" 
+                  checked={qrPrintMode === "specific"} 
+                  onChange={() => setQrPrintMode("specific")}
+                />
+                Specific numbers
+              </label>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              {qrPrintMode === "range" && (
+                <input
+                  type="text"
+                  value={qrRangeInput}
+                  onChange={(e) => setQrRangeInput(e.target.value)}
+                  placeholder="12-20"
+                  className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                />
+              )}
+              {qrPrintMode === "specific" && (
+                <input
+                  type="text"
+                  value={qrSpecificInput}
+                  onChange={(e) => setQrSpecificInput(e.target.value)}
+                  placeholder="1,3,7"
+                  className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                />
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => {
+                  console.log("QR Print Options:", {
+                    mode: qrPrintMode,
+                    range: qrRangeInput,
+                    specific: qrSpecificInput
+                  });
+                  alert("QR print setup ready. PDF generation will be added next.");
+                }}
+                className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white font-black"
+              >
+                Print
+              </button>
+              <button 
+                onClick={() => {
+                  setIsAllQrModalOpen(false);
+                  setQrPrintMode("all");
+                  setQrRangeInput("");
+                  setQrSpecificInput("");
+                }}
+                className="flex-1 py-3 rounded-2xl bg-slate-100 text-slate-600 font-black"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex items-center justify-around py-4 px-6 shadow-2xl z-50">
