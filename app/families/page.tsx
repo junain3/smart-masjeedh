@@ -966,7 +966,10 @@ export default function FamiliesPage() {
                 <div className="flex gap-4">
                   <button
                     type="button"
-                    onClick={() => setIsOpen(false)}
+                    onClick={() => {
+                      resetForm();
+                      setIsOpen(false);
+                    }}
                     className="flex-1 py-4 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600"
                   >
                     Cancel
