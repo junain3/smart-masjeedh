@@ -439,6 +439,70 @@ export default function FamiliesPage() {
     }
   }
 
+  // Helper function to parse QR selection input
+  const parseQrSelection = (input: string): number[] => {
+    if (!input || input.trim() === "") return [];
+    
+    const trimmed = input.trim().replace(/\s+/g, ""); // Remove spaces
+    
+    // Handle range format like "12-20"
+    if (trimmed.includes("-")) {
+      const parts = trimmed.split("-");
+      if (parts.length === 2) {
+        const start = parseInt(parts[0]);
+        const end = parseInt(parts[1]);
+        if (!isNaN(start) && !isNaN(end) && start <= end) {
+          const result: number[] = [];
+          for (let i = start; i <= end; i++) {
+            result.push(i);
+          }
+          return result;
+        }
+      }
+    }
+    
+    // Handle comma-separated format like "1,3,7"
+    if (trimmed.includes(",")) {
+      const parts = trimmed.split(",");
+      const result: number[] = [];
+      for (const part of parts) {
+        const num = parseInt(part);
+        if (!isNaN(num) && num > 0) {
+          result.push(num);
+        }
+      }
+      return result;
+    }
+    
+    // Handle single number
+    const singleNum = parseInt(trimmed);
+    if (!isNaN(singleNum) && singleNum > 0) {
+      return [singleNum];
+    }
+    
+    return [];
+  };
+
+  // Helper function to get selected families based on mode
+  const getSelectedFamilies = (): Family[] => {
+    if (qrPrintMode === "all") {
+      return filteredFamilies;
+    }
+    
+    let indices: number[] = [];
+    
+    if (qrPrintMode === "range") {
+      indices = parseQrSelection(qrRangeInput);
+    } else if (qrPrintMode === "specific") {
+      indices = parseQrSelection(qrSpecificInput);
+    }
+    
+    // Convert 1-based indices to 0-based array indices
+    return indices
+      .map(index => filteredFamilies[index - 1]) // Convert to 0-based
+      .filter(family => family !== undefined); // Filter out undefined
+  };
+
   const generatePDF = () => {
     try {
       console.log('Families: Starting print generation...');
@@ -920,15 +984,27 @@ export default function FamiliesPage() {
               )}
             </div>
 
+            <div className="text-center mb-4">
+              <p className="text-sm font-bold text-slate-600">
+                {qrPrintMode === "all" 
+                  ? `${filteredFamilies.length} families selected`
+                  : `${getSelectedFamilies().length} families selected`
+                }
+              </p>
+            </div>
+
             <div className="flex gap-3">
               <button 
                 onClick={() => {
+                  const selectedFamilies = getSelectedFamilies();
                   console.log("QR Print Options:", {
                     mode: qrPrintMode,
                     range: qrRangeInput,
-                    specific: qrSpecificInput
+                    specific: qrSpecificInput,
+                    selectedCount: selectedFamilies.length,
+                    selectedFamilies: selectedFamilies.map(f => ({ id: f.id, family_code: f.family_code, head_name: f.head_name }))
                   });
-                  alert("QR print setup ready. PDF generation will be added next.");
+                  alert(`Selected ${selectedFamilies.length} families for QR printing.`);
                 }}
                 className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white font-black"
               >
