@@ -526,8 +526,8 @@ export default function FamiliesPage() {
     });
   };
 
-  // Test single QR PDF generation
-  const generateSingleQRPDF = async () => {
+  // Generate bulk QR codes PDF for selected families
+  const generateBulkQRPDF = async () => {
     try {
       const selectedFamilies = getSelectedFamilies();
       
@@ -540,12 +540,6 @@ export default function FamiliesPage() {
         return;
       }
       
-      const family = selectedFamilies[0]; // Use first family for testing
-      const qrValue = `smart-masjeedh:family:${family.id}`;
-      
-      // Generate QR code as dataURL
-      const qrDataURL = await generateQRDataURL(qrValue);
-      
       // Create new PDF document
       const doc = new jsPDF({
         orientation: 'portrait',
@@ -553,21 +547,126 @@ export default function FamiliesPage() {
         format: 'a4'
       });
       
-      // Add QR code image
-      doc.addImage(qrDataURL, 'PNG', 50, 50, 50, 50);
+      // PDF dimensions and layout
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 10;
+      const cardWidth = 50;
+      const cardHeight = 55;
+      const cardsPerRow = 2;
+      const cardSpacing = 5;
+      const rowSpacing = 5;
       
-      // Add family code
-      doc.setFontSize(12);
-      doc.text(`Family Code: ${family.family_code}`, 50, 120);
+      let currentY = margin;
+      let currentX = margin;
+      let cardsInCurrentRow = 0;
       
-      // Add family head name
-      doc.text(`Head: ${family.head_name}`, 50, 130);
+      // Generate QR cards for each family
+      for (const family of selectedFamilies) {
+        // Check if we need a new page
+        if (currentY + cardHeight > pageHeight - margin) {
+          doc.addPage();
+          currentY = margin;
+          currentX = margin;
+          cardsInCurrentRow = 0;
+        }
+        
+        try {
+          // Generate QR code as dataURL
+          const qrValue = `smart-masjeedh:family:${family.id}`;
+          const qrDataURL = await generateQRDataURL(qrValue);
+          
+          // Add card background
+          doc.setFillColor(255, 255, 255);
+          doc.rect(currentX, currentY, cardWidth, cardHeight, 'F');
+          
+          // Add professional cutting border
+          doc.setDrawColor(0, 0, 0);
+          doc.setLineWidth(0.5);
+          // Draw dashed border using multiple lines
+          const x = currentX + 0.5;
+          const y = currentY + 0.5;
+          const w = cardWidth - 1;
+          const h = cardHeight - 1;
+          // Top border
+          for (let i = 0; i < w; i += 4) {
+            if (i % 4 < 2) doc.line(x + i, y, x + Math.min(i + 2, w), y);
+          }
+          // Right border
+          for (let i = 0; i < h; i += 4) {
+            if (i % 4 < 2) doc.line(x + w, y + i, x + w, y + Math.min(i + 2, h));
+          }
+          // Bottom border
+          for (let i = 0; i < w; i += 4) {
+            if (i % 4 < 2) doc.line(x + i, y + h, x + Math.min(i + 2, w), y + h);
+          }
+          // Left border
+          for (let i = 0; i < h; i += 4) {
+            if (i % 4 < 2) doc.line(x, y + i, x, y + Math.min(i + 2, h));
+          }
+          
+          // Add QR code image (larger)
+          doc.addImage(qrDataURL, 'PNG', currentX + 5, currentY + 3, 35, 35);
+          
+          // Add family code (larger, bold) - moved slightly lower
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(0, 0, 0);
+          doc.text(family.family_code, currentX + cardWidth/2, currentY + 43, { align: 'center' });
+          
+          // Add family head name (smaller, bold) - moved up closer to code, allow 2 lines
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'bold');
+          
+          // Split name into words for better wrapping
+          const words = family.head_name.split(' ');
+          let line1 = '';
+          let line2 = '';
+          const maxWidth = 40; // Maximum width for text in mm
+          
+          // Try to fit words into 2 lines
+          for (let i = 0; i < words.length; i++) {
+            const testLine = line1 + (line1 ? ' ' : '') + words[i];
+            const textWidth = doc.getTextWidth(testLine);
+            
+            if (textWidth <= maxWidth) {
+              line1 = testLine;
+            } else if (!line2) {
+              line2 = words[i];
+            } else {
+              line2 += ' ' + words[i];
+            }
+          }
+          
+          // Draw first line
+          doc.text(line1, currentX + cardWidth/2, currentY + 48, { align: 'center' });
+          
+          // Draw second line if exists
+          if (line2) {
+            doc.text(line2, currentX + cardWidth/2, currentY + 52, { align: 'center' });
+          }
+          
+        } catch (error) {
+          console.error('Error generating QR card:', error);
+        }
+        
+        // Update position for next card
+        currentX += cardWidth + cardSpacing;
+        cardsInCurrentRow++;
+        
+        // Move to next row if needed
+        if (cardsInCurrentRow >= cardsPerRow) {
+          currentY += cardHeight + rowSpacing;
+          currentX = margin;
+          cardsInCurrentRow = 0;
+        }
+      }
       
       // Save PDF
-      doc.save('test-family-qr.pdf');
+      doc.save('family-qr-codes.pdf');
       
     } catch (error) {
-      console.error('Single QR PDF generation error:', error);
+      console.error('Bulk QR PDF generation error:', error);
       alert('PDF generation failed: ' + (error as Error).message);
     }
   };
@@ -1054,37 +1153,24 @@ export default function FamiliesPage() {
             </div>
 
             <div className="text-center mb-4">
-              <p className="text-sm font-bold text-slate-600">
+              <p className={`text-sm font-bold ${getSelectedFamilies().length === 0 ? 'text-red-500' : 'text-slate-600'}`}>
                 {qrPrintMode === "all" 
                   ? `${filteredFamilies.length} families selected`
                   : `${getSelectedFamilies().length} families selected`
                 }
               </p>
+              {getSelectedFamilies().length === 0 && (
+                <p className="text-xs text-red-500 mt-1">No families selected.</p>
+              )}
             </div>
 
             <div className="flex gap-3">
               <button 
-                onClick={() => {
-                  const selectedFamilies = getSelectedFamilies();
-                  console.log("QR Print Options:", {
-                    mode: qrPrintMode,
-                    range: qrRangeInput,
-                    specific: qrSpecificInput,
-                    selectedCount: selectedFamilies.length,
-                    selectedFamilies: selectedFamilies.map(f => ({ id: f.id, family_code: f.family_code, head_name: f.head_name }))
-                  });
-                  alert(`Selected ${selectedFamilies.length} families for QR printing.`);
-                }}
-                className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white font-black"
-              >
-                Print
-              </button>
-              <button 
-                onClick={generateSingleQRPDF}
-                className="flex-1 py-3 rounded-2xl bg-blue-600 text-white font-black"
+                onClick={generateBulkQRPDF}
+                className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white font-black disabled:opacity-50"
                 disabled={getSelectedFamilies().length === 0}
               >
-                Test Single QR PDF
+                Print
               </button>
               <button 
                 onClick={() => {
