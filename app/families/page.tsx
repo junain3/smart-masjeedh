@@ -104,6 +104,7 @@ export default function FamiliesPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [families, setFamilies] = useState<Family[]>([]);
   const [isFetching, setIsFetching] = useState(false);
+  const [paymentCollections, setPaymentCollections] = useState<any[]>([]);
   const [editingFamily, setEditingFamily] = useState<Family | null>(null);
   const [isPdfOptionsOpen, setIsPdfOptionsOpen] = useState(false);
   const [pdfCols, setPdfCols] = useState<{code:boolean; head:boolean; address:boolean; phone:boolean; sub:boolean}>({code:true, head:true, address:true, phone:true, sub:true});
@@ -229,6 +230,21 @@ export default function FamiliesPage() {
         setFamilies(data);
         setIsLive(true);
         setErrorMessage("");
+        
+        // Fetch payment collections separately (don't block families loading)
+        try {
+          const { data: paymentData, error: paymentError } = await supabase
+            .from("subscription_collections")
+            .select("id, family_id, date, status")
+            .eq("masjid_id", tenantContext.masjidId);
+            
+          if (!paymentError && paymentData) {
+            setPaymentCollections(paymentData);
+          }
+        } catch (paymentErr) {
+          console.error("Payment collections fetch error:", paymentErr);
+          // Don't block families loading if payment fetch fails
+        }
       }
     } catch (err: any) {
       console.error("Fetch error:", err.message);
@@ -824,10 +840,41 @@ export default function FamiliesPage() {
     }
   };
 
-  const filteredFamilies = families.filter(f => 
-    f.head_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    f.family_code.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Helper function to check if family has accepted payments for selected year
+  const isFamilyPaidForYear = (familyId: string, selectedYear: number): boolean => {
+    if (!paymentCollections || paymentCollections.length === 0) {
+      return false;
+    }
+    
+    return paymentCollections.some((collection: any) => 
+      collection.family_id === familyId &&
+      collection.status === "accepted" &&
+      new Date(collection.date).getFullYear() === selectedYear
+    );
+  };
+
+  const filteredFamilies = families.filter(f => {
+    // Search filter
+    const matchesSearch = f.head_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                       f.family_code.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Payment status filter - ALL should show all families immediately
+    if (statusFilter === "all") {
+      return matchesSearch;
+    }
+    
+    // PAID filter
+    if (statusFilter === "paid") {
+      return matchesSearch && isFamilyPaidForYear(f.id, year);
+    }
+    
+    // UNPAID filter
+    if (statusFilter === "unpaid") {
+      return matchesSearch && !isFamilyPaidForYear(f.id, year);
+    }
+    
+    return matchesSearch;
+  });
 
 
   return (
