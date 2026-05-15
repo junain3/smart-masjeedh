@@ -740,7 +740,24 @@ setReportCount(result.data?.count || 0)
     setSubmittingService(true);
     try {
       const ctx = tenantContext || await getTenantContext();
-      if (!ctx) return;
+      if (!ctx) {
+        toast({ kind: "error", title: "Error", message: "Masjid context not found. Please log in again." });
+        return;
+      }
+
+      console.log("DEBUG - Creating service distribution with masjidId:", ctx.masjidId);
+
+      // 0. Verify masjid exists in masjids table first
+      const { data: masjidCheck } = await supabase
+        .from("masjids")
+        .select("id")
+        .eq("id", ctx.masjidId)
+        .maybeSingle();
+
+      if (!masjidCheck) {
+        toast({ kind: "error", title: "❌ NEW CODE - Masjid Missing", message: "Masjid not found in database. Please set up your masjid first." });
+        return;
+      }
 
       // 1. Fetch all families for this masjid
       const { data: families } = await supabase
@@ -753,6 +770,8 @@ setReportCount(result.data?.count || 0)
         return;
       }
 
+      console.log("DEBUG - Found families:", families.length);
+
       // 2. Create distribution records for each family
       const distributions = families.map(f => ({
         family_id: f.id,
@@ -762,14 +781,23 @@ setReportCount(result.data?.count || 0)
         status: 'Pending'
       }));
 
-      const { error } = await supabase.from("service_distributions").insert(distributions);
-      if (error) throw error;
+      console.log("DEBUG - Inserting distributions:", distributions);
 
-      toast({ kind: "success", title: "Created", message: "Service distribution created for all families!" });
+      const { error } = await supabase.from("service_distributions").insert(distributions);
+      if (error) {
+        console.error("DEBUG - Insert error:", error);
+        throw error;
+      }
+
+      toast({ kind: "success", title: "✅ NEW CODE WORKING!", message: "Service distribution created for all families!" });
       setIsServicesModalOpen(false);
       setServiceName("");
+      
+      // Refresh active services
+      fetchActiveServices();
     } catch (err: any) {
-      toast({ kind: "error", title: "Error", message: err.message || "Failed" });
+      console.error("DEBUG - Full error:", err);
+      toast({ kind: "error", title: "Error", message: err.message || "Failed to create service distribution" });
     } finally {
       setSubmittingService(false);
     }

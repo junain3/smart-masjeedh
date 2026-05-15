@@ -157,6 +157,8 @@ export default function EventDetailPage() {
       // Use tenantContext from auth provider instead of getTenantContext
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
+      const serviceName = ev ? `Event: ${ev.title}` : "Event Service";
+      const serviceDate = ev?.event_date || new Date().toISOString().split("T")[0];
 
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
       const canEvents = isAdmin || ctx.permissions?.events !== false;
@@ -171,6 +173,35 @@ export default function EventDetailPage() {
         .eq("family_id", familyId)
         .eq("masjid_id", ctx.masjidId);
       if (error) throw error;
+
+      const { data: existingService } = await supabase
+        .from("service_distributions")
+        .select("id")
+        .eq("family_id", familyId)
+        .eq("masjid_id", ctx.masjidId)
+        .eq("name", serviceName)
+        .eq("date", serviceDate)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingService?.id) {
+        await supabase
+          .from("service_distributions")
+          .update({ status: toReceived ? "Received" : "Pending" })
+          .eq("id", existingService.id)
+          .eq("masjid_id", ctx.masjidId);
+      } else if (toReceived) {
+        await supabase
+          .from("service_distributions")
+          .insert({
+            family_id: familyId,
+            masjid_id: ctx.masjidId,
+            name: serviceName,
+            date: serviceDate,
+            status: "Received",
+          });
+      }
+
       setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: toReceived ? "Received" : "Pending" } : r));
       // Log to accounts as zero-amount info row when marking Received
       if (toReceived && ev) {
@@ -195,6 +226,8 @@ export default function EventDetailPage() {
     try {
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
+      const serviceName = ev ? `Event: ${ev.title}` : "Event Service";
+      const serviceDate = ev?.event_date || new Date().toISOString().split("T")[0];
 
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
       const canEvents = isAdmin || ctx.permissions?.events !== false;
@@ -210,6 +243,14 @@ export default function EventDetailPage() {
         .eq("family_id", confirmUnmark.familyId)
         .eq("masjid_id", ctx.masjidId);
       if (error) throw error;
+
+      await supabase
+        .from("service_distributions")
+        .update({ status: "Pending" })
+        .eq("family_id", confirmUnmark.familyId)
+        .eq("masjid_id", ctx.masjidId)
+        .eq("name", serviceName)
+        .eq("date", serviceDate);
       
       setRows(prev => prev.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: "Pending" } : r));
       setConfirmUnmark(null);
@@ -229,6 +270,14 @@ export default function EventDetailPage() {
       return matchesSearch && matchesFilter;
     });
   }, [rows, search, filter]);
+
+  const displayRows = useMemo(() => {
+    if (lastScanned) {
+      const r = rows.find((x) => x.family_id === lastScanned);
+      return r ? [r] : [];
+    }
+    return filtered;
+  }, [rows, filtered, lastScanned]);
 
   const suggestions = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -310,7 +359,7 @@ export default function EventDetailPage() {
           </div>
           <div style="margin-top: 20px; text-align: center;">
             <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px;">
-              🖨️ Print / Save as PDF
+              ðŸ–¨ï¸ Print / Save as PDF
             </button>
           </div>
         </body>
@@ -402,9 +451,9 @@ export default function EventDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={() => setFilter("all")} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${filter==="all" ? "bg-emerald-50 text-emerald-600" : "bg-white border border-slate-100 text-slate-500"}`}>{t.filter_all}</button>
-          <button onClick={() => setFilter("received")} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${filter==="received" ? "bg-emerald-50 text-emerald-600" : "bg-white border border-slate-100 text-slate-500"}`}>{t.filter_received}</button>
-          <button onClick={() => setFilter("pending")} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${filter==="pending" ? "bg-emerald-50 text-emerald-600" : "bg-white border border-slate-100 text-slate-500"}`}>{t.filter_pending}</button>
+          <button onClick={() => { setFilter("all"); setLastScanned(null); }} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${filter==="all" ? "bg-emerald-50 text-emerald-600" : "bg-white border border-slate-100 text-slate-500"}`}>{t.filter_all}</button>
+          <button onClick={() => { setFilter("received"); setLastScanned(null); }} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${filter==="received" ? "bg-emerald-50 text-emerald-600" : "bg-white border border-slate-100 text-slate-500"}`}>{t.filter_received}</button>
+          <button onClick={() => { setFilter("pending"); setLastScanned(null); }} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${filter==="pending" ? "bg-emerald-50 text-emerald-600" : "bg-white border border-slate-100 text-slate-500"}`}>{t.filter_pending}</button>
         </div>
 
         <div className="relative group">
@@ -416,6 +465,7 @@ export default function EventDetailPage() {
             onChange={(e) => {
               setSearch(e.target.value);
               setShowSuggestions(true);
+              if (e.target.value.trim()) setLastScanned(null);
             }}
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => {
@@ -457,36 +507,9 @@ export default function EventDetailPage() {
           )}
         </div>
 
-        {/* Last scanned highlight */}
-        {lastScanned && (() => {
-          const r = rows.find(x => x.family_id === lastScanned);
-          if (!r) return null;
-          return (
-            <div className="bg-white rounded-2xl p-4 border border-emerald-100 shadow-sm animate-in zoom-in duration-300">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-bold text-emerald-600 uppercase">Scanned</p>
-                  <h4 className="text-sm font-black text-slate-800">{r.families.head_name}</h4>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">{r.families.family_code} • {r.families.phone || ""}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={r.status === "Received"}
-                      onChange={() => markStatus(r.family_id, r.status !== "Received", false)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                  </label>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
 
         <div className="space-y-3">
-          {filtered.length === 0 ? (
+          {displayRows.length === 0 ? (
             <div className="py-16 text-center bg-white rounded-[2rem] border border-slate-50">
               <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200">
                 <Users className="w-8 h-8" />
@@ -494,8 +517,15 @@ export default function EventDetailPage() {
               <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t.no_matches}</p>
             </div>
           ) : (
-            filtered.map(r => (
-              <div key={r.id} className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm">
+            displayRows.map(r => (
+              <div
+                key={r.id}
+                className={`bg-white rounded-2xl p-4 shadow-sm ${
+                  lastScanned && r.family_id === lastScanned
+                    ? "border border-emerald-100"
+                    : "border border-slate-50"
+                }`}
+              >
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-black text-slate-800">{r.families.head_name}</h4>

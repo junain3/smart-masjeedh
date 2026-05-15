@@ -22,6 +22,7 @@ import { supabase } from "@/lib/supabase";
 import { QRCodeSVG } from "qrcode.react";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { useMockAuth } from "@/components/MockAuthProvider";
+import { inferGenderFromRelationship } from "@/lib/member-gender";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -111,6 +112,10 @@ export default function FamilyDetailsPage() {
   const [collectionNote, setCollectionNote] = useState("");
   const [isCollectionSubmitting, setIsCollectionSubmitting] = useState(false);
   const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [serviceName, setServiceName] = useState("");
+  const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isServiceSubmitting, setIsServiceSubmitting] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [relationship, setRelationship] = useState("மகன்");
@@ -160,6 +165,11 @@ export default function FamilyDetailsPage() {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
   }, []);
+
+  useEffect(() => {
+    const inferred = inferGenderFromRelationship(relationship);
+    if (inferred) setGender(inferred);
+  }, [relationship]);
 
   useEffect(() => {
     if (dob) {
@@ -324,7 +334,7 @@ export default function FamilyDetailsPage() {
     setRelationship("மகன்");
     setDob("");
     setAge("");
-    setGender("Male");
+    setGender(inferGenderFromRelationship("மகன்") || "Male");
     setNic("");
     setPhone("");
     setCivilStatus("");
@@ -425,6 +435,43 @@ export default function FamilyDetailsPage() {
       alert("Error: " + error.message);
     } finally {
       setIsCollectionSubmitting(false);
+    }
+  };
+
+  const addService = async () => {
+    if (!supabase || !familyId || !tenantContext?.masjidId) return;
+
+    if (!serviceName.trim()) {
+      alert("Please enter a service name");
+      return;
+    }
+
+    setIsServiceSubmitting(true);
+
+    try {
+      const { error } = await supabase
+        .from("service_distributions")
+        .insert({
+          family_id: familyId,
+          masjid_id: tenantContext.masjidId,
+          name: serviceName.trim(),
+          date: serviceDate,
+          status: "Received",
+        });
+
+      if (error) throw error;
+
+      setServiceName("");
+      setServiceDate(new Date().toISOString().split('T')[0]);
+      setIsServiceModalOpen(false);
+      await fetchData(user);
+      setSuccessMessage("Service added successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (error: any) {
+      console.error("ADD SERVICE Error:", error);
+      alert(error.message || "Failed to add service");
+    } finally {
+      setIsServiceSubmitting(false);
     }
   };
 
@@ -631,6 +678,7 @@ export default function FamilyDetailsPage() {
   const remainingBalance = annualFee - totalApproved;
   const isOverpaid = remainingBalance < 0;
   const openingBal = family?.opening_balance || 0;
+  const recentService = services[0] || null;
 
   console.log("DEBUG CALCULATIONS:");
   console.log("- selectedYear:", selectedYear);
@@ -715,8 +763,10 @@ export default function FamilyDetailsPage() {
             <CheckCircle className="w-4 h-4" />
             <span className="text-[10px] font-black uppercase tracking-widest">{t.recent_services}</span>
           </div>
-          <p className="text-xs font-bold text-slate-700">Ramadan Dates</p>
-          <p className="text-[9px] font-black text-emerald-600/60 uppercase">MARCH 2024</p>
+          <p className="text-xs font-bold text-slate-700">{recentService?.name || "No services yet"}</p>
+          <p className="text-[9px] font-black text-emerald-600/60 uppercase">
+            {recentService?.date || "ADD A SERVICE TO RECORD IT HERE"}
+          </p>
         </div>
 
         <div className="bg-rose-50 rounded-[2rem] p-5 border border-rose-100 space-y-3">
@@ -764,15 +814,27 @@ export default function FamilyDetailsPage() {
         </div>
       </div>
 
-      {/* Add Subscription Button */}
-      <div className="bg-blue-50 rounded-[2rem] p-5 border border-blue-100 mb-6">
-        <button
-          onClick={() => setIsCollectionModalOpen(true)}
-          className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all"
-        >
-          <Wallet className="w-4 h-4" />
-          Add Subscription
-        </button>
+      <div className="px-6 mt-4 mb-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-amber-50 rounded-[2rem] p-5 border border-amber-100">
+            <button
+              onClick={() => setIsServiceModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-amber-500 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-amber-600 transition-all"
+            >
+              <CheckCircle className="w-4 h-4" />
+              Add Service
+            </button>
+          </div>
+          <div className="bg-blue-50 rounded-[2rem] p-5 border border-blue-100">
+            <button
+              onClick={() => setIsCollectionModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all"
+            >
+              <Wallet className="w-4 h-4" />
+              Add Subscription
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="p-6">
@@ -902,7 +964,10 @@ export default function FamilyDetailsPage() {
             ) : (
               filteredMembers.map((member) => (
                 <div key={member.id} className="bg-white professional-card rounded-2xl p-4 flex items-center justify-between group animate-in fade-in duration-500">
-                  <div className="flex items-center gap-4 min-w-0">
+                  <Link
+                    href={`/families/${familyId}/members/${member.id}`}
+                    className="flex items-center gap-4 min-w-0 flex-1"
+                  >
                     <div className="h-14 w-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-100 transition-colors flex-shrink-0">
                       <User className="h-7 w-7" />
                     </div>
@@ -917,7 +982,7 @@ export default function FamilyDetailsPage() {
                         {member.civil_status}
                       </span>
                     </div>
-                  </div>
+                  </Link>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => openEditMember(member)}
@@ -1021,7 +1086,7 @@ export default function FamilyDetailsPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => {}}
+                    onClick={() => toggleServiceStatus(service.id)}
                     className={`px-3 py-1 rounded-full text-[8px] font-black uppercase transition-all active:scale-95 ${
                       service.status === "Received"
                         ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
@@ -1086,7 +1151,12 @@ export default function FamilyDetailsPage() {
                   <select
                     required
                     value={relationship}
-                    onChange={(e) => setRelationship(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setRelationship(next);
+                      const g = inferGenderFromRelationship(next);
+                      if (g) setGender(g);
+                    }}
                     className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20 appearance-none"
                   >
                     <option value="கணவன்">{t.husband}</option>
@@ -1111,7 +1181,23 @@ export default function FamilyDetailsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">{t.gender}</label>
+                  <input
+                    readOnly
+                    value={
+                      gender === "Female"
+                        ? lang === "ta"
+                          ? "பெண்"
+                          : "Female"
+                        : lang === "ta"
+                          ? "ஆண்"
+                          : "Male"
+                    }
+                    className="w-full bg-slate-100 border-none rounded-2xl p-4 text-sm text-slate-600 font-bold"
+                  />
+                </div>
                 <div className="space-y-1">
                   <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">{t.age}</label>
                   <input readOnly value={age} className="w-full bg-slate-100 border-none rounded-2xl p-4 text-sm text-slate-500" />
@@ -1322,6 +1408,64 @@ export default function FamilyDetailsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isServiceModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-[2rem] p-6 w-full max-w-md space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-600">
+                <CheckCircle className="w-4 h-4" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Add Service</span>
+              </div>
+              <button
+                onClick={() => setIsServiceModalOpen(false)}
+                className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Service Name</label>
+                <input
+                  type="text"
+                  value={serviceName}
+                  onChange={(e) => setServiceName(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-amber-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                  placeholder="Enter service name"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</label>
+                <input
+                  type="date"
+                  value={serviceDate}
+                  onChange={(e) => setServiceDate(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-amber-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsServiceModalOpen(false)}
+                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addService}
+                  disabled={isServiceSubmitting}
+                  className="flex-1 px-6 py-3 bg-amber-500 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {isServiceSubmitting ? "Adding..." : "Add Service"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

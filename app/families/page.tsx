@@ -563,34 +563,45 @@ export default function FamiliesPage() {
         format: 'a4'
       });
       
-      // PDF dimensions and layout
+      // Auto-fit QR cards to use the full printable A4 page area.
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 10;
-      const cardWidth = 50;
-      const cardHeight = 55;
-      const cardsPerRow = 2;
-      const cardSpacing = 5;
-      const rowSpacing = 5;
-      
-      let currentY = margin;
-      let currentX = margin;
-      let cardsInCurrentRow = 0;
+      const horizontalMargin = 8;
+      const verticalMargin = 8;
+      const cardSpacing = 4;
+      const rowSpacing = 4;
+      const minCardWidth = 40;
+      const minCardHeight = 46;
+      const usableWidth = pageWidth - horizontalMargin * 2;
+      const usableHeight = pageHeight - verticalMargin * 2;
+      const cardsPerRow = Math.max(1, Math.floor((usableWidth + cardSpacing) / (minCardWidth + cardSpacing)));
+      const rowsPerPage = Math.max(1, Math.floor((usableHeight + rowSpacing) / (minCardHeight + rowSpacing)));
+      const cardWidth = (usableWidth - cardSpacing * (cardsPerRow - 1)) / cardsPerRow;
+      const cardHeight = (usableHeight - rowSpacing * (rowsPerPage - 1)) / rowsPerPage;
+      const cardsPerPage = cardsPerRow * rowsPerPage;
       
       // Generate QR cards for each family
-      for (const family of selectedFamilies) {
-        // Check if we need a new page
-        if (currentY + cardHeight > pageHeight - margin) {
+      for (let index = 0; index < selectedFamilies.length; index++) {
+        const family = selectedFamilies[index];
+        if (index > 0 && index % cardsPerPage === 0) {
           doc.addPage();
-          currentY = margin;
-          currentX = margin;
-          cardsInCurrentRow = 0;
         }
+
+        const pageIndex = index % cardsPerPage;
+        const rowIndex = Math.floor(pageIndex / cardsPerRow);
+        const colIndex = pageIndex % cardsPerRow;
+        const currentX = horizontalMargin + colIndex * (cardWidth + cardSpacing);
+        const currentY = verticalMargin + rowIndex * (cardHeight + rowSpacing);
         
         try {
           // Generate QR code as dataURL
           const qrValue = `smart-masjeedh:family:${family.id}`;
           const qrDataURL = await generateQRDataURL(qrValue);
+          const qrSize = Math.min(cardWidth - 10, cardHeight - 18, 30);
+          const qrX = currentX + (cardWidth - qrSize) / 2;
+          const qrY = currentY + 3;
+          const codeY = qrY + qrSize + 4;
+          const nameMaxWidth = cardWidth - 8;
           
           // Add card background
           doc.setFillColor(255, 255, 255);
@@ -621,60 +632,29 @@ export default function FamiliesPage() {
             if (i % 4 < 2) doc.line(x, y + i, x, y + Math.min(i + 2, h));
           }
           
-          // Add QR code image (larger)
-          doc.addImage(qrDataURL, 'PNG', currentX + 5, currentY + 3, 35, 35);
+          // Add QR code image centered inside each card.
+          doc.addImage(qrDataURL, 'PNG', qrX, qrY, qrSize, qrSize);
           
-          // Add family code (larger, bold) - moved slightly lower
-          doc.setFontSize(10);
+          // Add family code.
+          doc.setFontSize(cardWidth < 46 ? 9 : 10);
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(0, 0, 0);
-          doc.text(family.family_code, currentX + cardWidth/2, currentY + 43, { align: 'center' });
+          doc.text(family.family_code, currentX + cardWidth / 2, codeY, { align: 'center' });
           
-          // Add family head name (smaller, bold) - moved up closer to code, allow 2 lines
-          doc.setFontSize(7);
+          // Fit the family name into the remaining space using up to 2 centered lines.
+          doc.setFontSize(cardWidth < 46 ? 6.5 : 7);
           doc.setFont('helvetica', 'bold');
-          
-          // Split name into words for better wrapping
-          const words = family.head_name.split(' ');
-          let line1 = '';
-          let line2 = '';
-          const maxWidth = 40; // Maximum width for text in mm
-          
-          // Try to fit words into 2 lines
-          for (let i = 0; i < words.length; i++) {
-            const testLine = line1 + (line1 ? ' ' : '') + words[i];
-            const textWidth = doc.getTextWidth(testLine);
-            
-            if (textWidth <= maxWidth) {
-              line1 = testLine;
-            } else if (!line2) {
-              line2 = words[i];
-            } else {
-              line2 += ' ' + words[i];
+          const nameLines = doc.splitTextToSize(family.head_name, nameMaxWidth).slice(0, 2);
+          const firstNameY = Math.min(codeY + 5, currentY + cardHeight - 5);
+          nameLines.forEach((line: string, lineIndex: number) => {
+            const lineY = firstNameY + lineIndex * 4;
+            if (lineY <= currentY + cardHeight - 3) {
+              doc.text(line, currentX + cardWidth / 2, lineY, { align: 'center' });
             }
-          }
-          
-          // Draw first line
-          doc.text(line1, currentX + cardWidth/2, currentY + 48, { align: 'center' });
-          
-          // Draw second line if exists
-          if (line2) {
-            doc.text(line2, currentX + cardWidth/2, currentY + 52, { align: 'center' });
-          }
+          });
           
         } catch (error) {
           console.error('Error generating QR card:', error);
-        }
-        
-        // Update position for next card
-        currentX += cardWidth + cardSpacing;
-        cardsInCurrentRow++;
-        
-        // Move to next row if needed
-        if (cardsInCurrentRow >= cardsPerRow) {
-          currentY += cardHeight + rowSpacing;
-          currentX = margin;
-          cardsInCurrentRow = 0;
         }
       }
       
