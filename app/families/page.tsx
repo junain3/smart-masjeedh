@@ -13,6 +13,7 @@ import { useMockAuth } from "@/components/MockAuthProvider";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import RouteGuard from "@/components/RouteGuard";
 import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
+import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 
 type Family = {
   id: string;
@@ -125,9 +126,6 @@ export default function FamiliesPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const t = getTranslation(lang);
-
-  // Debug log to verify safe translation object
-  console.log("FAMILIES PAGE LANG DEBUG", { lang, tKeys: Object.keys(t), hasHome: !!t.home });
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -522,13 +520,13 @@ export default function FamiliesPage() {
   };
 
   // Generate QR code as dataURL using canvas
-  const generateQRDataURL = async (text: string): Promise<string> => {
+  const generateQRDataURL = async (text: string, pixelSize = 200): Promise<string> => {
     return new Promise((resolve, reject) => {
       QRCode.toDataURL(text, {
-        width: 200,
-        margin: 1,
+        width: pixelSize,
+        margin: 2,
         color: {
-          dark: '#000000',
+          dark: '#0f172a',
           light: '#FFFFFF'
         },
         errorCorrectionLevel: 'H'
@@ -563,22 +561,36 @@ export default function FamiliesPage() {
         format: 'a4'
       });
       
-      // Auto-fit QR cards to use the full printable A4 page area.
+      // A4 portrait: full page — 3 × 3 = 9 QR stickers per sheet (cost-efficient).
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      const horizontalMargin = 8;
-      const verticalMargin = 8;
-      const cardSpacing = 4;
-      const rowSpacing = 4;
-      const minCardWidth = 40;
-      const minCardHeight = 46;
+      const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
+      const horizontalMargin = 5;
+      const verticalMargin = 5;
+      const cardSpacing = 2;
+      const rowSpacing = 2;
+      const cardsPerRow = 3;
+      const rowsPerPage = 3;
       const usableWidth = pageWidth - horizontalMargin * 2;
       const usableHeight = pageHeight - verticalMargin * 2;
-      const cardsPerRow = Math.max(1, Math.floor((usableWidth + cardSpacing) / (minCardWidth + cardSpacing)));
-      const rowsPerPage = Math.max(1, Math.floor((usableHeight + rowSpacing) / (minCardHeight + rowSpacing)));
       const cardWidth = (usableWidth - cardSpacing * (cardsPerRow - 1)) / cardsPerRow;
       const cardHeight = (usableHeight - rowSpacing * (rowsPerPage - 1)) / rowsPerPage;
       const cardsPerPage = cardsPerRow * rowsPerPage;
+
+      const drawTightCutBorder = (x: number, y: number, w: number, h: number) => {
+        doc.setDrawColor(15, 23, 42);
+        doc.setLineWidth(0.45);
+        const dash = 2;
+        const gap = 2;
+        for (let i = 0; i < w; i += dash + gap) {
+          doc.line(x + i, y, x + Math.min(i + dash, w), y);
+          doc.line(x + i, y + h, x + Math.min(i + dash, w), y + h);
+        }
+        for (let i = 0; i < h; i += dash + gap) {
+          doc.line(x, y + i, x, y + Math.min(i + dash, h));
+          doc.line(x + w, y + i, x + w, y + Math.min(i + dash, h));
+        }
+      };
       
       // Generate QR cards for each family
       for (let index = 0; index < selectedFamilies.length; index++) {
@@ -592,65 +604,52 @@ export default function FamiliesPage() {
         const colIndex = pageIndex % cardsPerRow;
         const currentX = horizontalMargin + colIndex * (cardWidth + cardSpacing);
         const currentY = verticalMargin + rowIndex * (cardHeight + rowSpacing);
-        
+
         try {
-          // Generate QR code as dataURL
           const qrValue = `smart-masjeedh:family:${family.id}`;
-          const qrDataURL = await generateQRDataURL(qrValue);
-          const qrSize = Math.min(cardWidth - 10, cardHeight - 18, 30);
-          const qrX = currentX + (cardWidth - qrSize) / 2;
-          const qrY = currentY + 3;
-          const codeY = qrY + qrSize + 4;
-          const nameMaxWidth = cardWidth - 8;
-          
-          // Add card background
-          doc.setFillColor(255, 255, 255);
-          doc.rect(currentX, currentY, cardWidth, cardHeight, 'F');
-          
-          // Add professional cutting border
-          doc.setDrawColor(0, 0, 0);
-          doc.setLineWidth(0.5);
-          // Draw dashed border using multiple lines
-          const x = currentX + 0.5;
-          const y = currentY + 0.5;
-          const w = cardWidth - 1;
-          const h = cardHeight - 1;
-          // Top border
-          for (let i = 0; i < w; i += 4) {
-            if (i % 4 < 2) doc.line(x + i, y, x + Math.min(i + 2, w), y);
-          }
-          // Right border
-          for (let i = 0; i < h; i += 4) {
-            if (i % 4 < 2) doc.line(x + w, y + i, x + w, y + Math.min(i + 2, h));
-          }
-          // Bottom border
-          for (let i = 0; i < w; i += 4) {
-            if (i % 4 < 2) doc.line(x + i, y + h, x + Math.min(i + 2, w), y + h);
-          }
-          // Left border
-          for (let i = 0; i < h; i += 4) {
-            if (i % 4 < 2) doc.line(x, y + i, x, y + Math.min(i + 2, h));
-          }
-          
-          // Add QR code image centered inside each card.
-          doc.addImage(qrDataURL, 'PNG', qrX, qrY, qrSize, qrSize);
-          
-          // Add family code.
-          doc.setFontSize(cardWidth < 46 ? 9 : 10);
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(0, 0, 0);
-          doc.text(family.family_code, currentX + cardWidth / 2, codeY, { align: 'center' });
-          
-          // Fit the family name into the remaining space using up to 2 centered lines.
-          doc.setFontSize(cardWidth < 46 ? 6.5 : 7);
-          doc.setFont('helvetica', 'bold');
+          const borderPad = 1.2;
+          const gapQrToText = 1.8;
+          const codeFontSize = 8.5;
+          const nameFontSize = 6.8;
+          const nameMaxWidth = cardWidth - borderPad * 2 - 1;
+
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(nameFontSize);
           const nameLines = doc.splitTextToSize(family.head_name, nameMaxWidth).slice(0, 2);
-          const firstNameY = Math.min(codeY + 5, currentY + cardHeight - 5);
+          const labelHeight = gapQrToText + codeFontSize * 0.38 + nameLines.length * (nameFontSize * 0.42) + 1;
+
+          const qrSize = Math.min(
+            cardWidth - borderPad * 2 - 0.5,
+            cardHeight - labelHeight - borderPad * 2 - 0.5
+          );
+          const contentWidth = qrSize + borderPad * 2;
+          const contentHeight = borderPad + qrSize + labelHeight + borderPad;
+          const borderX = currentX + (cardWidth - contentWidth) / 2;
+          const borderY = currentY + (cardHeight - contentHeight) / 2;
+          const qrX = borderX + borderPad;
+          const qrY = borderY + borderPad;
+          const codeY = qrY + qrSize + gapQrToText + codeFontSize * 0.32;
+          const centerX = borderX + contentWidth / 2;
+
+          const qrPixelSize = Math.min(512, Math.max(280, Math.round(qrSize * 11)));
+          const qrDataURL = await generateQRDataURL(qrValue, qrPixelSize);
+
+          doc.setFillColor(255, 255, 255);
+          doc.rect(borderX, borderY, contentWidth, contentHeight, "F");
+          drawTightCutBorder(borderX, borderY, contentWidth, contentHeight);
+          doc.addImage(qrDataURL, "PNG", qrX, qrY, qrSize, qrSize);
+
+          doc.setTextColor(15, 23, 42);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(5.8);
+          const masjidLines = doc.splitTextToSize(masjidName, nameMaxWidth).slice(0, 1);
+          doc.text(masjidLines, centerX, codeY - 3.2, { align: "center" });
+          doc.setFontSize(codeFontSize);
+          doc.text(family.family_code, centerX, codeY, { align: "center" });
+
+          doc.setFontSize(nameFontSize);
           nameLines.forEach((line: string, lineIndex: number) => {
-            const lineY = firstNameY + lineIndex * 4;
-            if (lineY <= currentY + cardHeight - 3) {
-              doc.text(line, currentX + cardWidth / 2, lineY, { align: 'center' });
-            }
+            doc.text(line, centerX, codeY + 3.2 + lineIndex * (nameFontSize * 0.42), { align: "center" });
           });
           
         } catch (error) {
@@ -667,7 +666,7 @@ export default function FamiliesPage() {
     }
   };
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     try {
       console.log('Families: Starting print generation...');
       
@@ -702,6 +701,7 @@ export default function FamiliesPage() {
         if (pdfCols.sub) row.push(f.subscription_amount || 0);
         return row;
       });
+      const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
       
       // Generate HTML content
       let htmlContent = `
@@ -721,6 +721,13 @@ export default function FamiliesPage() {
               margin-bottom: 20px;
               font-size: 18px;
               font-weight: bold;
+            }
+            .pdf-masjid-name {
+              text-align: center;
+              margin: 0 0 6px;
+              font-size: 22px;
+              font-weight: bold;
+              color: #064e3b;
             }
             table { 
               width: 100%; 
@@ -761,6 +768,7 @@ export default function FamiliesPage() {
           </style>
         </head>
         <body>
+          <div class="pdf-masjid-name">${escapePdfHtml(masjidName)}</div>
           <h1>Masjid Families List</h1>
           <table>
             <thead>
@@ -783,7 +791,7 @@ export default function FamiliesPage() {
         row.forEach(cell => {
           const cellValue = String(cell || '');
           const truncatedValue = cellValue.length > 50 ? cellValue.substring(0, 50) + '...' : cellValue;
-          htmlContent += `<td>${truncatedValue}</td>`;
+          htmlContent += `<td>${escapePdfHtml(truncatedValue)}</td>`;
         });
         htmlContent += '</tr>';
       });

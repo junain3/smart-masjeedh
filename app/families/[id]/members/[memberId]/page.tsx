@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, FileText, User } from "lucide-react";
 import jsPDF from "jspdf";
 import { supabase } from "@/lib/supabase";
+import { getPdfMasjidName } from "@/lib/pdf-utils";
 import { useMockAuth } from "@/components/MockAuthProvider";
 
 type FamilySummary = {
@@ -129,7 +130,7 @@ export default function MemberDetailsPage() {
       .filter(Boolean) as Array<{ label: string; value: string }>;
   }, [member]);
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     if (!member || !family) return;
 
     try {
@@ -139,9 +140,13 @@ export default function MemberDetailsPage() {
         format: "a4",
       });
 
+      const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
       let y = 20;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(18);
+      doc.text(masjidName, 105, y, { align: "center" });
+
+      y += 10;
       doc.text("Member Details", 15, y);
 
       y += 10;

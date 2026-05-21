@@ -25,6 +25,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
+import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useAppToast } from "@/components/ToastProvider";
 import { useMockAuth } from "@/components/MockAuthProvider";
@@ -338,13 +339,16 @@ const { error } = await supabase
         return;
       }
 
+      const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
+
       const html = `
         <html>
           <head>
-            <title>Account Transactions - MJM</title>
+            <title>Account Transactions - ${escapePdfHtml(masjidName)}</title>
             <style>
               body { font-family: Arial, sans-serif; margin: 20px; }
-              h1 { color: #047857; text-align: center; }
+              h1 { color: #064e3b; text-align: center; margin-bottom: 6px; }
+              h2 { text-align: center; margin-top: 0; }
               table { width: 100%; border-collapse: collapse; margin-top: 20px; }
               th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
               th { background-color: #047857; color: white; }
@@ -356,7 +360,7 @@ const { error } = await supabase
           </head>
           <body>
             <div class="header">
-              <h1>Mubeen Jummah Masjid</h1>
+              <h1>${escapePdfHtml(masjidName)}</h1>
               <h2>Account Transactions</h2>
             </div>
             <div class="date">Generated: ${new Date().toLocaleDateString()}</div>
@@ -376,9 +380,9 @@ const { error } = await supabase
                     (tx) => `
                   <tr>
                     <td>${new Date(tx.date).toLocaleDateString()}</td>
-                    <td>${tx.description}</td>
-                    <td>${tx.category || "-"}</td>
-                    <td>${tx.type}</td>
+                    <td>${escapePdfHtml(tx.description)}</td>
+                    <td>${escapePdfHtml(tx.category || "-")}</td>
+                    <td>${escapePdfHtml(tx.type)}</td>
                     <td>${tx.type === "expense" ? "-" : "+"}Rs. ${tx.amount}</td>
                   </tr>
                 `
@@ -430,8 +434,8 @@ const { error } = await supabase
       >
         <div className="h-full flex flex-col">
           <div className="p-6 border-b border-neutral-200">
-            <h1 className="text-2xl font-black text-neutral-900">MJM</h1>
-            <p className="text-sm text-neutral-600">Mubeen Jummah Masjid</p>
+            <h1 className="text-2xl font-black text-neutral-900">Masjid</h1>
+            <p className="text-sm text-neutral-600">Your Masjid</p>
           </div>
 
           <nav className="flex-1 p-4 space-y-2">

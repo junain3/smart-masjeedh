@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMockAuth } from "@/components/MockAuthProvider";
+import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,6 +13,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"error" | "success" | "">("");
 
   // Redirect to home if already logged in
   useEffect(() => {
@@ -22,6 +26,15 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
   e.preventDefault();
+  setMessage("");
+  setMessageType("");
+
+  if (!email.trim() || !password) {
+    setMessage("Please enter your email and password");
+    setMessageType("error");
+    return;
+  }
+
   setLoading(true);
 
   try {
@@ -37,10 +50,41 @@ export default function LoginPage() {
     router.replace(next || "/");
   } catch (error: any) {
     console.error("LOGIN STEP ERROR:", error);
-    alert(error?.message || "Login failed");
+    setMessage("Invalid email or password");
+    setMessageType("error");
     setLoading(false);
   }
 };
+
+  const handlePasswordRecovery = async () => {
+    setMessage("");
+    setMessageType("");
+
+    if (!email.trim()) {
+      setMessage("Enter your email address to receive a password recovery link.");
+      setMessageType("error");
+      return;
+    }
+
+    setRecovering(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/login`,
+      });
+
+      if (error) throw error;
+
+      setMessage("If this email exists, a password recovery link has been sent.");
+      setMessageType("success");
+    } catch (error: any) {
+      console.error("PASSWORD RECOVERY ERROR:", error);
+      setMessage("Unable to send recovery email. Please try again.");
+      setMessageType("error");
+    } finally {
+      setRecovering(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
@@ -50,13 +94,29 @@ export default function LoginPage() {
       >
         <h1 className="text-2xl font-bold text-center">Login</h1>
 
+        {message && (
+          <div
+            className={`rounded-lg px-3 py-2 text-sm ${
+              messageType === "success"
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                : "bg-red-50 text-red-700 border border-red-100"
+            }`}
+            role="alert"
+          >
+            {message}
+          </div>
+        )}
+
         <div>
           <label className="block text-sm mb-1">Email</label>
           <input
             type="email"
-            required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setMessage("");
+              setMessageType("");
+            }}
             className="w-full border p-3 rounded"
             placeholder="Enter email"
           />
@@ -66,13 +126,25 @@ export default function LoginPage() {
           <label className="block text-sm mb-1">Password</label>
           <input
             type="password"
-            required
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setMessage("");
+              setMessageType("");
+            }}
             className="w-full border p-3 rounded"
             placeholder="Enter password"
           />
         </div>
+
+        <button
+          type="button"
+          onClick={handlePasswordRecovery}
+          disabled={recovering}
+          className="w-full text-sm text-emerald-700 font-semibold disabled:opacity-50"
+        >
+          {recovering ? "Sending recovery link..." : "Forgot Password / Recovery"}
+        </button>
 
         <button
           type="submit"

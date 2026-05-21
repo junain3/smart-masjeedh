@@ -23,6 +23,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { inferGenderFromRelationship } from "@/lib/member-gender";
+import { getPdfMasjidName } from "@/lib/pdf-utils";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -161,6 +162,41 @@ export default function FamilyDetailsPage() {
   };
   return map[value || ""] || value || "-";
 };
+
+  const getFamilyMemberSortRank = (member: Member) => {
+    const relationshipValue = (member.relationship || "").trim().toLowerCase();
+    const normalizedRelationship = normalizeRelationship(member.relationship).trim().toLowerCase();
+    const memberName = (member.name || "").trim().toLowerCase();
+    const familyHeadName = (family?.head_name || "").trim().toLowerCase();
+
+    if (
+      normalizedRelationship === "family head" ||
+      relationshipValue === "head" ||
+      relationshipValue === "குடும்பத் தலைவர்" ||
+      (familyHeadName && memberName === familyHeadName)
+    ) {
+      return 0;
+    }
+
+    if (
+      normalizedRelationship === "wife" ||
+      normalizedRelationship === "spouse" ||
+      relationshipValue === "மனைவி"
+    ) {
+      return 1;
+    }
+
+    if (
+      normalizedRelationship === "son" ||
+      normalizedRelationship === "daughter" ||
+      relationshipValue === "மகன்" ||
+      relationshipValue === "மகள்"
+    ) {
+      return 2;
+    }
+
+    return 3;
+  };
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
@@ -270,7 +306,19 @@ export default function FamilyDetailsPage() {
         .order("name");
 
       if (membersError) throw membersError;
-      setMembers(membersData || []);
+      const sortedMembers = [...(membersData || [])].sort((a, b) => {
+        const rankDiff = getFamilyMemberSortRank(a) - getFamilyMemberSortRank(b);
+        if (rankDiff !== 0) return rankDiff;
+
+        const aIsChild = getFamilyMemberSortRank(a) === 2;
+        const bIsChild = getFamilyMemberSortRank(b) === 2;
+        if (aIsChild && bIsChild) {
+          return Number(b.age || 0) - Number(a.age || 0);
+        }
+
+        return (a.name || "").localeCompare(b.name || "");
+      });
+      setMembers(sortedMembers);
 
       const { data: paymentsData, error: paymentsError } = await supabase
         .from("subscription_collections")
@@ -439,7 +487,10 @@ export default function FamilyDetailsPage() {
   };
 
   const addService = async () => {
-    if (!supabase || !familyId || !tenantContext?.masjidId) return;
+    if (!supabase || !familyId || !tenantContext?.masjidId) {
+      alert("Masjid context not found. Please log in again.");
+      return;
+    }
 
     if (!serviceName.trim()) {
       alert("Please enter a service name");
@@ -449,6 +500,19 @@ export default function FamilyDetailsPage() {
     setIsServiceSubmitting(true);
 
     try {
+      const { data: masjidData, error: masjidError } = await supabase
+        .from("masjids")
+        .select("id")
+        .eq("id", tenantContext.masjidId)
+        .maybeSingle();
+
+      if (masjidError) throw masjidError;
+
+      if (!masjidData) {
+        alert("Selected masjid is not valid. Please log in again or complete masjid setup before adding services.");
+        return;
+      }
+
       const { error } = await supabase
         .from("service_distributions")
         .insert({
@@ -609,7 +673,7 @@ export default function FamilyDetailsPage() {
     }
   };
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     try {
       if (typeof window === "undefined") {
         alert("PDF generation not available in server-side rendering");
@@ -621,7 +685,12 @@ export default function FamilyDetailsPage() {
         unit: 'mm',
         format: 'a4'
       });
-      doc.text(`Family: ${family?.head_name} (${family?.family_code})`, 15, 15);
+      const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text(masjidName, doc.internal.pageSize.width / 2, 12, { align: "center" });
+      doc.setFontSize(12);
+      doc.text(`Family: ${family?.head_name} (${family?.family_code})`, 15, 22);
 
       const tableData = members.map((m) => [
         m.name,
@@ -633,7 +702,7 @@ export default function FamilyDetailsPage() {
       ]);
 
       autoTable(doc, {
-        startY: 25,
+        startY: 30,
         head: [["Name", "Relation", "Age", "Gender", "NIC", "Phone"]],
         body: tableData,
         columnStyles: {

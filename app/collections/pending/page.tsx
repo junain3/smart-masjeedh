@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, X, AlertCircle, Users, Wallet, Calendar, Filter, Search, DollarSign, TrendingUp, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
+import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 import { AppShell } from "@/components/AppShell";
 
 type Family = {
@@ -200,7 +201,7 @@ export default function PendingCollectionsPage() {
     }
   };
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     try {
       console.log('Pending: Starting print generation...');
       
@@ -217,6 +218,8 @@ export default function PendingCollectionsPage() {
         return;
       }
       
+      const masjidName = await getPdfMasjidName(supabase);
+
       // Generate HTML content
       let htmlContent = `
         <!DOCTYPE html>
@@ -225,6 +228,7 @@ export default function PendingCollectionsPage() {
           <title>Pending Collections Report</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 20px; font-size: 12px; }
+            .pdf-masjid-name { text-align: center; margin: 0 0 6px; font-size: 22px; font-weight: bold; color: #064e3b; }
             h1 { text-align: center; margin-bottom: 20px; font-size: 18px; font-weight: bold; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { border: 1px solid #333; padding: 8px; text-align: left; }
@@ -235,6 +239,7 @@ export default function PendingCollectionsPage() {
           </style>
         </head>
         <body>
+          <div class="pdf-masjid-name">${escapePdfHtml(masjidName)}</div>
           <h1>Pending Collections Report</h1>
           <table>
             <thead>
@@ -255,14 +260,14 @@ export default function PendingCollectionsPage() {
       // Add data rows
       collections.forEach(c => {
         htmlContent += '<tr>';
-        htmlContent += `<td>${c.family?.family_code || ''}</td>`;
-        htmlContent += `<td>${c.family?.head_name || ''}</td>`;
-        htmlContent += `<td>${(c as any).collector?.email || 'Unknown'}</td>`;
-        htmlContent += `<td>${c.date || ''}</td>`;
+        htmlContent += `<td>${escapePdfHtml(c.family?.family_code || '')}</td>`;
+        htmlContent += `<td>${escapePdfHtml(c.family?.head_name || '')}</td>`;
+        htmlContent += `<td>${escapePdfHtml((c as any).collector?.email || 'Unknown')}</td>`;
+        htmlContent += `<td>${escapePdfHtml(c.date || '')}</td>`;
         htmlContent += `<td>Rs. ${c.amount?.toLocaleString() || 0}</td>`;
         htmlContent += `<td>${c.commission_percent || 0}%</td>`;
         htmlContent += `<td>Rs. ${c.commission_amount?.toLocaleString() || 0}</td>`;
-        htmlContent += `<td>${c.status || ''}</td>`;
+        htmlContent += `<td>${escapePdfHtml(c.status || '')}</td>`;
         htmlContent += '</tr>';
       });
       

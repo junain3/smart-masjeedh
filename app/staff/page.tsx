@@ -164,7 +164,7 @@ export default function StaffPage() {
     try {
       const { data, error } = await supabase
         .from("user_roles")
-        .select("id, email, role, permissions, user_id")
+        .select("id, email, role, permissions, user_id, created_at")
         .eq("masjid_id", tenantContext.masjidId);
 
       if (error) throw error;
@@ -221,7 +221,7 @@ export default function StaffPage() {
         const superAdmin: Staff = {
           id: ctx.userId || "current_user",
           name: user?.name || user?.email || "Super Admin",
-          email: user?.email || "admin@mjm.com",
+          email: user?.email || "admin@masjid.com",
           phone: user?.phone || "+919876543210",
           role: "super_admin",
           basic_salary: 0,
@@ -285,6 +285,20 @@ export default function StaffPage() {
       if (!ctx) return;
 
       if (editingStaff) {
+        const protectedRoleChangeReason =
+          editingStaff.role === "super_admin" && role !== "super_admin"
+            ? getProtectedAdminRemovalReason(editingStaff.user_id, editingStaff.role, "role_change")
+            : null;
+
+        if (protectedRoleChangeReason) {
+          toast({
+            kind: "error",
+            title: "Protected Super Admin",
+            message: protectedRoleChangeReason
+          });
+          return;
+        }
+
         // Update staff (mock - replace with real DB update)
         setStaff(prev => prev.map(s => 
           s.id === editingStaff.id 
@@ -556,6 +570,20 @@ export default function StaffPage() {
     if (!editingUserRole || !supabase) return;
 
     try {
+      const protectedRoleChangeReason =
+        editingUserRole.role === "super_admin" && editingRole !== "super_admin"
+          ? getProtectedAdminRemovalReason(editingUserRole.user_id, editingUserRole.role, "role_change")
+          : null;
+
+      if (protectedRoleChangeReason) {
+        toast({
+          kind: "error",
+          title: "Protected Super Admin",
+          message: protectedRoleChangeReason
+        });
+        return;
+      }
+
       const { error } = await supabase
         .from("user_roles")
         .update({ 
@@ -669,6 +697,46 @@ export default function StaffPage() {
 
   const [replacementCheck, setReplacementCheck] = useState<{ [key: string]: boolean }>({});
 
+  const superAdminRoles = useMemo(
+    () => userRoles.filter((userRole) => userRole.role === "super_admin"),
+    [userRoles]
+  );
+
+  const originalSuperAdminUserId = useMemo(() => {
+    if (superAdminRoles.length === 0) return null;
+
+    return [...superAdminRoles].sort((a, b) => {
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : Number.MAX_SAFE_INTEGER;
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : Number.MAX_SAFE_INTEGER;
+      return aTime - bTime;
+    })[0]?.user_id || null;
+  }, [superAdminRoles]);
+
+  const getProtectedAdminRemovalReason = (
+    targetUserId?: string | null,
+    targetRole?: string | null,
+    action: "remove" | "role_change" = "remove"
+  ) => {
+    if (!targetUserId || targetRole !== "super_admin") return null;
+
+    const isOriginalSuperAdmin = targetUserId === originalSuperAdminUserId;
+    const isLastSuperAdmin = superAdminRoles.length <= 1;
+
+    if (isOriginalSuperAdmin && isLastSuperAdmin) {
+      return action === "role_change"
+        ? "Original super admin cannot be demoted until another super admin is assigned."
+        : "Original super admin cannot be removed until another super admin is assigned.";
+    }
+
+    if (isLastSuperAdmin) {
+      return action === "role_change"
+        ? "Cannot demote the last remaining super admin. Assign another super admin first."
+        : "Cannot remove the last remaining super admin. Assign another super admin first.";
+    }
+
+    return null;
+  };
+
   useEffect(() => {
     const checkReplacementForCurrentAdmin = async () => {
       if (tenantContext?.userId && tenantContext?.masjidId) {
@@ -681,6 +749,11 @@ export default function StaffPage() {
   }, [tenantContext?.userId, tenantContext?.masjidId]);
 
   const safeSelfRemoval = async (currentUserId: string, masjidId: string) => {
+    const protectedReason = getProtectedAdminRemovalReason(currentUserId, "super_admin");
+    if (protectedReason) {
+      throw new Error(protectedReason);
+    }
+
     // STEP 1: Fetch all other admin-level users for the same masjid
     const { data: otherAdmins, error: fetchError } = await supabase
       .from('user_roles')
@@ -737,8 +810,17 @@ export default function StaffPage() {
   const handleDeleteStaff = async (staffMember: Staff) => {
     // CRITICAL: Only current Super Admin can manage other Super Admins
     const currentUserIsSuperAdmin = tenantContext?.role === 'super_admin' || user?.role === 'super_admin';
-    const isTargetSuperAdmin = staffMember.role === 'super_admin';
     const isCurrentUser = staffMember.user_id === user?.id || staffMember.user_id === tenantContext?.userId;
+    const protectedReason = getProtectedAdminRemovalReason(staffMember.user_id, staffMember.role);
+
+    if (protectedReason) {
+      toast({
+        kind: "error",
+        title: "Protected Super Admin",
+        message: protectedReason
+      });
+      return;
+    }
 
     // RULES:
     // 1. Cannot delete yourself (UNLESS another full-access admin exists)
@@ -772,15 +854,6 @@ export default function StaffPage() {
         kind: "error", 
         title: "ACCESS DENIED", 
         message: "Only Super Admin can delete staff members!" 
-      });
-      return;
-    }
-
-    if (isTargetSuperAdmin) {
-      toast({ 
-        kind: "error", 
-        title: "ACCESS DENIED", 
-        message: "Super Admin accounts cannot be deleted!" 
       });
       return;
     }
@@ -829,6 +902,16 @@ export default function StaffPage() {
   };
 
   const removeUserAccess = async (userRole: any) => {
+    const protectedReason = getProtectedAdminRemovalReason(userRole.user_id, userRole.role);
+    if (protectedReason) {
+      toast({
+        kind: "error",
+        title: "Protected Super Admin",
+        message: protectedReason
+      });
+      return;
+    }
+
     const ok = await confirm({
       title: "Remove Access",
       message: `Are you sure you want to remove access for ${userRole.email}?`,
@@ -1055,8 +1138,8 @@ export default function StaffPage() {
         <div className="h-full flex flex-col">
           {/* Logo */}
           <div className="p-6 border-b border-neutral-200">
-            <h1 className="text-2xl font-black text-neutral-900">MJM</h1>
-            <p className="text-sm text-neutral-600">Mubeen Jummah Masjid</p>
+            <h1 className="text-2xl font-black text-neutral-900">Masjid</h1>
+            <p className="text-sm text-neutral-600">Your Masjid</p>
           </div>
 
           {/* Navigation */}
@@ -1343,7 +1426,11 @@ export default function StaffPage() {
                               </div>
                               <div>
                                 <div className="text-sm font-medium text-emerald-700">
-                                  {staffMember.permissions?.subscriptions_collect ? (
+                                  {staffMember.role === 'super_admin' ? (
+                                    <span className="text-emerald-700">
+                                      Full Access
+                                    </span>
+                                  ) : staffMember.permissions?.subscriptions_collect ? (
                                     <span className="text-green-600">
                                       {(staffMember.commission_rate || 0)}% Commission
                                     </span>
@@ -1408,12 +1495,29 @@ export default function StaffPage() {
                               const isCurrentUser = staffMember.user_id === user?.id || staffMember.user_id === tenantContext?.userId;
                               const currentUserIsSuperAdmin = tenantContext?.role === 'super_admin' || user?.role === 'super_admin';
                               const hasReplacement = isCurrentUser && currentUserIsSuperAdmin ? replacementCheck[staffMember.user_id] : true;
+                              const protectedReason = getProtectedAdminRemovalReason(staffMember.user_id, staffMember.role);
                               
                               // Show delete button if:
                               // 1. Current user is super admin AND
                               // 2. Either deleting someone else (not super admin) OR deleting self with replacement
-                              return (tenantContext?.role === 'super_admin' || user?.role === 'super_admin') && 
-                                     (staffMember.role !== 'super_admin' || (isCurrentUser && hasReplacement));
+                              const canDelete =
+                                (tenantContext?.role === 'super_admin' || user?.role === 'super_admin') &&
+                                !protectedReason;
+
+                              if (!canDelete && protectedReason) {
+                                return (
+                                  <button
+                                    type="button"
+                                    disabled
+                                    className="text-neutral-300 cursor-not-allowed"
+                                    title={protectedReason}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                );
+                              }
+
+                              return canDelete;
                             })() && (
                               <button
                                 onClick={(e) => {
@@ -1464,7 +1568,10 @@ export default function StaffPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200">
-                    {userRoles.map((userRole) => (
+                    {userRoles.map((userRole) => {
+                      const protectedReason = getProtectedAdminRemovalReason(userRole.user_id, userRole.role);
+
+                      return (
                       <tr key={userRole.user_id} className="hover:bg-neutral-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-900">
                           {userRole.email}
@@ -1491,16 +1598,29 @@ export default function StaffPage() {
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => removeUserAccess(userRole)}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {protectedReason ? (
+                              <button
+                                type="button"
+                                disabled
+                                className="text-neutral-300 cursor-not-allowed"
+                                title={protectedReason}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => removeUserAccess(userRole)}
+                                className="text-red-600 hover:text-red-900"
+                                title="Remove access"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1695,10 +1815,31 @@ export default function StaffPage() {
                 <label className="block text-sm font-medium text-neutral-700 mb-2">
                   Role
                 </label>
+                {(() => {
+                  const protectedRoleChangeReason = editingStaff
+                    ? getProtectedAdminRemovalReason(editingStaff.user_id, editingStaff.role, "role_change")
+                    : null;
+
+                  return (
+                    <>
                 <select
                   value={role}
-                  onChange={(e) => setRole(e.target.value as any)}
-                  className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  onChange={(e) => {
+                    if (protectedRoleChangeReason) {
+                      toast({
+                        kind: "error",
+                        title: "Protected Super Admin",
+                        message: protectedRoleChangeReason
+                      });
+                      return;
+                    }
+                    setRole(e.target.value as any);
+                  }}
+                  disabled={!!protectedRoleChangeReason}
+                  title={protectedRoleChangeReason || "Select staff role"}
+                  className={`w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                    protectedRoleChangeReason ? "bg-neutral-100 text-neutral-500 cursor-not-allowed" : ""
+                  }`}
                 >
                   <option value="staff">Staff</option>
                   <option value="editor">Editor</option>
@@ -1708,6 +1849,14 @@ export default function StaffPage() {
                     <option value="super_admin">Super Admin</option>
                   )}
                 </select>
+                {protectedRoleChangeReason && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    {protectedRoleChangeReason}
+                  </p>
+                )}
+                    </>
+                  );
+                })()}
               </div>
 
               <div>
@@ -1805,16 +1954,45 @@ export default function StaffPage() {
                 <label className="block text-sm font-medium text-neutral-700 mb-2">
                   Role
                 </label>
+                {(() => {
+                  const protectedRoleChangeReason = editingUserRole
+                    ? getProtectedAdminRemovalReason(editingUserRole.user_id, editingUserRole.role, "role_change")
+                    : null;
+
+                  return (
+                    <>
                 <select
                   value={editingRole}
-                  onChange={(e) => handleRoleChange(e.target.value)}
-                  className="w-full px-3 py-2 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  onChange={(e) => {
+                    if (protectedRoleChangeReason) {
+                      toast({
+                        kind: "error",
+                        title: "Protected Super Admin",
+                        message: protectedRoleChangeReason
+                      });
+                      return;
+                    }
+                    handleRoleChange(e.target.value);
+                  }}
+                  disabled={!!protectedRoleChangeReason}
+                  title={protectedRoleChangeReason || "Select access role"}
+                  className={`w-full px-3 py-2 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                    protectedRoleChangeReason ? "bg-neutral-100 text-neutral-500 cursor-not-allowed" : ""
+                  }`}
                 >
                   <option value="super_admin">Super Admin</option>
                   <option value="co_admin">Co Admin</option>
                   <option value="staff">Staff</option>
                   <option value="editor">Editor</option>
                 </select>
+                {protectedRoleChangeReason && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    {protectedRoleChangeReason}
+                  </p>
+                )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Permission Checkboxes */}

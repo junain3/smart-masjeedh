@@ -54,15 +54,15 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: 'noreply@mjm.com',
+            from: 'noreply@masjid.com',
             to: [email],
-            subject: 'Invitation to Join MJM Staff Management',
+            subject: 'Invitation to Join Masjid Staff Management',
             html: `
               <!DOCTYPE html>
               <html>
               <head>
                 <meta charset="utf-8">
-                <title>Invitation to Join MJM</title>
+                <title>Invitation to Join Masjid</title>
                 <style>
                   body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
                   .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -75,12 +75,12 @@ export async function POST(request: NextRequest) {
               <body>
                 <div class="container">
                   <div class="header">
-                    <h1>🕌 MJM Staff Management</h1>
+                    <h1>🕌 Masjid Staff Management</h1>
                     <p>You're Invited!</p>
                   </div>
                   <div class="content">
                     <h2>Welcome to the Team!</h2>
-                    <p>You have been invited to join MJM Staff Management as a <strong>${role.replace('_', ' ').toUpperCase()}</strong>.</p>
+                    <p>You have been invited to join Masjid Staff Management as a <strong>${role.replace('_', ' ').toUpperCase()}</strong>.</p>
                     
                     <p><strong>Your Role Details:</strong></p>
                     <ul>
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
                     <p><strong>Note:</strong> This invitation link will expire in 7 days.</p>
                   </div>
                   <div class="footer">
-                    <p>This is an automated message from MJM Staff Management System.</p>
+                    <p>This is an automated message from Masjid Staff Management System.</p>
                     <p>If you didn't expect this invitation, please ignore this email.</p>
                   </div>
                 </div>

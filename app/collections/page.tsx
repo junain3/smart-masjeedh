@@ -6,6 +6,7 @@ import { QrCode, Plus, Users, Wallet, Calendar, X, Check, AlertCircle, Search, F
 import { supabase } from "@/lib/supabase";
 import { getTranslation, translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
+import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { AppShell } from "@/components/AppShell";
@@ -204,7 +205,7 @@ const [commissionBalance, setCommissionBalance] = useState(0);
     }
   };
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     try {
       console.log('Collections: Starting print generation...');
       
@@ -221,6 +222,8 @@ const [commissionBalance, setCommissionBalance] = useState(0);
         return;
       }
       
+      const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
+
       // Generate HTML content
       let htmlContent = `
         <!DOCTYPE html>
@@ -233,6 +236,13 @@ const [commissionBalance, setCommissionBalance] = useState(0);
               margin: 20px; 
               font-size: 12px;
               line-height: 1.4;
+            }
+            .pdf-masjid-name {
+              text-align: center;
+              margin: 0 0 6px;
+              font-size: 22px;
+              font-weight: bold;
+              color: #064e3b;
             }
             h1 { 
               text-align: center; 
@@ -279,6 +289,7 @@ const [commissionBalance, setCommissionBalance] = useState(0);
           </style>
         </head>
         <body>
+          <div class="pdf-masjid-name">${escapePdfHtml(masjidName)}</div>
           <h1>Staff Collections Report</h1>
           <table>
             <thead>
@@ -298,13 +309,13 @@ const [commissionBalance, setCommissionBalance] = useState(0);
       // Add data rows
       collections.forEach(c => {
         htmlContent += '<tr>';
-        htmlContent += `<td>${c.family?.family_code || ''}</td>`;
-        htmlContent += `<td>${c.family?.head_name || ''}</td>`;
-        htmlContent += `<td>${c.date || ''}</td>`;
+        htmlContent += `<td>${escapePdfHtml(c.family?.family_code || '')}</td>`;
+        htmlContent += `<td>${escapePdfHtml(c.family?.head_name || '')}</td>`;
+        htmlContent += `<td>${escapePdfHtml(c.date || '')}</td>`;
         htmlContent += `<td>Rs. ${c.amount?.toLocaleString() || 0}</td>`;
         htmlContent += `<td>${c.commission_percent || 0}%</td>`;
         htmlContent += `<td>Rs. ${c.commission_amount?.toLocaleString() || 0}</td>`;
-        htmlContent += `<td>${c.status || ''}</td>`;
+        htmlContent += `<td>${escapePdfHtml(c.status || '')}</td>`;
         htmlContent += '</tr>';
       });
       

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { DollarSign, Wallet, Calendar, Users, TrendingUp, AlertCircle, Check, Plus, X, FileText } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getTranslation, translations, Language } from "@/lib/i18n/translations";
+import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 import { AppShell } from "@/components/AppShell";
 
 type StaffMember = {
@@ -138,7 +139,7 @@ export default function SalaryManagementPage() {
     }
   };
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     try {
       console.log('Salary: Starting print generation...');
       
@@ -155,6 +156,8 @@ export default function SalaryManagementPage() {
         return;
       }
       
+      const masjidName = await getPdfMasjidName(supabase);
+
       // Generate HTML content
       let htmlContent = `
         <!DOCTYPE html>
@@ -163,6 +166,7 @@ export default function SalaryManagementPage() {
           <title>Staff Commission Balances Report</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 20px; font-size: 12px; }
+            .pdf-masjid-name { text-align: center; margin: 0 0 6px; font-size: 22px; font-weight: bold; color: #064e3b; }
             h1 { text-align: center; margin-bottom: 20px; font-size: 18px; font-weight: bold; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { border: 1px solid #333; padding: 8px; text-align: left; }
@@ -173,6 +177,7 @@ export default function SalaryManagementPage() {
           </style>
         </head>
         <body>
+          <div class="pdf-masjid-name">${escapePdfHtml(masjidName)}</div>
           <h1>Staff Commission Balances Report</h1>
           <table>
             <thead>
@@ -189,7 +194,7 @@ export default function SalaryManagementPage() {
       // Add data rows
       commissionBalances.forEach(b => {
         htmlContent += '<tr>';
-        htmlContent += `<td>${b.staff_email || ''}</td>`;
+        htmlContent += `<td>${escapePdfHtml(b.staff_email || '')}</td>`;
         htmlContent += `<td>Rs. ${b.total_commission_earned?.toLocaleString() || 0}</td>`;
         htmlContent += `<td>Rs. ${b.total_commission_paid?.toLocaleString() || 0}</td>`;
         htmlContent += `<td>Rs. ${b.available_balance?.toLocaleString() || 0}</td>`;

@@ -7,9 +7,12 @@ import { ArrowLeft, Users, CheckCircle, Clock, QrCode, FileText, Search } from "
 import { supabase } from "@/lib/supabase";
 import { getTranslation, translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
+import { getPdfMasjidName } from "@/lib/pdf-utils";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useAppToast } from "@/components/ToastProvider";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 type Ev = { id: string; title: string; event_date: string };
 type Att = {
@@ -18,6 +21,7 @@ type Att = {
   family_id: string;
   families: { id: string; family_code: string; head_name: string; phone?: string; address?: string };
 };
+type PdfFilter = "all" | "received" | "pending";
 
 export default function EventDetailPage() {
   const router = useRouter();
@@ -36,6 +40,8 @@ export default function EventDetailPage() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [allowed, setAllowed] = useState(true);
   const [confirmUnmark, setConfirmUnmark] = useState<{familyId: string, familyCode: string} | null>(null);
+  const [isPdfFilterOpen, setIsPdfFilterOpen] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const { tenantContext } = useMockAuth();
 
   useEffect(() => {
@@ -202,7 +208,8 @@ export default function EventDetailPage() {
           });
       }
 
-      setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: toReceived ? "Received" : "Pending" } : r));
+      const nextStatus = toReceived ? "Received" : "Pending";
+      setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: nextStatus } : r));
       // Log to accounts as zero-amount info row when marking Received
       if (toReceived && ev) {
         await supabase.from("transactions").insert([{
@@ -293,89 +300,106 @@ export default function EventDetailPage() {
   const receivedCount = rows.filter(r => r.status === "Received").length;
   const remainingCount = total - receivedCount;
 
-  const generatePDF = () => {
+  const generatePDF = async (pdfFilter: PdfFilter) => {
     try {
-      console.log('Event Detail: Starting print generation...');
-      
-      // Check client-side
-      if (typeof window === 'undefined') {
-        console.error('Print generation not available in server-side rendering');
+      if (!supabase) return;
+      setIsGeneratingPdf(true);
+      setIsPdfFilterOpen(false);
+
+      const ctx = tenantContext || await getTenantContext();
+      if (!ctx) {
+        router.push("/login");
         return;
       }
-      
-      // Create printable HTML
-      const printWindow = window.open('', '_blank', 'width=800,height=600');
-      if (!printWindow) {
-        alert('Please allow popups for this website to print PDF');
+
+      const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
+      const canEvents = isAdmin || ctx.permissions?.events !== false;
+      if (!canEvents) {
+        toast({ kind: "error", title: "Access denied", message: "You do not have permission to generate event reports." });
         return;
       }
-      
-      // Generate HTML content
-      let htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Event Attendance Report</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; font-size: 12px; }
-            h1 { text-align: center; margin-bottom: 20px; font-size: 18px; font-weight: bold; }
-            h2 { text-align: center; margin-bottom: 20px; font-size: 14px; color: #666; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #333; padding: 8px; text-align: left; }
-            th { background-color: #f0f0f0; font-weight: bold; font-size: 11px; }
-            td { font-size: 10px; word-wrap: break-word; }
-            .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #666; }
-            @media print { body { margin: 10px; } th, td { border: 1px solid #000; padding: 6px; font-size: 9px; } }
-          </style>
-        </head>
-        <body>
-          <h1>Event Attendance Report</h1>
-          <h2>${ev?.title || ''} (${ev?.event_date || ''})</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Family Code</th>
-                <th>Head Name</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-      `;
-      
-      // Add data rows
-      rows.forEach(r => {
-        htmlContent += '<tr>';
-        htmlContent += `<td>${r.families.family_code || ''}</td>`;
-        htmlContent += `<td>${r.families.head_name || ''}</td>`;
-        htmlContent += `<td>${r.status || ''}</td>`;
-        htmlContent += '</tr>';
+
+      if (!ev) {
+        toast({ kind: "error", title: "Missing Event", message: "Event details are not loaded yet." });
+        return;
+      }
+
+      const printableRows = rows.filter(r => {
+        if (pdfFilter === "received") return r.status === "Received";
+        if (pdfFilter === "pending") return r.status !== "Received";
+        return true;
       });
-      
-      htmlContent += `
-            </tbody>
-          </table>
-          <div class="footer">
-            Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
-          </div>
-          <div style="margin-top: 20px; text-align: center;">
-            <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px;">
-              ðŸ–¨ï¸ Print / Save as PDF
-            </button>
-          </div>
-        </body>
-        </html>
-      `;
-      
-      // Write content to new window
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      printWindow.focus();
-      
-      console.log('Event Detail: Print window opened successfully');
-      
-    } catch (error) {
-      console.error('Event Detail: Print generation error:', error);
-      alert('Print generation failed: ' + (error as Error).message);
+
+      const familyIds = printableRows.map((row) => row.family_id);
+      const { data: memberData, error: memberError } = familyIds.length > 0
+        ? await supabase
+            .from("members")
+            .select("family_id,name,full_name")
+            .in("family_id", familyIds)
+            .eq("masjid_id", ctx.masjidId)
+        : { data: [], error: null };
+
+      if (memberError) throw memberError;
+
+      const membersByFamily = ((memberData as any[]) || []).reduce<Record<string, string[]>>((acc, member) => {
+        const memberName = member.full_name || member.name;
+        if (!member.family_id || !memberName) return acc;
+        acc[member.family_id] = [...(acc[member.family_id] || []), memberName];
+        return acc;
+      }, {});
+
+      const pdfTotal = printableRows.length;
+      const pdfReceived = printableRows.filter(r => r.status === "Received").length;
+      const pdfPending = pdfTotal - pdfReceived;
+      const reportTitle = `${pdfFilter === "all" ? "All" : pdfFilter === "received" ? "Received" : "Pending"} Families`;
+      const masjidName = await getPdfMasjidName(supabase, ctx.masjidId);
+
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text(masjidName, doc.internal.pageSize.width / 2, 12, { align: "center" });
+      doc.setFontSize(12);
+      doc.text("Event Attendance Report", doc.internal.pageSize.width / 2, 20, { align: "center" });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`${ev.title} | Event Date: ${ev.event_date} | Showing: ${reportTitle}`, 14, 29);
+      doc.text(`Total: ${pdfTotal} | Received: ${pdfReceived} | Pending: ${pdfPending}`, 14, 35);
+
+      autoTable(doc, {
+        startY: 41,
+        head: [["#", "Family Code", "Head Name", "Phone", "Address", "Status", "Event Date", "Members"]],
+        body: printableRows.map((row, index) => [
+          index + 1,
+          row.families.family_code || "",
+          row.families.head_name || "",
+          row.families.phone || "",
+          row.families.address || "",
+          row.status || "Pending",
+          ev.event_date || "",
+          (membersByFamily[row.family_id] || []).join(", "),
+        ]),
+        styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak" },
+        headStyles: { fillColor: [4, 120, 87], textColor: 255 },
+        columnStyles: {
+          0: { cellWidth: 10 },
+          1: { cellWidth: 24 },
+          2: { cellWidth: 34 },
+          3: { cellWidth: 26 },
+          4: { cellWidth: 52 },
+          5: { cellWidth: 22 },
+          6: { cellWidth: 24 },
+          7: { cellWidth: 82 },
+        },
+      });
+
+      const safeTitle = ev.title.replace(/[^a-z0-9-_]+/gi, "-").replace(/^-|-$/g, "");
+      doc.save(`event-attendance-${safeTitle || eventId}-${pdfFilter}.pdf`);
+      toast({ kind: "success", title: "PDF Downloaded", message: `${reportTitle} report downloaded successfully.` });
+    } catch (error: any) {
+      console.error("Event Detail: PDF generation error:", error);
+      toast({ kind: "error", title: "PDF Failed", message: error.message || "Failed to generate PDF." });
+    } finally {
+      setIsGeneratingPdf(false);
     }
   };
 
@@ -424,8 +448,9 @@ export default function EventDetailPage() {
             <QrCode className="w-6 h-6" />
           </button>
           <button
-            onClick={generatePDF}
-            className="p-3 bg-slate-50 text-blue-600 rounded-2xl hover:bg-blue-50 transition-all active:scale-95"
+            onClick={() => setIsPdfFilterOpen(true)}
+            disabled={isGeneratingPdf}
+            className="p-3 bg-slate-50 text-blue-600 rounded-2xl hover:bg-blue-50 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             title={t.download_pdf}
           >
             <FileText className="w-6 h-6" />
@@ -555,6 +580,50 @@ export default function EventDetailPage() {
         onDecodedText={handleScan}
         helperText={t.attendance}
       />
+
+      {isPdfFilterOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm border border-slate-100 shadow-2xl">
+            <div className="mb-5 text-center">
+              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <FileText className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-black text-slate-900">Download Event PDF</h3>
+              <p className="text-xs font-semibold text-slate-400 mt-1">
+                Choose which attendance records to include.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {([
+                { key: "all", label: "All Families", helper: "Include received and pending families." },
+                { key: "received", label: "Received Only", helper: "Include only families marked as received." },
+                { key: "pending", label: "Pending Only", helper: "Include only families not yet received." },
+              ] as { key: PdfFilter; label: string; helper: string }[]).map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => generatePDF(option.key)}
+                  disabled={isGeneratingPdf}
+                  className="w-full text-left p-4 rounded-2xl border border-slate-100 hover:border-blue-100 hover:bg-blue-50/60 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="block text-sm font-black text-slate-800">{option.label}</span>
+                  <span className="block text-[11px] font-semibold text-slate-400 mt-1">{option.helper}</span>
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsPdfFilterOpen(false)}
+              disabled={isGeneratingPdf}
+              className="mt-4 w-full py-3 rounded-2xl bg-slate-100 text-slate-600 text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Dialog */}
       {confirmUnmark && (
