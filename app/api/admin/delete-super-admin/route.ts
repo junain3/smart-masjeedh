@@ -1,12 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+import { createClient as createAdminClient } from "@supabase/supabase-js";
+
+function createClient() {
+  const cookieStore = cookies();
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value }) =>
+              cookieStore.set(name, value)
+            );
+          } catch {
+            // The setAll method was called from a Server Component
+          }
+        },
+      },
+    }
+  );
+}
+
+function getSupabaseAdmin() {
+  return createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  );
+}
 
 const CONFIRMATION_TEXT = "DELETE SUPERADMIN";
 
 export async function POST(req: NextRequest) {
   try {
     const supabase = createClient();
+    const supabaseAdmin = getSupabaseAdmin();
     const { targetUserId, masjidId, confirmationText } = await req.json();
 
     if (!targetUserId || !masjidId || confirmationText !== CONFIRMATION_TEXT) {

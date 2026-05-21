@@ -1,7 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
-import crypto from "crypto";
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+import { createClient as createAdminClient } from "@supabase/supabase-js";
+import * as crypto from "crypto";
 import { Resend } from 'resend';
+
+const supabaseAdmin = createAdminClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
+
+function createClient() {
+  const cookieStore = cookies();
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value }) =>
+              cookieStore.set(name, value)
+            );
+          } catch {
+            // The setAll method was called from a Server Component
+          }
+        },
+      },
+    }
+  );
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,12 +52,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Resolve masjid_id
+const supabase = createClient();
 const { data: { session } } = await supabase.auth.getSession();
 
 let masjidId = masjid_id;
 
 if (!masjidId && session?.user?.id) {
-  const { data: roleRow } = await supabase
+  const { data: roleRow } = await supabaseAdmin
     .from("user_roles")
     .select("masjid_id")
     .eq("user_id", session.user.id)
@@ -38,7 +76,6 @@ if (!masjidId) {
 }
 
     // Generate OTP and invitation token
-    const otp = crypto.randomBytes(3).toString('hex').toUpperCase(); // 6-character OTP
     const invitationToken = crypto.randomBytes(32).toString('hex');
     
     console.log("DEBUG: Creating invitation with values:", {
@@ -54,8 +91,6 @@ if (!masjidId) {
       masjid_id: masjidId,
       email: email,
       role: role,
-      permissions: permissions || {},
-      commission_percent: commission_percent ?? null,
       token: invitationToken,
       status: "pending",
       created_by: session?.user?.id,
@@ -73,14 +108,12 @@ if (!masjidId) {
 
     // Store invitation in database with try/catch
     try {
-      const { error: inviteError } = await supabase
+      const { error: inviteError } = await supabaseAdmin
         .from("invitations")
         .insert({
           masjid_id: masjidId,
           email: email,
           role: role,
-          permissions: permissions || {},
-          commission_percent: commission_percent ?? null,
           token: invitationToken,
           status: "pending",
           created_by: session?.user?.id,
@@ -194,7 +227,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get invitation details
-    const { data: invitation, error } = await supabase
+    const { data: invitation, error } = await supabaseAdmin
       .from("invitations")
       .select("*")
       .eq("token", token)
@@ -219,9 +252,7 @@ export async function GET(request: NextRequest) {
       success: true,
       invitation: {
         email: invitation.email,
-        role: invitation.role,
-        permissions: invitation.permissions,
-        commission_percent: invitation.commission_percent
+        role: invitation.role
       }
     });
 
