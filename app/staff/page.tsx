@@ -12,11 +12,13 @@ import { useMockAuth } from "@/components/MockAuthProvider";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import StaffProfile from "@/components/StaffProfile";
 import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
+import FamiliesPage from "../families/page";
 
 export const dynamic = 'force-dynamic';
 
 type Permissions = {
   accounts: boolean;
+  families: boolean;
   members: boolean;
   subscriptions_collect: boolean;
   subscriptions_approve: boolean;
@@ -110,6 +112,7 @@ export default function StaffPage() {
   const [editingRole, setEditingRole] = useState('staff');
   const [permissions, setPermissions] = useState({
     accounts: false,
+    families: false,
     members: false,
     subscriptions_collect: false,
     subscriptions_approve: false,
@@ -125,6 +128,7 @@ export default function StaffPage() {
   const [inviteCommissionPercent, setInviteCommissionPercent] = useState('10');
   const [invitePermissions, setInvitePermissions] = useState<Permissions>({
     accounts: false,
+    families: false,
     members: false,
     subscriptions_collect: false,
     subscriptions_approve: false,
@@ -1016,6 +1020,7 @@ export default function StaffPage() {
       setInviteCommissionPercent('10');
       setInvitePermissions({
         accounts: false,
+        families: false,
         members: false,
         subscriptions_collect: false,
         subscriptions_approve: false,
@@ -2003,6 +2008,7 @@ export default function StaffPage() {
                 <div className="space-y-3">
                   {[
                     'accounts',
+                    'families',
                     'members', 
                     'subscriptions_collect',
                     'subscriptions_approve',
