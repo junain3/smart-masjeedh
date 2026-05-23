@@ -152,6 +152,24 @@ export default function FamilyDetailsPage() {
 
   const t = getTranslation(lang);
 
+  // Helper functions for input formatting
+  const formatTitleCase = (str: string): string => {
+    return str
+      .trim()
+      .replace(/\s+/g, ' ')
+      .replace(/\w\S*/g, (txt) => 
+        txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase()
+      );
+  };
+
+  const formatPhone = (str: string): string => {
+    return str.replace(/\s+/g, '').trim();
+  };
+
+  const formatNic = (str: string): string => {
+    return str.trim().toUpperCase();
+  };
+
   // Helper function for simple fuzzy name matching
   const areNamesSimilar = (name1: string, name2: string): boolean => {
     const n1 = name1.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1360,6 +1378,11 @@ export default function FamilyDetailsPage() {
                   placeholder="E.g. Ahmed Khan"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
+                  onBlur={(e) => {
+                    if (e.target.value) {
+                      setFullName(formatTitleCase(e.target.value));
+                    }
+                  }}
                 />
               </div>
 
@@ -1426,6 +1449,9 @@ export default function FamilyDetailsPage() {
                   <input
                     value={nic}
                     onChange={(e) => setNic(e.target.value)}
+                    onBlur={(e) => {
+                      setNic(formatNic(e.target.value));
+                    }}
                     className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
                     placeholder="12345V"
                   />
@@ -1440,6 +1466,9 @@ export default function FamilyDetailsPage() {
                   placeholder="07XXXXXXXX"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.slice(0, 10))}
+                  onBlur={(e) => {
+                    setPhone(formatPhone(e.target.value));
+                  }}
                   maxLength={10}
                 />
               </div>
@@ -1477,6 +1506,11 @@ export default function FamilyDetailsPage() {
                     type="text"
                     value={occupation}
                     onChange={(e) => setOccupation(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        setOccupation(formatTitleCase(e.target.value));
+                      }
+                    }}
                     className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
                     placeholder="e.g. Teacher, Engineer, Business"
                   />

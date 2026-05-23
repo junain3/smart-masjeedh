@@ -140,6 +140,20 @@ export default function FamiliesPage() {
 
   const t = getTranslation(lang);
 
+  // Helper functions for input formatting
+  const formatTitleCase = (str: string): string => {
+    return str
+      .trim()
+      .replace(/\s+/g, ' ')
+      .replace(/\w\S*/g, (txt) => 
+        txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase()
+      );
+  };
+
+  const formatPhone = (str: string): string => {
+    return str.replace(/\s+/g, '').trim();
+  };
+
   // Helper function for simple fuzzy name matching
   const areFamilyNamesSimilar = (name1: string, name2: string): boolean => {
     const n1 = name1.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1556,6 +1570,11 @@ export default function FamiliesPage() {
                       setHeadName(event.target.value);
                       setStep1Errors(prev => ({ ...prev, headName: undefined }));
                     }}
+                    onBlur={(event) => {
+                      if (event.target.value) {
+                        setHeadName(formatTitleCase(event.target.value));
+                      }
+                    }}
                     className={`w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold ${step1Errors.headName ? 'border-2 border-red-500' : ''}`}
                     placeholder="Full Name"
                     required
@@ -1573,6 +1592,11 @@ export default function FamiliesPage() {
                     onChange={(event) => {
                       setAddress(event.target.value);
                       setStep1Errors(prev => ({ ...prev, address: undefined }));
+                    }}
+                    onBlur={(event) => {
+                      if (event.target.value) {
+                        setAddress(formatTitleCase(event.target.value));
+                      }
                     }}
                     className={`w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold ${step1Errors.address ? 'border-2 border-red-500' : ''}`}
                     placeholder="Complete Address"
@@ -1592,6 +1616,9 @@ export default function FamiliesPage() {
                       onChange={(event) => {
                         setPhone(event.target.value);
                         setStep1Errors(prev => ({ ...prev, phone: undefined }));
+                      }}
+                      onBlur={(event) => {
+                        setPhone(formatPhone(event.target.value));
                       }}
                       className={`w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold ${step1Errors.phone ? 'border-2 border-red-500' : ''}`}
                       placeholder="Phone Number"
