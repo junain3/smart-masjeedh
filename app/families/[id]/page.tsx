@@ -738,8 +738,8 @@ export default function FamilyDetailsPage() {
 
   const filteredMembers = members.filter(
     (member) =>
-      member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      member.relationship.toLowerCase().includes(searchQuery.toLowerCase())
+      (member.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (member.relationship || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const annualFee = Number(family?.subscription_amount || 0);
