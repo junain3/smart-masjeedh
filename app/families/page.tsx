@@ -225,7 +225,13 @@ export default function FamiliesPage() {
 
 
       if (data) {
-        setFamilies(data);
+        const sortedFamilies = (data || []).sort((a, b) => {
+          const numA = parseInt((a.family_code || "").replace(/\D/g, "")) || 0;
+          const numB = parseInt((b.family_code || "").replace(/\D/g, "")) || 0;
+          return numA - numB;
+        });
+
+        setFamilies(sortedFamilies);
         setIsLive(true);
         setErrorMessage("");
         
