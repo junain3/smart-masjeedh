@@ -619,31 +619,54 @@ export default function StaffPage() {
 
     try {
       const balances: {[key: string]: number} = {};
-      
-      for (const staffMember of staff) {
-        if (staffMember.user_id) {
-          // Fetch earned from accepted collections
-          const { data: collections } = await supabase
-            .from('subscription_collections')
-            .select('commission_amount')
-            .eq('collected_by_user_id', staffMember.user_id)
-            .eq('masjid_id', tenantContext.masjidId)
-            .eq('status', 'accepted');
 
-          // Fetch paid from commission payments
-          const { data: payments } = await supabase
-            .from('collector_commission_payments')
-            .select('amount')
-            .eq('collector_user_id', staffMember.user_id)
-            .eq('masjid_id', tenantContext.masjidId);
+      // Fetch all collections and payments in single queries (N+1 fix)
+      const userIds = staff.map(s => s.user_id).filter(Boolean);
 
-          const earned = collections?.reduce((sum, item) => sum + (item.commission_amount || 0), 0) || 0;
-          const paid = payments?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
-          
-          balances[staffMember.user_id] = earned - paid;
-        }
+      if (userIds.length === 0) {
+        setStaffBalances(balances);
+        return;
       }
-      
+
+      const [{ data: collections }, { data: payments }] = await Promise.all([
+        supabase
+          .from('subscription_collections')
+          .select('commission_amount, collected_by_user_id')
+          .eq('masjid_id', tenantContext.masjidId)
+          .eq('status', 'accepted')
+          .in('collected_by_user_id', userIds),
+        supabase
+          .from('collector_commission_payments')
+          .select('amount, collector_user_id')
+          .eq('masjid_id', tenantContext.masjidId)
+          .in('collector_user_id', userIds)
+      ]);
+
+      // Aggregate by user_id
+      const earnedByUser: {[key: string]: number} = {};
+      const paidByUser: {[key: string]: number} = {};
+
+      collections?.forEach(item => {
+        const userId = item.collected_by_user_id;
+        if (userId) {
+          earnedByUser[userId] = (earnedByUser[userId] || 0) + (item.commission_amount || 0);
+        }
+      });
+
+      payments?.forEach(item => {
+        const userId = item.collector_user_id;
+        if (userId) {
+          paidByUser[userId] = (paidByUser[userId] || 0) + (item.amount || 0);
+        }
+      });
+
+      // Calculate balances for each staff member
+      staff.forEach(staffMember => {
+        if (staffMember.user_id) {
+          balances[staffMember.user_id] = (earnedByUser[staffMember.user_id] || 0) - (paidByUser[staffMember.user_id] || 0);
+        }
+      });
+
       setStaffBalances(balances);
     } catch (err) {
       console.error('Failed to fetch staff balances:', err);

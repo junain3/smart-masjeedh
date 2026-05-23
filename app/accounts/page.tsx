@@ -185,7 +185,7 @@ export default function AccountsPage() {
       const [transactionsResponse, familiesResponse] = await Promise.all([
         supabase
           .from("transactions")
-          .select("*")
+          .select("id, type, amount, category, description, date, family_id, masjid_id, user_id, created_at")
           .eq("masjid_id", tenantContext.masjidId)
           .order("date", { ascending: false }),
         supabase

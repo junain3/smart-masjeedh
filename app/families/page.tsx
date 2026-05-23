@@ -217,7 +217,7 @@ export default function FamiliesPage() {
 
       const { data, error } = await supabase
         .from("families")
-        .select("*")
+        .select("id, family_code, head_name, phone, address, subscription_amount, opening_balance, is_widow_head, house_type, has_toilet, special_needs_details, foreign_members_details, health_details, has_car, has_three_wheeler, has_van, has_lorry, has_tractor, extra_notes, created_at, masjid_id")
         .eq("masjid_id", tenantContext.masjidId)
         .order("family_code", { ascending: true });
 

@@ -50,7 +50,7 @@ export default function EventsPage() {
 
       const { data, error } = await supabase
         .from("events")
-        .select("*")
+        .select("id, title, event_date, description, masjid_id, created_at")
         .eq("masjid_id", ctx.masjidId)
         .order("event_date", { ascending: false });
 
