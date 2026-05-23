@@ -132,6 +132,10 @@ export default function FamiliesPage() {
   const [confirmedNoFamilyDuplicate, setConfirmedNoFamilyDuplicate] = useState(false);
   const [duplicateReason, setDuplicateReason] = useState<string>("");
   const [isStrictBlock, setIsStrictBlock] = useState(false);
+  
+  // Restore deleted family code state
+  const [isRestoreMode, setIsRestoreMode] = useState(false);
+  const [manualFamilyCode, setManualFamilyCode] = useState("");
 
   const t = getTranslation(lang);
 
@@ -328,7 +332,6 @@ export default function FamiliesPage() {
 
       if (error) throw error;
 
-
       if (data) {
         const sortedFamilies = (data || []).sort((a, b) => {
           const numA = parseInt((a.family_code || "").replace(/\D/g, "")) || 0;
@@ -380,7 +383,6 @@ export default function FamiliesPage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    console.log("=== handleSubmit START ===");
     
     setLoading(true);
     setSuccessMessage("");
@@ -429,12 +431,9 @@ export default function FamiliesPage() {
 
       // Check for family duplicates
       if (!confirmedNoFamilyDuplicate && !editingFamily) {
-        console.log("- Checking for family duplicates...");
         const duplicateCheck = checkForFamilyDuplicates();
         
         if (duplicateCheck.isDuplicate) {
-          console.log("- Warning duplicate found");
-          
           setPossibleDuplicateFamilies(duplicateCheck.matches);
           setDuplicateReason(duplicateCheck.reason);
           
@@ -475,63 +474,126 @@ export default function FamiliesPage() {
 
         if (error) throw error;
         setSuccessMessage("குடும்ப விபரம் திருத்தப்பட்டது.");
+        
+        // Close form and reset
+        setIsOpen(false);
+        resetForm();
+        fetchFamilies();
       } else {
-        // Insert new using RPC function for atomic family_code generation
-        console.log("Creating new family with headName:", headName);
-        const { data, error } = await supabase.rpc('insert_family_with_auto_code', {
-          p_masjid_id: tenantContext.masjidId,
-          p_head_name: headName,
-          p_address: address,
-          p_phone: phone,
-          p_subscription_amount: parseFloat(subscriptionAmount) || 0,
-          p_opening_balance: parseFloat(openingBalance) || 0,
-          p_is_widow_head: isWidowHead,
-          p_house_type: houseType || null,
-          p_has_toilet: hasToilet,
-          p_special_needs_details: specialNeedsDetails || null,
-          p_foreign_members_details: foreignMembersDetails || null,
-          p_health_details: healthDetails || null,
-          p_has_car: hasCar,
-          p_has_three_wheeler: hasThreeWheeler,
-          p_has_van: hasVan,
-          p_has_lorry: hasLorry,
-          p_has_tractor: hasTractor,
-          p_extra_notes: extraNotes || null,
-          p_user_id: authUserId
-        }).select();
+        let newFamilyId: string;
+        let assignedCode: string;
+        
+        if (isRestoreMode && manualFamilyCode.trim()) {
+          // Check if code already exists first
+          const { data: existingFamily, error: checkError } = await supabase
+            .from("families")
+            .select("id")
+            .eq("masjid_id", tenantContext.masjidId)
+            .eq("family_code", manualFamilyCode.trim())
+            .maybeSingle();
+          
+          if (checkError) throw checkError;
+          
+          if (existingFamily) {
+            throw new Error("This family code already exists. Please use a different code.");
+          }
+          
+          // Insert family directly with manual code
+          const { data: insertData, error: insertError } = await supabase
+            .from("families")
+            .insert([{
+              family_code: manualFamilyCode.trim(),
+              head_name: headName,
+              address,
+              phone,
+              subscription_amount: parseFloat(subscriptionAmount) || 0,
+              opening_balance: parseFloat(openingBalance) || 0,
+              is_widow_head: isWidowHead,
+              house_type: houseType || null,
+              has_toilet: hasToilet,
+              special_needs_details: specialNeedsDetails || null,
+              foreign_members_details: foreignMembersDetails || null,
+              health_details: healthDetails || null,
+              has_car: hasCar,
+              has_three_wheeler: hasThreeWheeler,
+              has_van: hasVan,
+              has_lorry: hasLorry,
+              has_tractor: hasTractor,
+              extra_notes: extraNotes || null,
+              user_id: authUserId,
+              masjid_id: tenantContext.masjidId
+            }])
+            .select();
+          
+          if (insertError) throw insertError;
+          
+          if (!insertData || insertData.length === 0) {
+            throw new Error("Failed to create family.");
+          }
+          
+          newFamilyId = insertData[0].id;
+          assignedCode = manualFamilyCode.trim();
+          
+          // Create family head member manually for restore mode
+          const { error: memberInsertError } = await supabase.from("members").insert([{
+            family_id: newFamilyId,
+            name: headName,
+            full_name: headName,
+            relationship: "Family Head",
+            civil_status: "",
+            user_id: authUserId,
+            masjid_id: tenantContext.masjidId
+          }]);
+          
+          if (memberInsertError) {
+            // Don't fail the whole thing if member creation fails
+          }
+        } else {
+          // Normal mode: use RPC function for automatic family_code generation
+          const { data, error } = await supabase.rpc('insert_family_with_auto_code', {
+            p_masjid_id: tenantContext.masjidId,
+            p_head_name: headName,
+            p_address: address,
+            p_phone: phone,
+            p_subscription_amount: parseFloat(subscriptionAmount) || 0,
+            p_opening_balance: parseFloat(openingBalance) || 0,
+            p_is_widow_head: isWidowHead,
+            p_house_type: houseType || null,
+            p_has_toilet: hasToilet,
+            p_special_needs_details: specialNeedsDetails || null,
+            p_foreign_members_details: foreignMembersDetails || null,
+            p_health_details: healthDetails || null,
+            p_has_car: hasCar,
+            p_has_three_wheeler: hasThreeWheeler,
+            p_has_van: hasVan,
+            p_has_lorry: hasLorry,
+            p_has_tractor: hasTractor,
+            p_extra_notes: extraNotes || null,
+            p_user_id: authUserId
+          }).select();
 
-        if (error) {
-          console.error("RPC error:", error);
-          throw error;
+          if (error) throw error;
+
+          if (!data || data.length === 0) {
+            throw new Error("Failed to create family.");
+          }
+          
+          newFamilyId = data[0].id;
+          assignedCode = data[0].family_code;
         }
 
-        console.log("RPC returned data:", data);
-
-        if (data && data.length > 0) {
-          const newFamilyId = data[0].id;
-          const assignedCode = data[0].family_code;
-
-          console.log("New family created:", { newFamilyId, assignedCode, headName });
-
-          setSuccessMessage(`குடும்பம் வெற்றிகரமாகச் சேமிக்கப்பட்டது. குறியீடு: ${assignedCode}`);
-          
-          console.log("Redirecting to family page:", `/families/${newFamilyId}`);
-          
-          // Close form and reset first
-          setIsOpen(false);
-          resetForm();
-          
-          // Refresh the families list
-          await fetchFamilies();
-          
-          // Then redirect
-          await router.push(`/families/${newFamilyId}`);
-        }
+        setSuccessMessage(`குடும்பம் வெற்றிகரமாகச் சேமிக்கப்பட்டது. குறியீடு: ${assignedCode}`);
+        
+        // Close form and reset first
+        setIsOpen(false);
+        resetForm();
+        
+        // Refresh the families list
+        await fetchFamilies();
+        
+        // Then redirect
+        await router.push(`/families/${newFamilyId}`);
       }
-
-      setIsOpen(false);
-      resetForm();
-      fetchFamilies();
     } catch (err: any) {
       // Handle duplicate family_code error
       if (err.message && err.message.includes('duplicate key') || err.message && err.message.includes('unique constraint')) {
@@ -572,6 +634,10 @@ export default function FamiliesPage() {
     setConfirmedNoFamilyDuplicate(false);
     setDuplicateReason("");
     setIsStrictBlock(false);
+    
+    // Reset restore mode state
+    setIsRestoreMode(false);
+    setManualFamilyCode("");
   };
 
   async function deleteFamily(id: string) {
@@ -591,7 +657,9 @@ export default function FamiliesPage() {
         .delete()
         .eq("id", id)
         .eq("masjid_id", tenantContext.masjidId);
+      
       if (error) throw error;
+      
       fetchFamilies();
     } catch (err: any) {
       alert(err.message);
@@ -1498,16 +1566,71 @@ export default function FamiliesPage() {
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.family_code}</label>
-                    <input
-                      type="text"
-                      value={familyCode}
-                      onChange={(event) => setFamilyCode(event.target.value)}
-                      className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                      placeholder="Family Code"
-                      required
-                    />
+                    {isRestoreMode ? (
+                      <input
+                        type="text"
+                        value={manualFamilyCode}
+                        onChange={(event) => {
+                          console.log("=== Manual family code changed ===");
+                          console.log("- New value:", event.target.value);
+                          setManualFamilyCode(event.target.value);
+                        }}
+                        className="w-full rounded-2xl bg-amber-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all font-bold"
+                        placeholder="Enter deleted family code (e.g., M4)"
+                        required
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={familyCode}
+                        onChange={(event) => setFamilyCode(event.target.value)}
+                        className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                        placeholder="Family Code"
+                        required
+                      />
+                    )}
                   </div>
                 </div>
+                
+                {/* Admin-only restore option */}
+                {(userIsSuperAdmin || isSuperAdminByRole) && !editingFamily && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="restore_mode"
+                        checked={isRestoreMode}
+                        onChange={(e) => {
+                          console.log("=== Restore mode checkbox changed ===");
+                          console.log("- New state:", e.target.checked);
+                          setIsRestoreMode(e.target.checked);
+                        }}
+                        className="w-5 h-5 accent-amber-500 rounded-lg"
+                      />
+                      <label htmlFor="restore_mode" className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-tight">
+                        Restore deleted family code
+                      </label>
+                    </div>
+                    {isRestoreMode && (
+                      <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl">
+                        <p className="text-[10px] font-bold text-amber-900">
+                          Use this only for restoring accidentally deleted families.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Debug info (hidden, but logs) */}
+                {(() => {
+                  console.log("=== Restore UI Render Debug ===");
+                  console.log("- userIsSuperAdmin:", userIsSuperAdmin);
+                  console.log("- isSuperAdminByRole:", isSuperAdminByRole);
+                  console.log("- editingFamily:", !!editingFamily);
+                  console.log("- isRestoreMode:", isRestoreMode);
+                  console.log("- manualFamilyCode:", manualFamilyCode);
+                  return null;
+                })()}
                 
                 <div className="flex items-center gap-2 pt-4">
                   <input
