@@ -124,6 +124,7 @@ export default function FamiliesPage() {
   const [qrRangeInput, setQrRangeInput] = useState("");
   const [qrSpecificInput, setQrSpecificInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   
   // Family duplicate prevention state
   const [allMasjidMembers, setAllMasjidMembers] = useState<any[]>([]);
@@ -1079,61 +1080,97 @@ export default function FamiliesPage() {
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-24 font-sans">
             {/* App Header */}
-      <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-emerald-600">
-            <ArrowLeft className="h-6 w-6" />
-          </Link>
-          <div>
-            <h1 className="text-lg font-black leading-none">{t.families}</h1>
-            <div className="flex items-center gap-3 mt-1">
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{isLive ? t.live_data : t.demo_mode}</p>
-              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{t.year}</label>
-              <select value={year} onChange={e=>setYear(parseInt(e.target.value))} className="text-xs font-bold bg-white border border-slate-200 rounded-lg px-2 py-1">
-                {Array.from({length:6}).map((_,i)=> {
-                  const y=new Date().getFullYear()-i;
-                  return <option key={y} value={y}>{y}</option>;
-                })}
-              </select>
-              <div className="flex items-center gap-1">
-                <button onClick={()=>setStatusFilter("all")} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${statusFilter==="all"?"bg-emerald-50 text-emerald-600":"text-slate-500 border border-slate-200"}`}>{t.filter_all}</button>
-                <button onClick={()=>setStatusFilter("paid")} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${statusFilter==="paid"?"bg-emerald-50 text-emerald-600":"text-slate-500 border border-slate-200"}`}>{t.paid}</button>
-                <button onClick={()=>setStatusFilter("unpaid")} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${statusFilter==="unpaid"?"bg-emerald-50 text-emerald-600":"text-slate-500 border border-slate-200"}`}>{t.unpaid}</button>
+      <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <Link href="/" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-emerald-600 shrink-0">
+              <ArrowLeft className="h-6 w-6" />
+            </Link>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-lg font-black leading-none truncate">{t.families}</h1>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider shrink-0">{isLive ? t.live_data : t.demo_mode}</p>
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider shrink-0">{t.year}</label>
+                <select value={year} onChange={e=>setYear(parseInt(e.target.value))} className="text-xs font-bold bg-white border border-slate-200 rounded-lg px-2 py-1 shrink-0">
+                  {Array.from({length:6}).map((_,i)=> {
+                    const y=new Date().getFullYear()-i;
+                    return <option key={y} value={y}>{y}</option>;
+                  })}
+                </select>
+                <div className="flex items-center gap-1">
+                  <button onClick={()=>setStatusFilter("all")} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${statusFilter==="all"?"bg-emerald-50 text-emerald-600":"text-slate-500 border border-slate-200"}`}>{t.filter_all}</button>
+                  <button onClick={()=>setStatusFilter("paid")} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${statusFilter==="paid"?"bg-emerald-50 text-emerald-600":"text-slate-500 border border-slate-200"}`}>{t.paid}</button>
+                  <button onClick={()=>setStatusFilter("unpaid")} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${statusFilter==="unpaid"?"bg-emerald-50 text-emerald-600":"text-slate-500 border border-slate-200"}`}>{t.unpaid}</button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={() => setIsPdfOptionsOpen(true)}
-            className="p-2.5 bg-slate-50 text-blue-600 rounded-xl hover:bg-blue-50 transition-all active:scale-95 flex items-center gap-1"
-            title={t.download_pdf}
-          >
-            <Download className="h-4 w-4" />
-            <span className="text-xs font-bold">PDF</span>
-          </button>
-          <button 
-            onClick={() => setIsScannerOpen(true)}
-            className="p-2.5 bg-slate-50 text-slate-600 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95 flex items-center gap-1"
-          >
-            <QrCode className="h-4 w-4" />
-            <span className="text-xs font-bold">QR</span>
-          </button>
-          <button 
-            onClick={() => setIsAllQrModalOpen(true)}
-            className="p-2.5 bg-slate-50 text-emerald-600 rounded-xl hover:bg-emerald-50 active:scale-95 transition-all"
-            title="Print All QR Codes"
-          >
-            <QrCode className="h-4 w-4" />
-            <span className="text-xs font-bold">All QR</span>
-          </button>
-          <button 
-            onClick={fetchFamilies}
-            disabled={isFetching}
-            className="p-2.5 bg-slate-50 text-emerald-600 rounded-xl hover:bg-emerald-100 active:scale-95 transition-all disabled:opacity-50"
-          >
-            <RefreshCw className={`h-5 w-5 ${isFetching ? 'animate-spin' : ''}`} />
-          </button>
+          
+          {/* More Menu Button */}
+          <div className="relative shrink-0">
+            <button 
+              onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+              className="p-2.5 bg-slate-50 text-slate-600 rounded-xl hover:bg-slate-100 active:scale-95 transition-all"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+              </svg>
+              <span className="text-xs font-bold ml-1 hidden sm:inline">More</span>
+            </button>
+            
+            {/* More Menu Dropdown */}
+            {isMoreMenuOpen && (
+              <>
+                <div 
+                  className="fixed inset-0 z-0" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 z-30 overflow-hidden">
+                  <button 
+                    onClick={() => {
+                      setIsPdfOptionsOpen(true);
+                      setIsMoreMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-slate-50 transition-colors"
+                  >
+                    <Download className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-bold text-slate-700">PDF</span>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setIsScannerOpen(true);
+                      setIsMoreMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-slate-50 transition-colors"
+                  >
+                    <QrCode className="h-4 w-4 text-emerald-600" />
+                    <span className="text-sm font-bold text-slate-700">QR</span>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setIsAllQrModalOpen(true);
+                      setIsMoreMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-slate-50 transition-colors"
+                  >
+                    <QrCode className="h-4 w-4 text-emerald-600" />
+                    <span className="text-sm font-bold text-slate-700">All QR</span>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      fetchFamilies();
+                      setIsMoreMenuOpen(false);
+                    }}
+                    disabled={isFetching}
+                    className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-4 w-4 text-emerald-600 ${isFetching ? 'animate-spin' : ''}`} />
+                    <span className="text-sm font-bold text-slate-700">Refresh</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
