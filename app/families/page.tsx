@@ -124,8 +124,113 @@ export default function FamiliesPage() {
   const [qrRangeInput, setQrRangeInput] = useState("");
   const [qrSpecificInput, setQrSpecificInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Family duplicate prevention state
+  const [allMasjidMembers, setAllMasjidMembers] = useState<any[]>([]);
+  const [possibleDuplicateFamilies, setPossibleDuplicateFamilies] = useState<Family[]>([]);
+  const [showFamilyDuplicateWarning, setShowFamilyDuplicateWarning] = useState(false);
+  const [confirmedNoFamilyDuplicate, setConfirmedNoFamilyDuplicate] = useState(false);
+  const [duplicateReason, setDuplicateReason] = useState<string>("");
+  const [isStrictBlock, setIsStrictBlock] = useState(false);
 
   const t = getTranslation(lang);
+
+  // Helper function for simple fuzzy name matching
+  const areFamilyNamesSimilar = (name1: string, name2: string): boolean => {
+    const n1 = name1.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const n2 = name2.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    if (n1.includes(n2) || n2.includes(n1)) return true;
+    
+    let diffs = 0;
+    const minLen = Math.min(n1.length, n2.length);
+    const maxLen = Math.max(n1.length, n2.length);
+    
+    if (maxLen - minLen > 3) return false;
+    
+    for (let i = 0; i < minLen; i++) {
+      if (n1[i] !== n2[i]) diffs++;
+      if (diffs > 2) return false;
+    }
+    
+    diffs += (maxLen - minLen);
+    return diffs <= 2;
+  };
+
+  // Check for family duplicates
+  const checkForFamilyDuplicates = (): { isDuplicate: boolean; isStrict: boolean; reason: string; matches: Family[] } => {
+    console.log("=== checkForFamilyDuplicates START ===");
+    
+    if (!tenantContext?.masjidId) {
+      console.log("- No masjidId, returning no duplicates");
+      return { isDuplicate: false, isStrict: false, reason: "", matches: [] };
+    }
+
+    const trimmedHeadName = headName?.trim();
+    const trimmedAddress = address?.trim();
+    const trimmedPhone = phone?.trim();
+
+    console.log("- Input values:");
+    console.log("  - headName:", trimmedHeadName);
+    console.log("  - address:", trimmedAddress);
+    console.log("  - phone:", trimmedPhone);
+
+    const warningDuplicates: Family[] = [];
+    let warningReason = "";
+
+    // Warning checks only (Add Family form doesn't have NIC/DOB fields)
+    for (const existingFamily of families) {
+      if (editingFamily && existingFamily.id === editingFamily.id) continue;
+
+      let isWarningMatch = false;
+      let matchReason = "";
+
+      // Same phone
+      if (trimmedPhone && existingFamily.phone?.trim() === trimmedPhone) {
+        isWarningMatch = true;
+        matchReason = "Same phone number";
+      }
+      // Same address
+      else if (trimmedAddress && existingFamily.address?.trim() === trimmedAddress) {
+        isWarningMatch = true;
+        matchReason = "Same address";
+      }
+      // Very similar head_name
+      else if (trimmedHeadName && existingFamily.head_name && areFamilyNamesSimilar(trimmedHeadName, existingFamily.head_name)) {
+        isWarningMatch = true;
+        matchReason = "Similar head name";
+      }
+      // Same phone + similar/same name
+      else if (trimmedPhone && existingFamily.phone?.trim() === trimmedPhone && 
+               trimmedHeadName && existingFamily.head_name && areFamilyNamesSimilar(trimmedHeadName, existingFamily.head_name)) {
+        isWarningMatch = true;
+        matchReason = "Same phone and similar name";
+      }
+
+      if (isWarningMatch) {
+        warningDuplicates.push(existingFamily);
+        warningReason = matchReason;
+      }
+    }
+
+    const hasWarning = warningDuplicates.length > 0;
+
+    console.log("- Results:");
+    console.log("  - warningDuplicates:", warningDuplicates.length);
+
+    if (hasWarning) {
+      console.log("- Warning duplicate found, reason:", warningReason);
+      return {
+        isDuplicate: true,
+        isStrict: false,
+        reason: warningReason,
+        matches: warningDuplicates
+      };
+    }
+
+    console.log("- No duplicates found");
+    return { isDuplicate: false, isStrict: false, reason: "", matches: [] };
+  };
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -235,6 +340,21 @@ export default function FamiliesPage() {
         setIsLive(true);
         setErrorMessage("");
         
+        // Fetch all masjid members for duplicate detection
+        try {
+          const { data: membersData, error: membersError } = await supabase
+            .from("members")
+            .select("*")
+            .eq("masjid_id", tenantContext.masjidId);
+            
+          if (!membersError && membersData) {
+            setAllMasjidMembers(membersData);
+          }
+        } catch (membersErr) {
+          console.error("Members fetch error:", membersErr);
+          // Don't block families loading if members fetch fails
+        }
+        
         // Fetch payment collections separately (don't block families loading)
         try {
           const { data: paymentData, error: paymentError } = await supabase
@@ -260,6 +380,8 @@ export default function FamiliesPage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    console.log("=== handleSubmit START ===");
+    
     setLoading(true);
     setSuccessMessage("");
     setErrorMessage("");
@@ -303,6 +425,24 @@ export default function FamiliesPage() {
         setErrorMessage("Family code is required.");
         setLoading(false);
         return;
+      }
+
+      // Check for family duplicates
+      if (!confirmedNoFamilyDuplicate && !editingFamily) {
+        console.log("- Checking for family duplicates...");
+        const duplicateCheck = checkForFamilyDuplicates();
+        
+        if (duplicateCheck.isDuplicate) {
+          console.log("- Warning duplicate found");
+          
+          setPossibleDuplicateFamilies(duplicateCheck.matches);
+          setDuplicateReason(duplicateCheck.reason);
+          
+          // Show warning modal
+          setShowFamilyDuplicateWarning(true);
+          setLoading(false);
+          return;
+        }
       }
 
       if (editingFamily) {
@@ -425,6 +565,13 @@ export default function FamiliesPage() {
     setExtraNotes("");
     setCurrentStep(1);
     setEditingFamily(null);
+    
+    // Reset duplicate prevention state
+    setPossibleDuplicateFamilies([]);
+    setShowFamilyDuplicateWarning(false);
+    setConfirmedNoFamilyDuplicate(false);
+    setDuplicateReason("");
+    setIsStrictBlock(false);
   };
 
   async function deleteFamily(id: string) {
@@ -1556,6 +1703,56 @@ export default function FamiliesPage() {
               </div>
             )}
           </form>
+          </div>
+        </div>
+      )}
+
+      {/* Family Duplicate Warning Modal */}
+      {showFamilyDuplicateWarning && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <h2 className="text-2xl font-bold mb-4 text-center text-slate-900">Possible duplicate family found</h2>
+            <p className="text-sm text-slate-600 mb-6 text-center">
+              {duplicateReason ? `${duplicateReason}.` : "We found a family that might be a duplicate."} Please review:
+            </p>
+            
+            <div className="space-y-3 mb-6">
+              {possibleDuplicateFamilies.map((duplicate) => (
+                <div key={duplicate.id} className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+                  <h3 className="font-bold text-slate-900">{duplicate.head_name}</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {duplicate.family_code}
+                    {duplicate.address && ` • ${duplicate.address}`}
+                    {duplicate.phone && ` • ${duplicate.phone}`}
+                  </p>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex gap-4">
+              <button
+                onClick={() => {
+                  console.log("- Family duplicate warning: Cancel clicked");
+                  setShowFamilyDuplicateWarning(false);
+                  setConfirmedNoFamilyDuplicate(false);
+                }}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  console.log("- Family duplicate warning: Continue Anyway clicked");
+                  setConfirmedNoFamilyDuplicate(true);
+                  setShowFamilyDuplicateWarning(false);
+                  console.log("- Calling handleSubmit again");
+                  handleSubmit({ preventDefault: () => {} } as React.FormEvent);
+                }}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold bg-emerald-500 text-white shadow-lg shadow-emerald-500/30"
+              >
+                Continue Anyway
+              </button>
+            </div>
           </div>
         </div>
       )}
