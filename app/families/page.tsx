@@ -330,40 +330,33 @@ export default function FamiliesPage() {
         if (error) throw error;
         setSuccessMessage("குடும்ப விபரம் திருத்தப்பட்டது.");
       } else {
-        // Insert new
-        const { data, error } = await supabase
-          .from("families")
-          .insert([
-            {
-              family_code: familyCode,
-              head_name: headName,
-              address,
-              phone,
-              subscription_amount: parseFloat(subscriptionAmount) || 0,
-              opening_balance: parseFloat(openingBalance) || 0,
-              is_widow_head: isWidowHead,
-              // New fields
-              house_type: houseType || null,
-              has_toilet: hasToilet,
-              special_needs_details: specialNeedsDetails || null,
-              foreign_members_details: foreignMembersDetails || null,
-              health_details: healthDetails || null,
-              has_car: hasCar,
-              has_three_wheeler: hasThreeWheeler,
-              has_van: hasVan,
-              has_lorry: hasLorry,
-              has_tractor: hasTractor,
-              extra_notes: extraNotes || null,
-              user_id: authUserId, // Use authenticated user ID
-              masjid_id: tenantContext.masjidId // Include masjid ID
-            }
-          ])
-          .select()
-          .single();
+        // Insert new using RPC function for atomic family_code generation
+        const { data, error } = await supabase.rpc('insert_family_with_auto_code', {
+          p_masjid_id: tenantContext.masjidId,
+          p_head_name: headName,
+          p_address: address,
+          p_phone: phone,
+          p_subscription_amount: parseFloat(subscriptionAmount) || 0,
+          p_opening_balance: parseFloat(openingBalance) || 0,
+          p_is_widow_head: isWidowHead,
+          p_house_type: houseType || null,
+          p_has_toilet: hasToilet,
+          p_special_needs_details: specialNeedsDetails || null,
+          p_foreign_members_details: foreignMembersDetails || null,
+          p_health_details: healthDetails || null,
+          p_has_car: hasCar,
+          p_has_three_wheeler: hasThreeWheeler,
+          p_has_van: hasVan,
+          p_has_lorry: hasLorry,
+          p_has_tractor: hasTractor,
+          p_extra_notes: extraNotes || null,
+          p_user_id: authUserId
+        }).select();
 
-        if (!error && data) {
-          const newFamilyId = data.id;
-          
+        if (!error && data && data.length > 0) {
+          const newFamilyId = data[0].id;
+          const assignedCode = data[0].family_code;
+
           // Check if head member already exists (safe pattern)
           const { data: existingHead } = await supabase
             .from("members")
@@ -383,26 +376,30 @@ export default function FamiliesPage() {
               user_id: authUserId,
               masjid_id: tenantContext.masjidId
             }]);
-            
+
             if (memberInsertError) {
               console.error("Head member creation failed:", memberInsertError);
               throw new Error(`Failed to create family head member: ${memberInsertError.message}`);
             }
           }
+
+          setSuccessMessage(`குடும்பம் வெற்றிகரமாகச் சேமிக்கப்பட்டது. குறியீடு: ${assignedCode}`);
+          router.push(`/families/${newFamilyId}`);  // Redirect to family details
         }
 
         if (error) throw error;
-        setSuccessMessage("குடும்பம் வெற்றிகரமாகச் சேமிக்கப்பட்டது.");
-        if (data) {
-          router.push(`/families/${data.id}`);  // Redirect to family details
-        }
       }
 
       setIsOpen(false);
       resetForm();
       fetchFamilies();
     } catch (err: any) {
-      setErrorMessage(err.message);
+      // Handle duplicate family_code error
+      if (err.message && err.message.includes('duplicate key') || err.message && err.message.includes('unique constraint')) {
+        setErrorMessage("இந்த குடும்ப குறியீடு ஏற்கனவே உள்ளது. வேறொரு குறியீட்டைப் பயன்படுத்தவும். (This family code already exists. Please use a different code.)");
+      } else {
+        setErrorMessage(err.message);
+      }
     } finally {
       setLoading(false);
     }
