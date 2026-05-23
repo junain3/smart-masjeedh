@@ -1,5 +1,6 @@
 -- Create RPC function for atomic family insertion with auto-generated family_code
 -- This prevents race conditions when multiple users add families simultaneously
+-- Also creates the family head member automatically
 
 CREATE OR REPLACE FUNCTION insert_family_with_auto_code(
   p_masjid_id UUID,
@@ -54,6 +55,7 @@ DECLARE
   v_next_num INTEGER;
   v_max_code TEXT;
   v_match TEXT;
+  v_family_id UUID;
 BEGIN
   -- Lock families table for this masjid_id to prevent concurrent inserts
   -- This ensures atomicity of the code generation and insert
@@ -135,13 +137,31 @@ BEGIN
     p_user_id,
     p_masjid_id
   )
-  RETURNING 
-    id, family_code, head_name, address, phone, 
-    subscription_amount, opening_balance, is_widow_head,
-    house_type, has_toilet, special_needs_details,
-    foreign_members_details, health_details, has_car,
-    has_three_wheeler, has_van, has_lorry, has_tractor,
-    extra_notes, user_id, masjid_id, created_at;
+  RETURNING id INTO v_family_id;
+  
+  -- Delete any existing head members for this family to ensure clean state
+  DELETE FROM members
+  WHERE family_id = v_family_id
+  AND (relationship = 'Head' OR relationship = 'Family Head');
+  
+  -- Insert the family head member with the correct name
+  INSERT INTO members (
+    family_id,
+    name,
+    full_name,
+    relationship,
+    civil_status,
+    user_id,
+    masjid_id
+  ) VALUES (
+    v_family_id,
+    p_head_name,
+    p_head_name,
+    'Family Head',
+    '',
+    p_user_id,
+    p_masjid_id
+  );
     
   RETURN QUERY SELECT 
     id, family_code, head_name, address, phone, 
@@ -151,11 +171,7 @@ BEGIN
     has_three_wheeler, has_van, has_lorry, has_tractor,
     extra_notes, user_id, masjid_id, created_at
   FROM families
-  WHERE id = (
-    SELECT id FROM families
-    WHERE family_code = v_next_code AND masjid_id = p_masjid_id
-    LIMIT 1
-  );
+  WHERE id = v_family_id;
 END;
 $$;
 

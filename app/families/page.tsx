@@ -337,6 +337,7 @@ export default function FamiliesPage() {
         setSuccessMessage("குடும்ப விபரம் திருத்தப்பட்டது.");
       } else {
         // Insert new using RPC function for atomic family_code generation
+        console.log("Creating new family with headName:", headName);
         const { data, error } = await supabase.rpc('insert_family_with_auto_code', {
           p_masjid_id: tenantContext.masjidId,
           p_head_name: headName,
@@ -359,41 +360,33 @@ export default function FamiliesPage() {
           p_user_id: authUserId
         }).select();
 
-        if (!error && data && data.length > 0) {
+        if (error) {
+          console.error("RPC error:", error);
+          throw error;
+        }
+
+        console.log("RPC returned data:", data);
+
+        if (data && data.length > 0) {
           const newFamilyId = data[0].id;
           const assignedCode = data[0].family_code;
 
-          // Check if head member already exists (safe pattern)
-          const { data: existingHead } = await supabase
-            .from("members")
-            .select("id")
-            .eq("family_id", newFamilyId)
-            .eq("relationship", "Head")
-            .maybeSingle();
-
-          if (!existingHead) {
-            // Create head member only if doesn't exist
-            const { error: memberInsertError } = await supabase.from("members").insert([{
-              family_id: newFamilyId,
-              name: headName,              // Keep for future compatibility
-              full_name: headName,        // Add for database NOT NULL constraint
-              relationship: "Head",
-              civil_status: "",
-              user_id: authUserId,
-              masjid_id: tenantContext.masjidId
-            }]);
-
-            if (memberInsertError) {
-              console.error("Head member creation failed:", memberInsertError);
-              throw new Error(`Failed to create family head member: ${memberInsertError.message}`);
-            }
-          }
+          console.log("New family created:", { newFamilyId, assignedCode, headName });
 
           setSuccessMessage(`குடும்பம் வெற்றிகரமாகச் சேமிக்கப்பட்டது. குறியீடு: ${assignedCode}`);
-          router.push(`/families/${newFamilyId}`);  // Redirect to family details
+          
+          console.log("Redirecting to family page:", `/families/${newFamilyId}`);
+          
+          // Close form and reset first
+          setIsOpen(false);
+          resetForm();
+          
+          // Refresh the families list
+          await fetchFamilies();
+          
+          // Then redirect
+          await router.push(`/families/${newFamilyId}`);
         }
-
-        if (error) throw error;
       }
 
       setIsOpen(false);

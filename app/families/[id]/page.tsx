@@ -127,6 +127,7 @@ export default function FamilyDetailsPage() {
   const [phone, setPhone] = useState("");
   const [civilStatus, setCivilStatus] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [allMasjidMembers, setAllMasjidMembers] = useState<Member[]>([]);
   
   // New fields for enhanced data collection
   const [education, setEducation] = useState("");
@@ -145,8 +146,110 @@ export default function FamilyDetailsPage() {
 
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [possibleDuplicates, setPossibleDuplicates] = useState<Member[]>([]);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [confirmedNoDuplicate, setConfirmedNoDuplicate] = useState(false);
 
   const t = getTranslation(lang);
+
+  // Helper function for simple fuzzy name matching
+  const areNamesSimilar = (name1: string, name2: string): boolean => {
+    const n1 = name1.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const n2 = name2.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    // Check if one is a substring of the other
+    if (n1.includes(n2) || n2.includes(n1)) return true;
+    
+    // Simple edit distance check (up to 2 differences)
+    let diffs = 0;
+    const minLen = Math.min(n1.length, n2.length);
+    const maxLen = Math.max(n1.length, n2.length);
+    
+    if (maxLen - minLen > 3) return false;
+    
+    for (let i = 0; i < minLen; i++) {
+      if (n1[i] !== n2[i]) diffs++;
+      if (diffs > 2) return false;
+    }
+    
+    diffs += (maxLen - minLen);
+    return diffs <= 2;
+  };
+
+  // Find possible duplicates
+  const checkForDuplicates = () => {
+    console.log("=== checkForDuplicates START ===");
+    console.log("- tenantContext?.masjidId:", tenantContext?.masjidId);
+    console.log("- allMasjidMembers count:", allMasjidMembers?.length || 0);
+    
+    if (!tenantContext?.masjidId || !allMasjidMembers) {
+      console.log("- Exiting: missing masjidId or allMasjidMembers");
+      return false;
+    }
+
+    const duplicates: Member[] = [];
+    const trimmedNic = nic?.trim();
+    const trimmedPhone = phone?.trim();
+    const trimmedDob = dob?.trim();
+    const trimmedFullName = fullName?.trim();
+
+    console.log("- Input values:");
+    console.log("  - nic:", trimmedNic);
+    console.log("  - phone:", trimmedPhone);
+    console.log("  - dob:", trimmedDob);
+    console.log("  - fullName:", trimmedFullName);
+
+    for (const member of allMasjidMembers) {
+      // Skip self if editing
+      if (editingMember && member.id === editingMember.id) {
+        console.log("- Skipping self:", member.id);
+        continue;
+      }
+
+      let isDuplicate = false;
+      let reason = "";
+
+      // Strict check: same NIC - this will be blocked by database constraint anyway
+      if (trimmedNic && member.nic?.trim() === trimmedNic) {
+        isDuplicate = true;
+        reason = "Same NIC";
+      }
+      // Smart checks (only if NIC is empty)
+      else if (!trimmedNic) {
+        // Same phone
+        if (trimmedPhone && member.phone?.trim() === trimmedPhone) {
+          isDuplicate = true;
+          reason = "Same phone number";
+        }
+        // Same date of birth
+        else if (trimmedDob && member.dob?.trim() === trimmedDob) {
+          isDuplicate = true;
+          reason = "Same date of birth";
+        }
+        // Similar names
+        else if (trimmedFullName && member.name && areNamesSimilar(trimmedFullName, member.name)) {
+          isDuplicate = true;
+          reason = "Similar names";
+        }
+      }
+
+      if (isDuplicate) {
+        console.log("- Found duplicate:", {
+          memberId: member.id,
+          name: member.name,
+          reason: reason
+        });
+        duplicates.push(member);
+      }
+    }
+
+    console.log("- Total duplicates found:", duplicates.length);
+    setPossibleDuplicates(duplicates);
+    
+    const hasDuplicates = duplicates.length > 0;
+    console.log("- checkForDuplicates END - hasDuplicates:", hasDuplicates);
+    return hasDuplicates;
+  };
 
   const normalizeRelationship = (value?: string) => {
   const map: Record<string, string> = {
@@ -320,6 +423,19 @@ export default function FamilyDetailsPage() {
       });
       setMembers(sortedMembers);
 
+      // Load ALL members in the entire masjid for duplicate detection
+      const { data: allMembersData, error: allMembersError } = await supabase
+        .from("members")
+        .select("*")
+        .eq("masjid_id", tenantContext.masjidId);
+
+      if (allMembersError) {
+        console.error("Error loading all masjid members:", allMembersError);
+        setAllMasjidMembers([]);
+      } else {
+        setAllMasjidMembers(allMembersData || []);
+      }
+
       const { data: paymentsData, error: paymentsError } = await supabase
         .from("subscription_collections")
         .select("id, amount, status, collected_by_user_id, date, accepted_at, created_at")
@@ -401,6 +517,11 @@ export default function FamilyDetailsPage() {
     setSpecialNeedsDetails("");
     setHasHealthIssue(false);
     setHealthDetails("");
+    
+    // Reset duplicate detection state
+    setPossibleDuplicates([]);
+    setShowDuplicateWarning(false);
+    setConfirmedNoDuplicate(false);
   };
 
   const openEditMember = (member: Member) => {
@@ -541,8 +662,28 @@ export default function FamilyDetailsPage() {
 
   const addMember = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("=== addMember START ===");
 
-    if (!supabase || !familyId || !user || !tenantContext?.masjidId) return;
+    if (!supabase || !familyId || !user || !tenantContext?.masjidId) {
+      console.log("- Exiting: missing dependencies");
+      return;
+    }
+
+    console.log("- confirmedNoDuplicate:", confirmedNoDuplicate);
+
+    // Check for duplicates first
+    if (!confirmedNoDuplicate) {
+      console.log("- Checking for duplicates...");
+      const hasDuplicates = checkForDuplicates();
+      console.log("- hasDuplicates result:", hasDuplicates);
+      
+      if (hasDuplicates) {
+        console.log("- Setting showDuplicateWarning to true");
+        setShowDuplicateWarning(true);
+        console.log("- Returning early");
+        return;
+      }
+    }
 
     setSubmitting(true);
     setSuccessMessage("");
@@ -622,11 +763,19 @@ export default function FamilyDetailsPage() {
 
       setIsModalOpen(false);
       resetForm();
+      setPossibleDuplicates([]);
+      setShowDuplicateWarning(false);
+      setConfirmedNoDuplicate(false);
       await fetchData(user);
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (error: any) {
       console.error("ADD MEMBER Error:", error);
-     alert(`Error: ${error.message || t.failed_to_add_member}`);
+      // Check for unique constraint violation
+      if (error.code === '23505' || error.message?.includes('unique constraint')) {
+        alert(`This NIC number is already registered for another member in this masjid.`);
+      } else {
+        alert(`Error: ${error.message || t.failed_to_add_member}`);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -1477,6 +1626,56 @@ export default function FamilyDetailsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showDuplicateWarning && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-6 sm:p-8 shadow-2xl border border-slate-100">
+            <h2 className="text-2xl font-bold mb-4 text-center text-slate-900">Possible duplicate member found</h2>
+            <p className="text-sm text-slate-600 mb-6 text-center">
+              We found similar members already in the system. Please review:
+            </p>
+            
+            <div className="space-y-3 mb-6">
+              {possibleDuplicates.map((duplicate) => (
+                <div key={duplicate.id} className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+                  <h3 className="font-bold text-slate-900">{duplicate.name}</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {duplicate.relationship}
+                    {duplicate.nic && ` • NIC: ${duplicate.nic}`}
+                    {duplicate.phone && ` • Phone: ${duplicate.phone}`}
+                    {duplicate.dob && ` • DOB: ${duplicate.dob}`}
+                  </p>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex gap-4">
+              <button
+                onClick={() => {
+                  console.log("- Duplicate warning: Cancel clicked");
+                  setShowDuplicateWarning(false);
+                  setConfirmedNoDuplicate(false);
+                }}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  console.log("- Duplicate warning: Continue Anyway clicked");
+                  setConfirmedNoDuplicate(true);
+                  setShowDuplicateWarning(false);
+                  console.log("- Calling addMember again");
+                  addMember({ preventDefault: () => {} } as React.FormEvent);
+                }}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold bg-emerald-500 text-white shadow-lg shadow-emerald-500/30"
+              >
+                Continue Anyway
+              </button>
+            </div>
           </div>
         </div>
       )}
