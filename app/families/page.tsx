@@ -787,25 +787,26 @@ export default function FamiliesPage() {
         format: 'a4'
       });
       
-      // A4 portrait: full page — 3 × 3 = 9 QR stickers per sheet (cost-efficient).
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
+      
+      // 3 columns × 4 rows = 12 cards per A4 portrait page
       const horizontalMargin = 5;
       const verticalMargin = 5;
       const cardSpacing = 2;
       const rowSpacing = 2;
       const cardsPerRow = 3;
-      const rowsPerPage = 3;
+      const rowsPerPage = 4;
       const usableWidth = pageWidth - horizontalMargin * 2;
       const usableHeight = pageHeight - verticalMargin * 2;
       const cardWidth = (usableWidth - cardSpacing * (cardsPerRow - 1)) / cardsPerRow;
       const cardHeight = (usableHeight - rowSpacing * (rowsPerPage - 1)) / rowsPerPage;
       const cardsPerPage = cardsPerRow * rowsPerPage;
 
-      const drawTightCutBorder = (x: number, y: number, w: number, h: number) => {
-        doc.setDrawColor(15, 23, 42);
-        doc.setLineWidth(0.45);
+      const drawDashedCutBorder = (x: number, y: number, w: number, h: number) => {
+        doc.setDrawColor(80, 80, 80);
+        doc.setLineWidth(0.3);
         const dash = 2;
         const gap = 2;
         for (let i = 0; i < w; i += dash + gap) {
@@ -833,16 +834,16 @@ export default function FamiliesPage() {
 
         try {
           const qrValue = `smart-masjeedh:family:${family.id}`;
-          const borderPad = 1.2;
-          const gapQrToText = 1.8;
-          const codeFontSize = 8.5;
-          const nameFontSize = 6.8;
-          const nameMaxWidth = cardWidth - borderPad * 2 - 1;
+          const borderPad = 1.5;
+          const gapQrToText = 2;
+          const codeFontSize = 10;
+          const nameFontSize = 7.5;
+          const nameMaxWidth = cardWidth - borderPad * 2 - 2;
 
           doc.setFont("helvetica", "bold");
           doc.setFontSize(nameFontSize);
           const nameLines = doc.splitTextToSize(family.head_name, nameMaxWidth).slice(0, 2);
-          const labelHeight = gapQrToText + codeFontSize * 0.38 + nameLines.length * (nameFontSize * 0.42) + 1;
+          const labelHeight = gapQrToText + codeFontSize * 0.4 + nameLines.length * (nameFontSize * 0.45) + 1.5;
 
           const qrSize = Math.min(
             cardWidth - borderPad * 2 - 0.5,
@@ -854,7 +855,7 @@ export default function FamiliesPage() {
           const borderY = currentY + (cardHeight - contentHeight) / 2;
           const qrX = borderX + borderPad;
           const qrY = borderY + borderPad;
-          const codeY = qrY + qrSize + gapQrToText + codeFontSize * 0.32;
+          const codeY = qrY + qrSize + gapQrToText + codeFontSize * 0.35;
           const centerX = borderX + contentWidth / 2;
 
           const qrPixelSize = Math.min(512, Math.max(280, Math.round(qrSize * 11)));
@@ -862,20 +863,27 @@ export default function FamiliesPage() {
 
           doc.setFillColor(255, 255, 255);
           doc.rect(borderX, borderY, contentWidth, contentHeight, "F");
-          drawTightCutBorder(borderX, borderY, contentWidth, contentHeight);
+          drawDashedCutBorder(borderX, borderY, contentWidth, contentHeight);
           doc.addImage(qrDataURL, "PNG", qrX, qrY, qrSize, qrSize);
 
-          doc.setTextColor(15, 23, 42);
+          doc.setTextColor(0, 0, 0);
+          
+          // Masjid name (smaller, but readable)
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(5.8);
+          doc.setFontSize(6);
           const masjidLines = doc.splitTextToSize(masjidName, nameMaxWidth).slice(0, 1);
-          doc.text(masjidLines, centerX, codeY - 3.2, { align: "center" });
+          doc.text(masjidLines, centerX, codeY - 3.5, { align: "center" });
+          
+          // Family code (M number - bold and clear)
           doc.setFontSize(codeFontSize);
+          doc.setFont("helvetica", "bold");
           doc.text(family.family_code, centerX, codeY, { align: "center" });
-
+          
+          // Family head name (clear, bold)
           doc.setFontSize(nameFontSize);
+          doc.setFont("helvetica", "bold");
           nameLines.forEach((line: string, lineIndex: number) => {
-            doc.text(line, centerX, codeY + 3.2 + lineIndex * (nameFontSize * 0.42), { align: "center" });
+            doc.text(line, centerX, codeY + 3.5 + lineIndex * (nameFontSize * 0.45), { align: "center" });
           });
           
         } catch (error) {
