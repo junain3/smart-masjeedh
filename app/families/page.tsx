@@ -108,7 +108,7 @@ export default function FamiliesPage() {
   const [paymentCollections, setPaymentCollections] = useState<any[]>([]);
   const [editingFamily, setEditingFamily] = useState<Family | null>(null);
   const [isPdfOptionsOpen, setIsPdfOptionsOpen] = useState(false);
-  const [pdfCols, setPdfCols] = useState<{code:boolean; head:boolean; address:boolean; phone:boolean; sub:boolean}>({code:true, head:true, address:true, phone:true, sub:true});
+  const [pdfCols, setPdfCols] = useState<{serialTick:boolean; code:boolean; head:boolean; address:boolean; phone:boolean; sub:boolean; signature:boolean}>({serialTick:false, code:true, head:true, address:true, phone:true, sub:true, signature:false});
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid">("all");
   const [allowed, setAllowed] = useState(true);
@@ -919,20 +919,24 @@ export default function FamiliesPage() {
       
       // Prepare headers
       const headers: string[] = [];
-      if (pdfCols.code) headers.push("Code");
+      if (pdfCols.serialTick) headers.push("தொடர் இலக்கம்");
+      if (pdfCols.code) headers.push("Family Code");
       if (pdfCols.head) headers.push("Head Name");
       if (pdfCols.address) headers.push("Address");
       if (pdfCols.phone) headers.push("Phone");
       if (pdfCols.sub) headers.push("Sub. Amt");
+      if (pdfCols.signature) headers.push("Signature");
 
       // Prepare table data
-      const tableData = filteredFamilies.map(f => {
+      const tableData = filteredFamilies.map((f, index) => {
         const row: (string|number)[] = [];
+        if (pdfCols.serialTick) row.push(index + 1);
         if (pdfCols.code) row.push(f.family_code);
         if (pdfCols.head) row.push(f.head_name);
         if (pdfCols.address) row.push(f.address);
         if (pdfCols.phone) row.push(f.phone);
         if (pdfCols.sub) row.push(f.subscription_amount || 0);
+        if (pdfCols.signature) row.push("");
         return row;
       });
       const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
@@ -984,6 +988,17 @@ export default function FamiliesPage() {
               word-wrap: break-word;
               max-width: 150px;
             }
+            .serial-cell {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            }
+            .tick-box {
+              width: 12px;
+              height: 12px;
+              border: 1px solid #000;
+              flex-shrink: 0;
+            }
             .footer {
               margin-top: 30px;
               text-align: center;
@@ -1020,12 +1035,17 @@ export default function FamiliesPage() {
       `;
       
       // Add data rows
-      tableData.forEach(row => {
+      tableData.forEach((row, rowIndex) => {
         htmlContent += '<tr>';
-        row.forEach(cell => {
-          const cellValue = String(cell || '');
-          const truncatedValue = cellValue.length > 50 ? cellValue.substring(0, 50) + '...' : cellValue;
-          htmlContent += `<td>${escapePdfHtml(truncatedValue)}</td>`;
+        row.forEach((cell, cellIndex) => {
+          if (pdfCols.serialTick && cellIndex === 0) {
+            const cellValue = String(cell || '');
+            htmlContent += `<td><div class="serial-cell"><div class="tick-box"></div>${escapePdfHtml(cellValue)}</div></td>`;
+          } else {
+            const cellValue = String(cell || '');
+            const truncatedValue = cellValue.length > 50 ? cellValue.substring(0, 50) + '...' : cellValue;
+            htmlContent += `<td>${escapePdfHtml(truncatedValue)}</td>`;
+          }
         });
         htmlContent += '</tr>';
       });
@@ -1372,12 +1392,13 @@ export default function FamiliesPage() {
                 <X className="w-5 h-5 text-slate-400" />
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.code} onChange={e=>setPdfCols(s=>({...s,code:e.target.checked}))}/> Code</label>
-              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.head} onChange={e=>setPdfCols(s=>({...s,head:e.target.checked}))}/> Head</label>
+            <div className="grid grid-cols-1 gap-3 mb-4">
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.serialTick} onChange={e=>setPdfCols(s=>({...s,serialTick:e.target.checked}))}/> Serial Number Tick Box</label>
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.code} onChange={e=>setPdfCols(s=>({...s,code:e.target.checked}))}/> Family Code</label>
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.head} onChange={e=>setPdfCols(s=>({...s,head:e.target.checked}))}/> Head Name</label>
               <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.address} onChange={e=>setPdfCols(s=>({...s,address:e.target.checked}))}/> Address</label>
               <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.phone} onChange={e=>setPdfCols(s=>({...s,phone:e.target.checked}))}/> Phone</label>
-              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.sub} onChange={e=>setPdfCols(s=>({...s,sub:e.target.checked}))}/> Sub. Amt</label>
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={pdfCols.signature} onChange={e=>setPdfCols(s=>({...s,signature:e.target.checked}))}/> Signature Column</label>
             </div>
             <button onClick={() => { setIsPdfOptionsOpen(false); generatePDF(); }} className="w-full py-3 rounded-2xl bg-blue-600 text-white font-black">
               🖨️ Print Report

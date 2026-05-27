@@ -42,6 +42,7 @@ export default function EventDetailPage() {
   const [confirmUnmark, setConfirmUnmark] = useState<{familyId: string, familyCode: string} | null>(null);
   const [isPdfFilterOpen, setIsPdfFilterOpen] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [pdfCols, setPdfCols] = useState<{serialTick: boolean; family_code: boolean; head_name: boolean; members: boolean; address: boolean; phone: boolean; signature: boolean}>({serialTick: false, family_code: true, head_name: true, members: false, address: false, phone: false, signature: false});
   const { tenantContext } = useMockAuth();
 
   const sortByFamilyCode = (a: Att, b: Att) => {
@@ -56,15 +57,27 @@ export default function EventDetailPage() {
     return numA - numB;
   };
 
+  const getCacheKey = (id: string) => `event_attendance_cache_${id}`;
+
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
+    
+    // 1. Load stale data from localStorage first for instant UI load
+    const cachedRows = localStorage.getItem(getCacheKey(eventId));
+    if (cachedRows) {
+      const parsed = JSON.parse(cachedRows);
+      const sorted = parsed.sort(sortByFamilyCode);
+      setRows(sorted);
+      setLoading(false);
+    }
+    
+    // 2. Revalidate in background
     fetchData();
   }, [eventId]);
 
   async function fetchData() {
     if (!supabase) return;
-    setLoading(true);
     try {
       // Use tenantContext from auth provider instead of getTenantContext
       const ctx = tenantContext || await getTenantContext();
@@ -135,6 +148,9 @@ export default function EventDetailPage() {
         .order("created_at", { ascending: true });
       if (attErr2) throw attErr2;
       const sortedRows = ((a2 as any) || []).sort(sortByFamilyCode);
+      
+      // 3. Update localStorage and state silently
+      localStorage.setItem(getCacheKey(eventId), JSON.stringify(sortedRows));
       setRows(sortedRows);
     } catch (err: any) {
       toast({ kind: "error", title: "Error", message: err.message || "Failed" });
@@ -176,7 +192,9 @@ export default function EventDetailPage() {
     const nextStatus = "Received";
     
     // 1. Optimistic Update: Immediate visual feedback
-    setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: nextStatus } : r));
+    const optimisticRows = rows.map(r => r.family_id === familyId ? { ...r, status: nextStatus } : r);
+    setRows(optimisticRows);
+    localStorage.setItem(getCacheKey(eventId), JSON.stringify(optimisticRows));
     
     try {
       // Use tenantContext from auth provider instead of getTenantContext
@@ -190,7 +208,9 @@ export default function EventDetailPage() {
       if (!canEvents) {
         toast({ kind: "error", title: "Access denied", message: "" });
         // Rollback on access denied
-        setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: originalStatus } : r));
+        const rollbackRows = rows.map(r => r.family_id === familyId ? { ...r, status: originalStatus } : r);
+        setRows(rollbackRows);
+        localStorage.setItem(getCacheKey(eventId), JSON.stringify(rollbackRows));
         return;
       }
       
@@ -248,7 +268,9 @@ export default function EventDetailPage() {
     } catch (e: any) {
       // 3. Error Rollback
       toast({ kind: "error", title: "Error", message: e.message || "Failed" });
-      setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: originalStatus } : r));
+      const rollbackRows = rows.map(r => r.family_id === familyId ? { ...r, status: originalStatus } : r);
+      setRows(rollbackRows);
+      localStorage.setItem(getCacheKey(eventId), JSON.stringify(rollbackRows));
     }
   }
 
@@ -260,7 +282,9 @@ export default function EventDetailPage() {
     const nextStatus = "Pending";
     
     // 1. Optimistic Update: Immediate visual feedback
-    setRows(prev => prev.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: nextStatus } : r));
+    const optimisticRows = rows.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: nextStatus } : r);
+    setRows(optimisticRows);
+    localStorage.setItem(getCacheKey(eventId), JSON.stringify(optimisticRows));
     setConfirmUnmark(null);
     
     try {
@@ -274,7 +298,9 @@ export default function EventDetailPage() {
       if (!canEvents) {
         toast({ kind: "error", title: "Access denied", message: "" });
         // Rollback on access denied
-        setRows(prev => prev.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: originalStatus } : r));
+        const rollbackRows = rows.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: originalStatus } : r);
+        setRows(rollbackRows);
+        localStorage.setItem(getCacheKey(eventId), JSON.stringify(rollbackRows));
         return;
       }
       
@@ -301,7 +327,9 @@ export default function EventDetailPage() {
     } catch (e: any) {
       // 3. Error Rollback
       toast({ kind: "error", title: "Error", message: e.message || "Failed" });
-      setRows(prev => prev.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: originalStatus } : r));
+      const rollbackRows = rows.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: originalStatus } : r);
+      setRows(rollbackRows);
+      localStorage.setItem(getCacheKey(eventId), JSON.stringify(rollbackRows));
     }
   }
 
@@ -369,13 +397,29 @@ export default function EventDetailPage() {
       });
 
       const familyIds = printableRows.map((row) => row.family_id);
-      const { data: memberData, error: memberError } = familyIds.length > 0
-        ? await supabase
+      let memberData: any[] = [];
+      let memberError: any = null;
+      
+      if (familyIds.length > 0) {
+        const chunkSize = 400;
+        for (let i = 0; i < familyIds.length; i += chunkSize) {
+          const chunk = familyIds.slice(i, i + chunkSize);
+          const result = await supabase
             .from("members")
             .select("family_id,name,full_name")
-            .in("family_id", familyIds)
-            .eq("masjid_id", ctx.masjidId)
-        : { data: [], error: null };
+            .in("family_id", chunk)
+            .eq("masjid_id", ctx.masjidId);
+          
+          if (result.error) {
+            memberError = result.error;
+            break;
+          }
+          
+          if (result.data) {
+            memberData = [...memberData, ...result.data];
+          }
+        }
+      }
 
       if (memberError) throw memberError;
 
@@ -393,44 +437,88 @@ export default function EventDetailPage() {
       const masjidName = await getPdfMasjidName(supabase, ctx.masjidId);
 
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      
+      // Header section - all center-aligned
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.text(masjidName, doc.internal.pageSize.width / 2, 12, { align: "center" });
+      doc.setFontSize(18);
+      doc.setTextColor(6, 78, 59); // Dark green for masjid name
+      doc.text(masjidName, pageWidth / 2, 14, { align: "center" });
+      
       doc.setFontSize(12);
-      doc.text("Event Attendance Report", doc.internal.pageSize.width / 2, 20, { align: "center" });
+      doc.setTextColor(15, 23, 42); // Dark slate for subtitle
+      doc.text("Event Attendance Sheet", pageWidth / 2, 21, { align: "center" });
+      
+      // Safe event name: strip any problematic characters
+      let safeEventName = ev.title || "Event Attendance Report";
+      // Replace any non-ASCII or problematic characters to prevent gibberish
+      safeEventName = safeEventName.replace(/[^\x20-\x7E]/g, "");
+      doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42); // Dark slate for event name
+      doc.text(safeEventName, pageWidth / 2, 28, { align: "center" });
+      
+      // Metadata lines - safe English/Tamil bilingual fallback
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.text(`${ev.title} | Event Date: ${ev.event_date} | Showing: ${reportTitle}`, 14, 29);
-      doc.text(`Total: ${pdfTotal} | Received: ${pdfReceived} | Pending: ${pdfPending}`, 14, 35);
+      doc.setFontSize(10);
+      doc.setTextColor(71, 85, 105); // Slate gray for metadata
+      const metaLine1 = `Event Date: ${ev.event_date} | Showing: ${reportTitle}`;
+      doc.text(metaLine1, pageWidth / 2, 36, { align: "center" });
+      
+      // Colored metadata numbers
+      doc.setFont("helvetica", "bold");
+      const metaLabelX = pageWidth / 2 - 40;
+      
+      doc.setTextColor(15, 23, 42);
+      doc.text("Total:", metaLabelX, 42);
+      doc.setTextColor(6, 78, 59); // Green for total
+      doc.text(String(pdfTotal), metaLabelX + 18, 42);
+      
+      doc.setTextColor(15, 23, 42);
+      doc.text("Received:", metaLabelX + 30, 42);
+      doc.setTextColor(5, 150, 105); // Emerald for received
+      doc.text(String(pdfReceived), metaLabelX + 58, 42);
+      
+      doc.setTextColor(15, 23, 42);
+      doc.text("Pending:", metaLabelX + 72, 42);
+      doc.setTextColor(217, 119, 6); // Amber for pending
+      doc.text(String(pdfPending), metaLabelX + 98, 42);
 
-      autoTable(doc, {
-        startY: 41,
-        head: [["#", "Family Code", "Head Name", "Phone", "Address", "Status", "Event Date", "Members"]],
-        body: printableRows.map((row, index) => [
-          index + 1,
-          row.families.family_code || "",
-          row.families.head_name || "",
-          row.families.phone || "",
-          row.families.address || "",
-          row.status || "Pending",
-          ev.event_date || "",
-          (membersByFamily[row.family_id] || []).join(", "),
-        ]),
-        styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak" },
-        headStyles: { fillColor: [4, 120, 87], textColor: 255 },
-        columnStyles: {
-          0: { cellWidth: 10 },
-          1: { cellWidth: 24 },
-          2: { cellWidth: 34 },
-          3: { cellWidth: 26 },
-          4: { cellWidth: 52 },
-          5: { cellWidth: 22 },
-          6: { cellWidth: 24 },
-          7: { cellWidth: 82 },
-        },
+      // Prepare headers and body based on selected columns
+      const headers: string[] = [];
+      if (pdfCols.serialTick) headers.push("S.No");
+      if (pdfCols.family_code) headers.push("Family Code");
+      if (pdfCols.head_name) headers.push("Head Name");
+      if (pdfCols.members) headers.push("Family Members");
+      if (pdfCols.address) headers.push("Address");
+      if (pdfCols.phone) headers.push("Phone");
+      if (pdfCols.signature) headers.push("Signature");
+
+      const tableBody = printableRows.map((row, index) => {
+        const rowData: (string|number|{content: string, styles: any})[] = [];
+        if (pdfCols.serialTick) rowData.push(index + 1);
+        if (pdfCols.family_code) rowData.push({ content: row.families.family_code || "", styles: { fontStyle: "bold" } });
+        if (pdfCols.head_name) rowData.push({ content: row.families.head_name || "", styles: { fontStyle: "bold" } });
+        if (pdfCols.members) rowData.push({ content: (membersByFamily[row.family_id] || []).join(", "), styles: { fontStyle: "bold" } });
+        if (pdfCols.address) rowData.push(row.families.address || "");
+        if (pdfCols.phone) rowData.push(row.families.phone || "");
+        if (pdfCols.signature) rowData.push("");
+        return rowData;
       });
 
-      const safeTitle = ev.title.replace(/[^a-z0-9-_]+/gi, "-").replace(/^-|-$/g, "");
+      autoTable(doc, {
+        startY: 48,
+        head: [headers],
+        body: tableBody,
+        styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak" },
+        headStyles: { 
+          fillColor: [6, 78, 59], // Dark green theme
+          textColor: 255, 
+          fontStyle: "bold" 
+        },
+        theme: "grid",
+      });
+
+      const safeTitle = (ev.title || "event").replace(/[^a-z0-9-_]+/gi, "-").replace(/^-|-$/g, "");
       doc.save(`event-attendance-${safeTitle || eventId}-${pdfFilter}.pdf`);
       toast({ kind: "success", title: "PDF Downloaded", message: `${reportTitle} report downloaded successfully.` });
     } catch (error: any) {
@@ -621,18 +709,18 @@ export default function EventDetailPage() {
 
       {isPdfFilterOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm border border-slate-100 shadow-2xl">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm border border-slate-100 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="mb-5 text-center">
               <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
                 <FileText className="w-6 h-6" />
               </div>
               <h3 className="text-lg font-black text-slate-900">Download Event PDF</h3>
               <p className="text-xs font-semibold text-slate-400 mt-1">
-                Choose which attendance records to include.
+                Choose which attendance records and columns to include.
               </p>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 mb-4">
               {([
                 { key: "all", label: "All Families", helper: "Include received and pending families." },
                 { key: "received", label: "Received Only", helper: "Include only families marked as received." },
@@ -645,17 +733,81 @@ export default function EventDetailPage() {
                   disabled={isGeneratingPdf}
                   className="w-full text-left p-4 rounded-2xl border border-slate-100 hover:border-blue-100 hover:bg-blue-50/60 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span className="block text-sm font-black text-slate-800">{option.label}</span>
+                  <span className="block text-sm font-black text-slate-800">
+                    {isGeneratingPdf ? "Preparing PDF..." : option.label}
+                  </span>
                   <span className="block text-[11px] font-semibold text-slate-400 mt-1">{option.helper}</span>
                 </button>
               ))}
+            </div>
+
+            <div className="border-t border-slate-200 pt-4 mb-4">
+              <h4 className="text-sm font-bold text-slate-900 mb-3">Columns</h4>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={pdfCols.serialTick}
+                    onChange={(e) => setPdfCols(s => ({ ...s, serialTick: e.target.checked }))}
+                  />
+                  Serial Number Tick Box
+                </label>
+                <label className="flex items-center gap-2 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={pdfCols.family_code}
+                    onChange={(e) => setPdfCols(s => ({ ...s, family_code: e.target.checked }))}
+                  />
+                  Family Code
+                </label>
+                <label className="flex items-center gap-2 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={pdfCols.head_name}
+                    onChange={(e) => setPdfCols(s => ({ ...s, head_name: e.target.checked }))}
+                  />
+                  Head Name
+                </label>
+                <label className="flex items-center gap-2 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={pdfCols.members}
+                    onChange={(e) => setPdfCols(s => ({ ...s, members: e.target.checked }))}
+                  />
+                  Family Members
+                </label>
+                <label className="flex items-center gap-2 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={pdfCols.address}
+                    onChange={(e) => setPdfCols(s => ({ ...s, address: e.target.checked }))}
+                  />
+                  Address
+                </label>
+                <label className="flex items-center gap-2 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={pdfCols.phone}
+                    onChange={(e) => setPdfCols(s => ({ ...s, phone: e.target.checked }))}
+                  />
+                  Phone
+                </label>
+                <label className="flex items-center gap-2 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={pdfCols.signature}
+                    onChange={(e) => setPdfCols(s => ({ ...s, signature: e.target.checked }))}
+                  />
+                  Signature Column
+                </label>
+              </div>
             </div>
 
             <button
               type="button"
               onClick={() => setIsPdfFilterOpen(false)}
               disabled={isGeneratingPdf}
-              className="mt-4 w-full py-3 rounded-2xl bg-slate-100 text-slate-600 text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="mt-2 w-full py-3 rounded-2xl bg-slate-100 text-slate-600 text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
