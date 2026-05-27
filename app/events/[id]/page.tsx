@@ -44,6 +44,18 @@ export default function EventDetailPage() {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const { tenantContext } = useMockAuth();
 
+  const sortByFamilyCode = (a: Att, b: Att) => {
+    const getNumericPart = (code: string) => {
+      const match = code.match(/(\d+)/);
+      return match ? parseInt(match[1], 10) : 0;
+    };
+    
+    const numA = getNumericPart(a.families.family_code || "");
+    const numB = getNumericPart(b.families.family_code || "");
+    
+    return numA - numB;
+  };
+
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
@@ -122,7 +134,8 @@ export default function EventDetailPage() {
         .eq("masjid_id", ctx.masjidId)
         .order("created_at", { ascending: true });
       if (attErr2) throw attErr2;
-      setRows((a2 as any) || []);
+      const sortedRows = ((a2 as any) || []).sort(sortByFamilyCode);
+      setRows(sortedRows);
     } catch (err: any) {
       toast({ kind: "error", title: "Error", message: err.message || "Failed" });
     } finally {
@@ -158,7 +171,13 @@ export default function EventDetailPage() {
       return;
     }
     
-    // If marking as received (turn ON), proceed immediately
+    const originalRow = rows.find(r => r.family_id === familyId);
+    const originalStatus = originalRow?.status || "Pending";
+    const nextStatus = "Received";
+    
+    // 1. Optimistic Update: Immediate visual feedback
+    setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: nextStatus } : r));
+    
     try {
       // Use tenantContext from auth provider instead of getTenantContext
       const ctx = tenantContext || await getTenantContext();
@@ -170,16 +189,22 @@ export default function EventDetailPage() {
       const canEvents = isAdmin || ctx.permissions?.events !== false;
       if (!canEvents) {
         toast({ kind: "error", title: "Access denied", message: "" });
+        // Rollback on access denied
+        setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: originalStatus } : r));
         return;
       }
-      const { error } = await supabase
+      
+      // Update event attendance in background
+      const { error: attendanceError } = await supabase
         .from("event_attendance")
-        .update({ status: toReceived ? "Received" : "Pending" })
+        .update({ status: nextStatus })
         .eq("event_id", eventId)
         .eq("family_id", familyId)
         .eq("masjid_id", ctx.masjidId);
-      if (error) throw error;
+      
+      if (attendanceError) throw attendanceError;
 
+      // Update service distribution in background
       const { data: existingService } = await supabase
         .from("service_distributions")
         .select("id")
@@ -193,7 +218,7 @@ export default function EventDetailPage() {
       if (existingService?.id) {
         await supabase
           .from("service_distributions")
-          .update({ status: toReceived ? "Received" : "Pending" })
+          .update({ status: nextStatus })
           .eq("id", existingService.id)
           .eq("masjid_id", ctx.masjidId);
       } else if (toReceived) {
@@ -204,12 +229,10 @@ export default function EventDetailPage() {
             masjid_id: ctx.masjidId,
             name: serviceName,
             date: serviceDate,
-            status: "Received",
+            status: nextStatus,
           });
       }
 
-      const nextStatus = toReceived ? "Received" : "Pending";
-      setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: nextStatus } : r));
       // Log to accounts as zero-amount info row when marking Received
       if (toReceived && ev) {
         await supabase.from("transactions").insert([{
@@ -223,12 +246,22 @@ export default function EventDetailPage() {
         }]);
       }
     } catch (e: any) {
+      // 3. Error Rollback
       toast({ kind: "error", title: "Error", message: e.message || "Failed" });
+      setRows(prev => prev.map(r => r.family_id === familyId ? { ...r, status: originalStatus } : r));
     }
   }
 
   async function confirmUnmarkFamily() {
     if (!confirmUnmark || !supabase) return;
+    
+    const originalRow = rows.find(r => r.family_id === confirmUnmark.familyId);
+    const originalStatus = originalRow?.status || "Received";
+    const nextStatus = "Pending";
+    
+    // 1. Optimistic Update: Immediate visual feedback
+    setRows(prev => prev.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: nextStatus } : r));
+    setConfirmUnmark(null);
     
     try {
       const ctx = tenantContext || await getTenantContext();
@@ -240,30 +273,35 @@ export default function EventDetailPage() {
       const canEvents = isAdmin || ctx.permissions?.events !== false;
       if (!canEvents) {
         toast({ kind: "error", title: "Access denied", message: "" });
+        // Rollback on access denied
+        setRows(prev => prev.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: originalStatus } : r));
         return;
       }
       
-      const { error } = await supabase
+      // Update event attendance in background
+      const { error: attendanceError } = await supabase
         .from("event_attendance")
-        .update({ status: "Pending" })
+        .update({ status: nextStatus })
         .eq("event_id", eventId)
         .eq("family_id", confirmUnmark.familyId)
         .eq("masjid_id", ctx.masjidId);
-      if (error) throw error;
+      
+      if (attendanceError) throw attendanceError;
 
+      // Update service distribution in background
       await supabase
         .from("service_distributions")
-        .update({ status: "Pending" })
+        .update({ status: nextStatus })
         .eq("family_id", confirmUnmark.familyId)
         .eq("masjid_id", ctx.masjidId)
         .eq("name", serviceName)
         .eq("date", serviceDate);
       
-      setRows(prev => prev.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: "Pending" } : r));
-      setConfirmUnmark(null);
       toast({ kind: "success", title: "Success", message: "Marked as not received" });
     } catch (e: any) {
+      // 3. Error Rollback
       toast({ kind: "error", title: "Error", message: e.message || "Failed" });
+      setRows(prev => prev.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: originalStatus } : r));
     }
   }
 
