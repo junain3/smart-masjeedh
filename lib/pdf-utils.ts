@@ -9,7 +9,7 @@ export async function getPdfMasjidName(supabase: any, masjidId?: string | null) 
       resolvedMasjidId = ctx?.masjidId || null;
     }
 
-    if (!resolvedMasjidId) return "Masjid";
+    if (!resolvedMasjidId) return "MASJID";
 
     const { data } = await supabase
       .from("masjids")
@@ -17,10 +17,11 @@ export async function getPdfMasjidName(supabase: any, masjidId?: string | null) 
       .eq("id", resolvedMasjidId)
       .maybeSingle();
 
-    return data?.masjid_name || "Masjid";
+    const rawName = data?.masjid_name;
+    return typeof rawName === 'string' ? rawName : "MASJID";
   } catch (error) {
     console.error("Failed to load Masjeedh name for PDF:", error);
-    return "Masjid";
+    return "MASJID";
   }
 }
 
