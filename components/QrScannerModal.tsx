@@ -51,14 +51,8 @@ export function QrScannerModal({
       if (!open) return;
 
       const Html5Qrcode = lib.Html5Qrcode;
-      if (!scannerRef.current) {
-        scannerRef.current = new Html5Qrcode(containerId);
-      } else {
-        // Try to stop existing scanner before restarting
-        try {
-          await scannerRef.current.stop();
-        } catch {}
-      }
+      // Always create a new scanner instance when starting fresh
+      scannerRef.current = new Html5Qrcode(containerId);
 
       const config = {
         fps,
@@ -97,7 +91,11 @@ export function QrScannerModal({
     if (inst?.stop) {
       try {
         await inst.stop();
-        await inst.clear?.();
+      } catch {}
+    }
+    if (inst?.clear) {
+      try {
+        await inst.clear();
       } catch {}
     }
     scannerRef.current = null;
@@ -116,7 +114,7 @@ export function QrScannerModal({
     return () => {
       stopScanner();
     };
-  }, [open, containerId, fps, qrboxSize, onDecodedText]);
+  }, [open, containerId, fps, qrboxSize]);
 
   if (!open) return null;
 
