@@ -9,6 +9,7 @@ import { translations, getTranslation, Language } from "@/lib/i18n/translations"
 import { QrScannerModal } from "@/components/QrScannerModal";
 import QRCode from "qrcode";
 import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import RouteGuard from "@/components/RouteGuard";
@@ -930,183 +931,74 @@ export default function FamiliesPage() {
 
   const generatePDF = async () => {
     try {
-      console.log('Families: Starting print generation...');
-      
-      // Check client-side
-      if (typeof window === 'undefined') {
-        console.error('Print generation not available in server-side rendering');
+      if (typeof window === "undefined") {
+        alert("PDF generation not available in server-side rendering");
         return;
       }
+
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
       
-      // Create printable HTML
-      const printWindow = window.open('', '_blank', 'width=800,height=600');
-      if (!printWindow) {
-        alert('Please allow popups for this website to print PDF');
-        return;
-      }
+      const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
+
+      // Tamil to English translation mapping
+      const tamilToEnglishMap: Record<string, string> = {
+        "உலருணவு விநியோகம்": "Dry Ration Distribution",
+        "உலருணவு": "Dry Ration Distribution",
+        "உழ்ஹிய்யா": "Udhkiya Distribution",
+        "உள்ஹிய்யா": "Udhkiya Distribution",
+        "பெருநாள் உதவி": "Eid Festival Relief"
+      };
+
+      // Header section - all center-aligned
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(6, 78, 59); // Dark green for masjid name
+      doc.text(masjidName, pageWidth / 2, 14, { align: "center" });
+      
+      doc.setFontSize(12);
+      doc.setTextColor(15, 23, 42); // Dark slate for subtitle
+      doc.text("Masjid Families List", pageWidth / 2, 21, { align: "center" });
       
       // Prepare headers
       const headers: string[] = [];
-      if (pdfCols.serialTick) headers.push("தொடர் இலக்கம்");
+      if (pdfCols.serialTick) headers.push("S.No");
       if (pdfCols.code) headers.push("Family Code");
       if (pdfCols.head) headers.push("Head Name");
       if (pdfCols.address) headers.push("Address");
       if (pdfCols.phone) headers.push("Phone");
-      if (pdfCols.sub) headers.push("Sub. Amt");
       if (pdfCols.signature) headers.push("Signature");
 
       // Prepare table data
-      const tableData = filteredFamilies.map((f, index) => {
-        const row: (string|number)[] = [];
+      const tableBody = filteredFamilies.map((f, index) => {
+        const row: (string|number|{content: string, styles: any})[] = [];
         if (pdfCols.serialTick) row.push(index + 1);
-        if (pdfCols.code) row.push(f.family_code);
-        if (pdfCols.head) row.push(f.head_name);
+        if (pdfCols.code) row.push({ content: f.family_code, styles: { fontStyle: "bold" } });
+        if (pdfCols.head) row.push({ content: f.head_name, styles: { fontStyle: "bold" } });
         if (pdfCols.address) row.push(f.address);
         if (pdfCols.phone) row.push(f.phone);
-        if (pdfCols.sub) row.push(f.subscription_amount || 0);
         if (pdfCols.signature) row.push("");
         return row;
       });
-      const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
-      
-      // Generate HTML content
-      let htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Masjid Families List</title>
-          <style>
-            body { 
-              font-family: Arial, sans-serif; 
-              margin: 20px; 
-              font-size: 12px;
-              line-height: 1.4;
-            }
-            h1 { 
-              text-align: center; 
-              margin-bottom: 20px;
-              font-size: 18px;
-              font-weight: bold;
-            }
-            .pdf-masjid-name {
-              text-align: center;
-              margin: 0 0 6px;
-              font-size: 22px;
-              font-weight: bold;
-              color: #064e3b;
-            }
-            table { 
-              width: 100%; 
-              border-collapse: collapse; 
-              margin-top: 20px;
-            }
-            th, td { 
-              border: 1px solid #333; 
-              padding: 8px; 
-              text-align: left;
-              vertical-align: top;
-            }
-            th { 
-              background-color: #f0f0f0; 
-              font-weight: bold;
-              font-size: 11px;
-            }
-            td { 
-              font-size: 10px;
-              word-wrap: break-word;
-              max-width: 150px;
-            }
-            .serial-cell {
-              display: flex;
-              align-items: center;
-              gap: 6px;
-            }
-            .tick-box {
-              width: 12px;
-              height: 12px;
-              border: 1px solid #000;
-              flex-shrink: 0;
-            }
-            .footer {
-              margin-top: 30px;
-              text-align: center;
-              font-size: 10px;
-              color: #666;
-            }
-            @media print {
-              body { margin: 10px; }
-              th, td { 
-                border: 1px solid #000; 
-                padding: 6px;
-                font-size: 9px;
-              }
-              .no-print { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="pdf-masjid-name">${escapePdfHtml(masjidName)}</div>
-          <h1>Masjid Families List</h1>
-          <table>
-            <thead>
-              <tr>
-      `;
-      
-      // Add headers
-      headers.forEach(header => {
-        htmlContent += `<th>${header}</th>`;
+
+      autoTable(doc, {
+        startY: 30,
+        head: [headers],
+        body: tableBody,
+        styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak" },
+        headStyles: {
+          fillColor: [6, 78, 59],
+          textColor: 255,
+          fontStyle: 'bold'
+        },
+        theme: 'grid'
       });
-      htmlContent += `
-              </tr>
-            </thead>
-            <tbody>
-      `;
-      
-      // Add data rows
-      tableData.forEach((row, rowIndex) => {
-        htmlContent += '<tr>';
-        row.forEach((cell, cellIndex) => {
-          if (pdfCols.serialTick && cellIndex === 0) {
-            const cellValue = String(cell || '');
-            htmlContent += `<td><div class="serial-cell"><div class="tick-box"></div>${escapePdfHtml(cellValue)}</div></td>`;
-          } else {
-            const cellValue = String(cell || '');
-            const truncatedValue = cellValue.length > 50 ? cellValue.substring(0, 50) + '...' : cellValue;
-            htmlContent += `<td>${escapePdfHtml(truncatedValue)}</td>`;
-          }
-        });
-        htmlContent += '</tr>';
-      });
-      
-      htmlContent += `
-            </tbody>
-          </table>
-          <div class="footer">
-            Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
-          </div>
-          <div class="no-print" style="margin-top: 20px; text-align: center;">
-            <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px;">
-              🖨️ Print / Save as PDF
-            </button>
-            <br><br>
-            <small>Use Ctrl+P or Cmd+P to print, then choose "Save as PDF"</small>
-          </div>
-        </body>
-        </html>
-      `;
-      
-      // Write content to new window
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      
-      // Focus and trigger print dialog
-      printWindow.focus();
-      
-      console.log('Families: Print window opened successfully');
+
+      doc.save('masjid-families-list.pdf');
       
     } catch (error) {
-      console.error('Families: Print generation error:', error);
-      alert('Print generation failed: ' + (error as Error).message);
+      console.error('PDF generation error:', error);
+      alert('PDF generation failed: ' + (error as Error).message);
     }
   };
 
