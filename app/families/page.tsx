@@ -1016,9 +1016,36 @@ export default function FamiliesPage() {
   };
 
   const filteredFamilies = families.filter(f => {
-    // Search filter
-    const matchesSearch = f.head_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                       f.family_code.toLowerCase().includes(searchQuery.toLowerCase());
+    // Search filter with smart Sri Lankan phone number handling and pure number → only address matching
+    const cleanQuery = searchQuery.trim().toLowerCase();
+    const isPureNumber = /^\d+$/.test(cleanQuery);
+    const isPhonePattern = isPureNumber && cleanQuery.startsWith('07') && cleanQuery.length >= 4;
+
+    // 1. Head Name Match (Always partial match)
+    const matchesName = f.head_name?.toLowerCase().includes(cleanQuery);
+
+    // 2. Family Code Match (ONLY match if it's NOT a pure number, meaning user typed 'M' or letters)
+    const matchesFamilyCode = !isPureNumber
+      ? f.family_code?.toLowerCase().includes(cleanQuery)
+      : false;
+
+    // 3. Address Match (If pure number, use strict word boundaries so "10" matches "10/1", "10-A" but NOT "109")
+    let matchesAddress = false;
+    if (f.address) {
+      const addressLower = f.address.toLowerCase();
+      if (isPureNumber) {
+        const boundaryRegex = new RegExp(`\\b${cleanQuery}\\b`);
+        matchesAddress = boundaryRegex.test(addressLower);
+      } else {
+        matchesAddress = addressLower.includes(cleanQuery);
+      }
+    }
+
+    const matchesSearch =
+      matchesName ||
+      matchesFamilyCode ||
+      matchesAddress ||
+      (isPhonePattern ? f.phone?.toLowerCase().includes(cleanQuery) : false);
     
     // Payment status filter - ALL should show all families immediately
     if (statusFilter === "all") {
@@ -1162,6 +1189,12 @@ export default function FamiliesPage() {
             className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm"
           />
         </div>
+
+        {searchQuery && (
+          <div className="text-sm font-medium text-emerald-700 px-1">
+            {filteredFamilies.length} குடும்பங்கள் கண்டறியப்பட்டன (Families found)
+          </div>
+        )}
 
         <button
           type="button"
