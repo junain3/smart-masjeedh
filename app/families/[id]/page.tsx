@@ -152,6 +152,18 @@ export default function FamilyDetailsPage() {
 
   const t = getTranslation(lang);
 
+  // Cache key functions
+  const getFamilyCacheKey = (masjidId: string, familyId: string) =>
+    `family_details_${masjidId}_${familyId}`;
+  const getMembersCacheKey = (masjidId: string, familyId: string) =>
+    `family_members_${masjidId}_${familyId}`;
+  const getPaymentsCacheKey = (masjidId: string, familyId: string) =>
+    `family_payments_${masjidId}_${familyId}`;
+  const getServicesCacheKey = (masjidId: string, familyId: string) =>
+    `family_services_${masjidId}_${familyId}`;
+  const getAllMembersCacheKey = (masjidId: string) =>
+    `family_all_members_${masjidId}`;
+
   // Helper functions for input formatting
   const formatTitleCase = (str: string): string => {
     return str
@@ -363,6 +375,28 @@ export default function FamilyDetailsPage() {
       }
 
       setUser(authUser);
+
+      // Load cached data FIRST for instant UI
+      try {
+        const cachedFamily = localStorage.getItem(getFamilyCacheKey(tenantContext.masjidId, familyId));
+        const cachedMembers = localStorage.getItem(getMembersCacheKey(tenantContext.masjidId, familyId));
+        const cachedPayments = localStorage.getItem(getPaymentsCacheKey(tenantContext.masjidId, familyId));
+        const cachedServices = localStorage.getItem(getServicesCacheKey(tenantContext.masjidId, familyId));
+        const cachedAllMembers = localStorage.getItem(getAllMembersCacheKey(tenantContext.masjidId));
+
+        if (cachedFamily) {
+          setFamily(JSON.parse(cachedFamily));
+          setLoading(false); // Show UI immediately
+        }
+        if (cachedMembers) setMembers(JSON.parse(cachedMembers));
+        if (cachedPayments) setPayments(JSON.parse(cachedPayments));
+        if (cachedServices) setServices(JSON.parse(cachedServices));
+        if (cachedAllMembers) setAllMasjidMembers(JSON.parse(cachedAllMembers));
+      } catch (e) {
+        console.warn("Failed to load cached data:", e);
+      }
+
+      // Revalidate in background
       await fetchData(authUser);
     };
 
@@ -400,32 +434,73 @@ export default function FamilyDetailsPage() {
       return;
     }
 
-    setLoading(true);
+    // Don't set loading to true if we have cached data (keeps UI responsive)
+    const hasCachedData = !!localStorage.getItem(getFamilyCacheKey(tenantContext.masjidId, familyId));
+    if (!hasCachedData) {
+      setLoading(true);
+    }
     setErrorMessage("");
 
     try {
-      const { data: familyData, error: familyError } = await supabase
-        .from("families")
-        .select("*")
-        .eq("id", familyId)
-        .eq("masjid_id", tenantContext.masjidId)
-        .single();
+      // Fetch all data in parallel using Promise.all for better performance
+      const [
+        familyResult,
+        membersResult,
+        allMembersResult,
+        paymentsResult,
+        servicesResult
+      ] = await Promise.all([
+        // Family data
+        supabase
+          .from("families")
+          .select("id, family_code, head_name, address, phone, subscription_amount, opening_balance, is_widow_head, house_type, has_toilet, special_needs_details, foreign_members_details, health_details, has_car, has_three_wheeler, has_van, has_lorry, has_tractor, extra_notes, created_at, masjid_id")
+          .eq("id", familyId)
+          .eq("masjid_id", tenantContext.masjidId)
+          .single(),
+          
+        // Family members
+        supabase
+          .from("members")
+          .select("id, family_id, member_code, name, full_name, relationship, age, gender, dob, nic, phone, civil_status, status, education, occupation, is_moulavi, is_new_muslim, is_foreign_resident, foreign_country, foreign_contact, has_special_needs, special_needs_details, has_health_issue, health_details")
+          .eq("family_id", familyId)
+          .eq("masjid_id", tenantContext.masjidId)
+          .order("name"),
+          
+        // All masjid members for duplicate detection
+        supabase
+          .from("members")
+          .select("id, name, full_name, nic, phone, dob, masjid_id")
+          .eq("masjid_id", tenantContext.masjidId),
+          
+        // Payments
+        supabase
+          .from("subscription_collections")
+          .select("id, amount, status, collected_by_user_id, date, accepted_at, created_at")
+          .eq("family_id", familyId)
+          .eq("masjid_id", tenantContext.masjidId)
+          .order("created_at", { ascending: false }),
+          
+        // Services
+        supabase
+          .from("service_distributions")
+          .select("id, status, date, name")
+          .eq("family_id", familyId)
+          .eq("masjid_id", tenantContext.masjidId)
+          .order("date", { ascending: false })
+      ]);
 
+      // Process family data
+      const { data: familyData, error: familyError } = familyResult;
       if (familyError || !familyData) {
         console.log("Family fetch error:", familyError);
         setFamily(null);
         return;
       }
-
       setFamily(familyData);
+      localStorage.setItem(getFamilyCacheKey(tenantContext.masjidId, familyId), JSON.stringify(familyData));
 
-      const { data: membersData, error: membersError } = await supabase
-        .from("members")
-        .select("*")
-        .eq("family_id", familyId)
-        .eq("masjid_id", tenantContext.masjidId)
-        .order("name");
-
+      // Process members data
+      const { data: membersData, error: membersError } = membersResult;
       if (membersError) throw membersError;
       const sortedMembers = [...(membersData || [])].sort((a, b) => {
         const rankDiff = getFamilyMemberSortRank(a) - getFamilyMemberSortRank(b);
@@ -440,72 +515,53 @@ export default function FamilyDetailsPage() {
         return (a.name || "").localeCompare(b.name || "");
       });
       setMembers(sortedMembers);
+      localStorage.setItem(getMembersCacheKey(tenantContext.masjidId, familyId), JSON.stringify(sortedMembers));
 
-      // Load ALL members in the entire masjid for duplicate detection
-      const { data: allMembersData, error: allMembersError } = await supabase
-        .from("members")
-        .select("*")
-        .eq("masjid_id", tenantContext.masjidId);
-
+      // Process all masjid members
+      const { data: allMembersData, error: allMembersError } = allMembersResult;
       if (allMembersError) {
         console.error("Error loading all masjid members:", allMembersError);
         setAllMasjidMembers([]);
       } else {
         setAllMasjidMembers(allMembersData || []);
+        localStorage.setItem(getAllMembersCacheKey(tenantContext.masjidId), JSON.stringify(allMembersData));
       }
 
-      const { data: paymentsData, error: paymentsError } = await supabase
-        .from("subscription_collections")
-        .select("id, amount, status, collected_by_user_id, date, accepted_at, created_at")
-        .eq("family_id", familyId)
-        .eq("masjid_id", tenantContext.masjidId)
-                .order("created_at", { ascending: false });
-
-      console.log("DEBUG PAYMENTS QUERY:");
-      console.log("- familyId:", familyId);
-      console.log("- masjidId:", tenantContext.masjidId);
-      console.log("- paymentsData:", paymentsData);
-      console.log("- paymentsError:", paymentsError);
-      console.log("- paymentsData length:", paymentsData?.length || 0);
-
+      // Process payments
+      const { data: paymentsData, error: paymentsError } = paymentsResult;
       if (paymentsError) {
         console.log("Payments fetch error:", paymentsError);
         setPayments([]);
       } else {
-        const mappedPayments = paymentsData || [];
-        console.log("DEBUG PAYMENTS MAPPING:");
-        console.log("- mappedPayments:", mappedPayments);
-        console.log("- mappedPayments length:", mappedPayments.length);
-        setPayments(mappedPayments);
+        setPayments(paymentsData || []);
+        localStorage.setItem(getPaymentsCacheKey(tenantContext.masjidId, familyId), JSON.stringify(paymentsData));
       }
 
-      const { data: servicesData, error: servicesError } = await supabase
-        .from("service_distributions")
-        .select("id, status, date, name")
-        .eq("family_id", familyId)
-        .eq("masjid_id", tenantContext.masjidId)
-        .order("date", { ascending: false });
-
+      // Process services
+      const { data: servicesData, error: servicesError } = servicesResult;
+      const processedServices = (servicesData || []).map((s: any) => ({
+        id: s.id,
+        name: s.name || "Service",
+        date: s.date,
+        status: s.status,
+      }));
       if (servicesError) {
         console.log("Services fetch error:", servicesError);
         setServices([]);
       } else {
-        setServices(
-          (servicesData || []).map((s: any) => ({
-            id: s.id,
-            name: s.name || "Service",
-            date: s.date,
-            status: s.status,
-          }))
-        );
+        setServices(processedServices);
+        localStorage.setItem(getServicesCacheKey(tenantContext.masjidId, familyId), JSON.stringify(processedServices));
       }
     } catch (err: any) {
       console.error("Error fetching data:", err);
       setErrorMessage(err?.message || "Failed to load family details.");
-      setFamily(null);
-      setMembers([]);
-      setPayments([]);
-      setServices([]);
+      // Only clear state if we didn't have cached data
+      if (!hasCachedData) {
+        setFamily(null);
+        setMembers([]);
+        setPayments([]);
+        setServices([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -945,7 +1001,14 @@ export default function FamilyDetailsPage() {
   const finalDue = previousArrears + currentDue;
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
+          <p className="text-sm font-bold text-slate-600">Loading Family Details...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!family) {

@@ -251,6 +251,10 @@ export default function FamiliesPage() {
     return { isDuplicate: false, isStrict: false, reason: "", matches: [] };
   };
 
+  const getCacheKey = (masjidId: string) => `families_cache_${masjidId}`;
+  const getPaymentsCacheKey = (masjidId: string) => `family_payments_cache_${masjidId}`;
+  const getMembersCacheKey = (masjidId: string) => `family_members_cache_${masjidId}`;
+
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
@@ -258,6 +262,25 @@ export default function FamiliesPage() {
 
   useEffect(() => {
     if (!tenantContext?.masjidId) return;
+
+    // Load stale data from localStorage first for instant UI load
+    const cachedFamilies = localStorage.getItem(getCacheKey(tenantContext.masjidId));
+    const cachedPayments = localStorage.getItem(getPaymentsCacheKey(tenantContext.masjidId));
+    const cachedMembers = localStorage.getItem(getMembersCacheKey(tenantContext.masjidId));
+    
+    if (cachedFamilies) {
+      const parsedFamilies = JSON.parse(cachedFamilies);
+      setFamilies(parsedFamilies);
+      setIsLive(true);
+    }
+    if (cachedPayments) {
+      setPaymentCollections(JSON.parse(cachedPayments));
+    }
+    if (cachedMembers) {
+      setAllMasjidMembers(JSON.parse(cachedMembers));
+    }
+
+    // Revalidate in background
     fetchFamilies();
   }, [tenantContext?.masjidId, resumeTick]);
 
@@ -341,7 +364,7 @@ export default function FamiliesPage() {
 
       const { data, error } = await supabase
         .from("families")
-        .select("id, family_code, head_name, phone, address, subscription_amount, opening_balance, is_widow_head, house_type, has_toilet, special_needs_details, foreign_members_details, health_details, has_car, has_three_wheeler, has_van, has_lorry, has_tractor, extra_notes, created_at, masjid_id")
+        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id")
         .eq("masjid_id", tenantContext.masjidId)
         .order("family_code", { ascending: true });
 
@@ -358,6 +381,9 @@ export default function FamiliesPage() {
         setIsLive(true);
         setErrorMessage("");
         
+        // Save families to localStorage immediately for instant load next time
+        localStorage.setItem(getCacheKey(tenantContext.masjidId), JSON.stringify(sortedFamilies));
+        
         // Fetch all masjid members for duplicate detection
         try {
           const { data: membersData, error: membersError } = await supabase
@@ -367,6 +393,7 @@ export default function FamiliesPage() {
             
           if (!membersError && membersData) {
             setAllMasjidMembers(membersData);
+            localStorage.setItem(getMembersCacheKey(tenantContext.masjidId), JSON.stringify(membersData));
           }
         } catch (membersErr) {
           console.error("Members fetch error:", membersErr);
@@ -382,6 +409,7 @@ export default function FamiliesPage() {
             
           if (!paymentError && paymentData) {
             setPaymentCollections(paymentData);
+            localStorage.setItem(getPaymentsCacheKey(tenantContext.masjidId), JSON.stringify(paymentData));
           }
         } catch (paymentErr) {
           console.error("Payment collections fetch error:", paymentErr);

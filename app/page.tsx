@@ -314,170 +314,80 @@ export default function HomePage() {
 
 
 
-  // Fetch live/demo status
-
+  // Fetch all dashboard data in parallel
   useEffect(() => {
-
-    const fetchLiveStatus = async () => {
-
+    const fetchDashboardData = async () => {
       if (!supabase) return;
-
       if (!tenantContext?.masjidId) return;
-
-
-
-      // Check if we have real data
-
-      const [{ count: familiesCount }, { count: membersCount }] = await Promise.all([
-        supabase
-
-          .from("families")
-
-          .select("id", { count: "exact", head: true })
-
-          .eq("masjid_id", tenantContext.masjidId),
-
-        supabase
-
-          .from("members")
-
-          .select("id", { count: "exact", head: true })
-
-          .eq("masjid_id", tenantContext.masjidId),
-      ]);
-
-
-
-      const hasRealData = (familiesCount || 0) > 0 || (membersCount || 0) > 0;
-
-      setIsLive(hasRealData);
-
-    };
-
-
-
-    fetchLiveStatus();
-
-  }, [tenantContext, resumeTick]);
-
-
-
-  // Fetch family and member counts
-
-  useEffect(() => {
-
-    const fetchCounts = async () => {
-
-      if (!supabase) return;
-
-      if (!tenantContext?.masjidId) return;
-
-
-
-      const [{ count: familiesCount }, { count: membersCount }] = await Promise.all([
-        supabase
-
-          .from("families")
-
-          .select("id", { count: "exact", head: true })
-
-          .eq("masjid_id", tenantContext.masjidId),
-
-        supabase
-
-          .from("members")
-
-          .select("id", { count: "exact", head: true })
-
-          .eq("masjid_id", tenantContext.masjidId),
-      ]);
-
-
-
-      setFamilyCount(familiesCount || 0);
-
-      setMemberCount(membersCount || 0);
-
-    };
-
-
-
-    fetchCounts();
-
-  }, [tenantContext, resumeTick]);
-
-
-
-  // Fetch masjid data
-
-  useEffect(() => {
-
-    const fetchMasjidData = async () => {
-
-      if (!supabase) return;
-
-      if (!tenantContext?.masjidId) return;
-
-
 
       try {
+        const [
+          familiesCountResult,
+          membersCountResult,
+          masjidDataResult
+        ] = await Promise.all([
+          // Family count for both live status and display
+          supabase
+            .from("families")
+            .select("id", { count: "exact", head: true })
+            .eq("masjid_id", tenantContext.masjidId),
+          
+          // Member count for both live status and display
+          supabase
+            .from("members")
+            .select("id", { count: "exact", head: true })
+            .eq("masjid_id", tenantContext.masjidId),
+          
+          // Masjid data
+          supabase
+            .from("masjids")
+            .select("masjid_name, logo_url, tagline, preferred_language")
+            .eq("id", tenantContext.masjidId)
+            .single()
+        ]);
 
-        const { data: masjidData } = await supabase
-
-          .from("masjids")
-
-          .select("masjid_name, logo_url, tagline, preferred_language")
-
-          .eq("id", tenantContext.masjidId)
-
-          .single();
-
-
-
-        if (masjidData) {
-
+        // Update counts
+        const familiesCount = familiesCountResult.count || 0;
+        const membersCount = membersCountResult.count || 0;
+        setFamilyCount(familiesCount);
+        setMemberCount(membersCount);
+        
+        // Update live status
+        setIsLive(familiesCount > 0 || membersCount > 0);
+        
+        // Update masjid data
+        const { data: masjidData, error: masjidError } = masjidDataResult;
+        if (masjidError || !masjidData) {
+          // Safe fallback: set default masjid if anything fails
           setMasjid({
-
+            name: "Masjid",
+            logo_url: "",
+            tagline: "Your Masjid",
+          });
+        } else {
+          setMasjid({
             name: (masjidData as any).masjid_name || "Masjid",
-
             logo_url: (masjidData as any).logo_url || "",
-
             tagline: (masjidData as any).tagline || "Your Masjid",
-
           });
 
           // Set language from masjid data if available
-
           if ((masjidData as any).preferred_language && ["en", "ta", "si"].includes((masjidData as any).preferred_language)) {
-
             setLang((masjidData as any).preferred_language);
-
           }
-
         }
-
       } catch (error) {
-
-        // Safe fallback: set default masjid if anything fails
-
+        console.error("Error fetching dashboard data:", error);
+        // Safe fallback for any errors
         setMasjid({
-
           name: "Masjid",
-
           logo_url: "",
-
           tagline: "Your Masjid",
-
         });
-
       }
-
     };
 
-
-
-    fetchMasjidData();
-
+    fetchDashboardData();
   }, [tenantContext, resumeTick]);
 
 

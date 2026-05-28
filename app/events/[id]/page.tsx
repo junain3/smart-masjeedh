@@ -436,6 +436,33 @@ export default function EventDetailPage() {
       const reportTitle = `${pdfFilter === "all" ? "All" : pdfFilter === "received" ? "Received" : "Pending"} Families`;
       const masjidName = await getPdfMasjidName(supabase, ctx.masjidId);
 
+      // Tamil to English translation mapping
+      const tamilToEnglishMap: Record<string, string> = {
+        "உலருணவு விநியோகம்": "Dry Ration Distribution",
+        "உலருணவு": "Dry Ration Distribution",
+        "உழ்ஹிய்யா": "Udhkiya Distribution",
+        "உள்ஹிய்யா": "Udhkiya Distribution",
+        "பெருநாள் உதவி": "Eid Festival Relief"
+      };
+
+      // Safe event name processing
+      let safeEventName = ev.title || "Event Attendance & Distribution Sheet";
+      
+      // Check if we have an exact translation match
+      if (tamilToEnglishMap[safeEventName]) {
+        safeEventName = tamilToEnglishMap[safeEventName];
+      } else {
+        // Check for partial matches or Tamil characters
+        const hasTamil = /[\u0B80-\u0BFF]/.test(safeEventName);
+        if (hasTamil) {
+          // If there's Tamil text but no exact match, use safe bilingual fallback
+          safeEventName = "Event Attendance & Distribution Sheet";
+        } else {
+          // Strip any problematic characters just in case
+          safeEventName = safeEventName.replace(/[^\x20-\x7E]/g, "");
+        }
+      }
+
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageWidth = doc.internal.pageSize.getWidth();
       
@@ -448,11 +475,6 @@ export default function EventDetailPage() {
       doc.setFontSize(12);
       doc.setTextColor(15, 23, 42); // Dark slate for subtitle
       doc.text("Event Attendance Sheet", pageWidth / 2, 21, { align: "center" });
-      
-      // Safe event name: strip any problematic characters
-      let safeEventName = ev.title || "Event Attendance Report";
-      // Replace any non-ASCII or problematic characters to prevent gibberish
-      safeEventName = safeEventName.replace(/[^\x20-\x7E]/g, "");
       doc.setFontSize(14);
       doc.setTextColor(15, 23, 42); // Dark slate for event name
       doc.text(safeEventName, pageWidth / 2, 28, { align: "center" });
