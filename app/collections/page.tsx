@@ -1,22 +1,21 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { QrCode, Plus, Users, Wallet, Calendar, X, Check, AlertCircle, Search, FileText, DollarSign, CreditCard, Briefcase } from "lucide-react";
+import { Plus, QrCode, X, Check, AlertCircle, Search, FileText, Pencil } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { getTranslation, translations, Language } from "@/lib/i18n/translations";
+import { getTranslation, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
-import { Html5QrcodeScanner } from "html5-qrcode";
 import { AppShell } from "@/components/AppShell";
+import { QrScannerModal } from "@/components/QrScannerModal";
+import { calcCommission } from "@/lib/collection-utils";
 
 type Family = {
   id: string;
   family_code: string;
   head_name: string;
   address?: string;
-  phone?: string;
   subscription_amount?: number;
 };
 
@@ -25,1223 +24,550 @@ type Collection = {
   family_id: string;
   collected_by_user_id: string;
   amount: number;
-  commission_percent: number;
-  commission_amount: number;
   notes?: string;
   date: string;
   status: "pending" | "accepted" | "rejected";
   created_at: string;
+  commission_percent?: number;
+  commission_amount?: number;
   family?: Family;
 };
 
-type CollectorWaitingBalance = {
-  total_waiting_amount: number;
-  total_collections_count: number;
+const STATUS_LABEL: Record<Collection["status"], string> = {
+  pending: "நிலுவை",
+  accepted: "அனுமதி",
+  rejected: "நிராகரி",
 };
 
-type FamilySubscriptionStatus = {
-  family_id: string;
-  total_paid: number;
-  waiting_amount: number;
-  approved_amount: number;
-  last_payment_date: string;
+const STATUS_CLASS: Record<Collection["status"], string> = {
+  pending: "bg-amber-100 text-amber-800",
+  accepted: "bg-emerald-100 text-emerald-800",
+  rejected: "bg-rose-100 text-rose-800",
 };
 
 export default function CollectionsPage() {
-  const router = useRouter();
   const { user, tenantContext, loading: authLoading, resumeTick } = useSupabaseAuth();
   const [lang, setLang] = useState<Language>("en");
-  const [collections, setCollections] = useState<Collection[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
-  const [familySubscriptions, setFamilySubscriptions] = useState<Map<string, FamilySubscriptionStatus>>(new Map());
-  const [waitingBalance, setWaitingBalance] = useState<CollectorWaitingBalance | null>(null);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [showPaymentHistory, setShowPaymentHistory] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [selectedFamilyId, setSelectedFamilyId] = useState("");
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
   const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [commissionRate, setCommissionRate] = useState(0);
-const [commissionEarned, setCommissionEarned] = useState(0);
-const [commissionPaid, setCommissionPaid] = useState(0);
-const [commissionBalance, setCommissionBalance] = useState(0);
+  const [commissionEarned, setCommissionEarned] = useState(0);
+  const [commissionPending, setCommissionPending] = useState(0);
 
   const t = getTranslation(lang);
 
-  // Filter families based on search term
   const filteredFamilies = useMemo(() => {
-    if (!searchTerm) return families;
+    if (!searchTerm.trim()) return families;
     const term = searchTerm.toLowerCase();
-    return families.filter(family => 
-      family.family_code.toLowerCase().includes(term) ||
-      family.head_name.toLowerCase().includes(term) ||
-      (family.address && family.address.toLowerCase().includes(term))
+    return families.filter(
+      (f) =>
+        f.family_code.toLowerCase().includes(term) ||
+        f.head_name.toLowerCase().includes(term) ||
+        (f.address && f.address.toLowerCase().includes(term))
     );
   }, [families, searchTerm]);
+
+  const stats = useMemo(() => {
+    const pending = collections
+      .filter((c) => c.status === "pending")
+      .reduce((sum, c) => sum + c.amount, 0);
+    const approved = collections
+      .filter((c) => c.status === "accepted")
+      .reduce((sum, c) => sum + c.amount, 0);
+    return { pending, approved, count: collections.length };
+  }, [collections]);
+
+  const selectedFamily = families.find((f) => f.id === selectedFamilyId);
+  const estimatedCommission = useMemo(() => {
+    const amt = parseFloat(amount);
+    if (!Number.isFinite(amt) || amt <= 0 || commissionRate <= 0) return 0;
+    return calcCommission(amt, commissionRate);
+  }, [amount, commissionRate]);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
+  }, []);
+
+  useEffect(() => {
+    if (!tenantContext?.masjidId || !user?.id) return;
     loadData();
-  }, [tenantContext?.masjidId, resumeTick]);
+  }, [tenantContext?.masjidId, user?.id, resumeTick]);
 
-  
+  const selectFamily = (family: Family) => {
+    setSelectedFamilyId(family.id);
+    if (family.subscription_amount) {
+      setAmount(String(family.subscription_amount));
+    }
+  };
+
   const loadData = async () => {
+    if (!tenantContext?.masjidId || !user?.id) return;
+    setLoading(true);
+    setError("");
     try {
-      if (!tenantContext || !user?.id) return;
-
-      const authUserId = user.id;
-
-      // Load all data in parallel for better performance
-      const [
-        familiesResponse,
-        collectionsResponse,
-        profileResponse,
-        earnedResponse,
-        paidResponse
-      ] = await Promise.all([
-        // Load families
+      const [familiesRes, collectionsRes, profileRes] = await Promise.all([
         supabase
           .from("families")
-          .select("id, family_code, head_name, address, phone, subscription_amount")
+          .select("id, family_code, head_name, address, subscription_amount")
           .eq("masjid_id", tenantContext.masjidId)
           .order("family_code"),
-        
-        // Load my collections
         supabase
           .from("subscription_collections")
           .select("*")
           .eq("masjid_id", tenantContext.masjidId)
-          .eq("collected_by_user_id", authUserId)
+          .eq("collected_by_user_id", user.id)
           .order("created_at", { ascending: false }),
-        
-        // Load my commission rate (safe fallback)
         supabase
           .from("subscription_collector_profiles")
           .select("default_commission_percent")
           .eq("masjid_id", tenantContext.masjidId)
-          .eq("user_id", authUserId)
+          .eq("user_id", user.id)
           .maybeSingle(),
-        
-        // Total earned from accepted collections
-        supabase
-          .from('subscription_collections')
-          .select('commission_amount')
-          .eq('collected_by_user_id', authUserId)
-          .eq('masjid_id', tenantContext.masjidId)
-          .eq('status', 'accepted'),
-          
-        // Total paid from commission payments
-        supabase
-          .from('collector_commission_payments')
-          .select('amount')
-          .eq('collector_user_id', authUserId)
-          .eq('masjid_id', tenantContext.masjidId)
       ]);
 
-      // Add error guard for families
-      if (familiesResponse.error) {
-        console.error("Families fetch error:", familiesResponse.error);
-      }
+      if (familiesRes.error) throw familiesRes.error;
+      if (collectionsRes.error) throw collectionsRes.error;
 
-      const familiesData = familiesResponse.data;
-      const collectionsData = collectionsResponse.data;
-      const profileData = profileResponse.data;
+      const familyList = familiesRes.data || [];
+      const collectionList = collectionsRes.data || [];
+      const withFamilies = collectionList.map((c) => ({
+        ...c,
+        family: familyList.find((f) => f.id === c.family_id),
+      }));
 
-      // Map family details to collections separately
-      const collectionsWithFamilies = collectionsData?.map(collection => ({
-        ...collection,
-        family: familiesData?.find(f => f.id === collection.family_id)
-      })) || [];
+      const rate = Number(profileRes.data?.default_commission_percent ?? 0);
+      const earned = collectionList
+        .filter((c) => c.status === "accepted")
+        .reduce((sum, c) => sum + (c.commission_amount || 0), 0);
+      const pendingComm = collectionList
+        .filter((c) => c.status === "pending")
+        .reduce((sum, c) => sum + calcCommission(c.amount, rate), 0);
 
-      // Process family subscription statuses (disabled until table exists)
-      const subscriptionMap = new Map<string, FamilySubscriptionStatus>();
-      // subscriptionData?.forEach(payment => {
-      //   const existing = subscriptionMap.get(payment.family_id) || {
-      //     family_id: payment.family_id,
-      //     total_paid: 0,
-      //     waiting_amount: 0,
-      //     approved_amount: 0,
-      //     last_payment_date: payment.payment_date
-      //   };
-      //   
-      //   existing.total_paid += payment.amount;
-      //   if (payment.status === 'waiting') {
-      //     existing.waiting_amount += payment.amount;
-      //   } else if (payment.status === 'approved') {
-      //     existing.approved_amount += payment.amount;
-      //   }
-      //   
-      //   if (payment.payment_date > existing.last_payment_date) {
-      //     existing.last_payment_date = payment.payment_date;
-      //   }
-      //   
-      //   subscriptionMap.set(payment.family_id, existing);
-      // });
-
-      // Calculate commission totals
-      const earnedTotal = earnedResponse.data?.reduce((sum, item) => sum + (item.commission_amount || 0), 0) || 0;
-      const paidTotal = paidResponse.data?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
-
-      setFamilies(familiesData || []);
-      setCollections(collectionsWithFamilies || []);
-      setFamilySubscriptions(subscriptionMap);
-      setWaitingBalance(null); // balanceData?.[0] || null); // Disabled until RPC exists
-      setCommissionRate(profileData?.default_commission_percent || 0);
-      setCommissionEarned(earnedTotal);
-      setCommissionPaid(paidTotal);
-      setCommissionBalance(earnedTotal - paidTotal);
+      setCommissionRate(rate);
+      setCommissionEarned(earned);
+      setCommissionPending(pendingComm);
+      setFamilies(familyList);
+      setCollections(withFamilies);
     } catch (e: any) {
-      setError(e.message || "Failed to load data");
+      setError(e.message || "தரவு ஏற்ற முடியவில்லை");
     } finally {
       setLoading(false);
     }
   };
 
-  const generatePDF = async () => {
-    try {
-      console.log('Collections: Starting print generation...');
-      
-      // Check client-side
-      if (typeof window === 'undefined') {
-        console.error('Print generation not available in server-side rendering');
-        return;
-      }
-      
-      // Create printable HTML
-      const printWindow = window.open('', '_blank', 'width=800,height=600');
-      if (!printWindow) {
-        alert('Please allow popups for this website to print PDF');
-        return;
-      }
-      
-      const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
-
-      // Generate HTML content
-      let htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Staff Collections Report</title>
-          <style>
-            body { 
-              font-family: Arial, sans-serif; 
-              margin: 20px; 
-              font-size: 12px;
-              line-height: 1.4;
-            }
-            .pdf-masjid-name {
-              text-align: center;
-              margin: 0 0 6px;
-              font-size: 22px;
-              font-weight: bold;
-              color: #064e3b;
-            }
-            h1 { 
-              text-align: center; 
-              margin-bottom: 20px;
-              font-size: 18px;
-              font-weight: bold;
-            }
-            table { 
-              width: 100%; 
-              border-collapse: collapse; 
-              margin-top: 20px;
-            }
-            th, td { 
-              border: 1px solid #333; 
-              padding: 8px; 
-              text-align: left;
-              vertical-align: top;
-            }
-            th { 
-              background-color: #f0f0f0; 
-              font-weight: bold;
-              font-size: 11px;
-            }
-            td { 
-              font-size: 10px;
-              word-wrap: break-word;
-              max-width: 150px;
-            }
-            .footer {
-              margin-top: 30px;
-              text-align: center;
-              font-size: 10px;
-              color: #666;
-            }
-            @media print {
-              body { margin: 10px; }
-              th, td { 
-                border: 1px solid #000; 
-                padding: 6px;
-                font-size: 9px;
-              }
-              .no-print { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="pdf-masjid-name">${escapePdfHtml(masjidName)}</div>
-          <h1>Staff Collections Report</h1>
-          <table>
-            <thead>
-              <tr>
-                <th>Family Code</th>
-                <th>Head Name</th>
-                <th>Date</th>
-                <th>Amount</th>
-                <th>Commission %</th>
-                <th>Commission</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-      `;
-      
-      // Add data rows
-      collections.forEach(c => {
-        htmlContent += '<tr>';
-        htmlContent += `<td>${escapePdfHtml(c.family?.family_code || '')}</td>`;
-        htmlContent += `<td>${escapePdfHtml(c.family?.head_name || '')}</td>`;
-        htmlContent += `<td>${escapePdfHtml(c.date || '')}</td>`;
-        htmlContent += `<td>Rs. ${c.amount?.toLocaleString() || 0}</td>`;
-        htmlContent += `<td>${c.commission_percent || 0}%</td>`;
-        htmlContent += `<td>Rs. ${c.commission_amount?.toLocaleString() || 0}</td>`;
-        htmlContent += `<td>${escapePdfHtml(c.status || '')}</td>`;
-        htmlContent += '</tr>';
-      });
-      
-      htmlContent += `
-            </tbody>
-          </table>
-          <div class="footer">
-            Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
-          </div>
-          <div class="no-print" style="margin-top: 20px; text-align: center;">
-            <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px;">
-              🖨️ Print / Save as PDF
-            </button>
-            <br><br>
-            <small>Use Ctrl+P or Cmd+P to print, then choose "Save as PDF"</small>
-          </div>
-        </body>
-        </html>
-      `;
-      
-      // Write content to new window
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      
-      // Focus and trigger print dialog
-      printWindow.focus();
-      
-      console.log('Collections: Print window opened successfully');
-      
-    } catch (error) {
-      console.error('Collections: Print generation error:', error);
-      alert('Print generation failed: ' + (error as Error).message);
-    }
+  const resetForm = () => {
+    setSelectedFamilyId("");
+    setAmount("");
+    setNotes("");
+    setSearchTerm("");
+    setError("");
+    setSuccess("");
+    setEditingCollection(null);
   };
 
-  const startScanner = () => {
-    setIsScannerOpen(true);
-    setTimeout(() => {
-      const scanner = new Html5QrcodeScanner(
-        "qr-reader",
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        false
-      );
+  const closeModal = () => {
+    setIsModalOpen(false);
+    resetForm();
+  };
 
-      scanner.render(
-        (decodedText) => {
-          // Find family by QR code
-          const family = families.find(f => f.family_code === decodedText);
-          if (family) {
-            setSelectedFamilyId(family.id);
-            setIsScannerOpen(false);
-            scanner.clear();
-          } else {
-            setError("Family not found for this QR code");
-          }
-        },
-        (error) => {
-          // Handle scan error silently
-        }
-      );
-    }, 100);
+  const openAddModal = () => {
+    resetForm();
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (collection: Collection) => {
+    if (collection.status !== "pending") return;
+    setEditingCollection(collection);
+    setSelectedFamilyId(collection.family_id);
+    setAmount(String(collection.amount));
+    setNotes(collection.notes || "");
+    setIsModalOpen(true);
+  };
+
+  const resolveFamilyFromQr = (text: string) => {
+    if (text.startsWith("smart-masjeedh:family:")) {
+      return text.split(":")[2];
+    }
+    const byCode = families.find(
+      (f) => f.family_code.toLowerCase() === text.trim().toLowerCase()
+    );
+    return byCode?.id || null;
+  };
+
+  const handleQrDecoded = (text: string) => {
+    const familyId = resolveFamilyFromQr(text);
+    if (!familyId) {
+      setError("இந்த QR-க்கு குடும்பம் கிடைக்கவில்லை");
+      return;
+    }
+    setSelectedFamilyId(familyId);
+    const family = families.find((f) => f.id === familyId);
+    if (family?.subscription_amount) setAmount(String(family.subscription_amount));
+    setIsScannerOpen(false);
+    setIsModalOpen(true);
+    setError("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('🔥 handleSubmit called');
-    console.log('🔥 selectedFamilyId:', selectedFamilyId);
-    console.log('🔥 amount:', amount);
-    console.log('🔥 notes:', notes);
-    
-    if (!selectedFamilyId || !amount) {
-      console.log('🔥 Validation failed - missing required fields');
+    if (!selectedFamilyId || !amount) return;
+
+    setSubmitting(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const ctx = tenantContext || (await getTenantContext());
+      if (!ctx) throw new Error("Masjid context not found");
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error("Not logged in");
+
+      const amountNum = parseFloat(amount);
+      if (!Number.isFinite(amountNum) || amountNum <= 0) {
+        throw new Error("சரியான தொகை உள்ளிடவும்");
+      }
+
+      if (editingCollection) {
+        const { error: updateError } = await supabase
+          .from("subscription_collections")
+          .update({
+            family_id: selectedFamilyId,
+            amount: amountNum,
+            notes: notes.trim() || null,
+          })
+          .eq("id", editingCollection.id)
+          .eq("collected_by_user_id", session.user.id)
+          .eq("status", "pending");
+
+        if (updateError) throw updateError;
+        setSuccess("வசூல் புதுப்பிக்கப்பட்டது");
+      } else {
+        const { error: insertError } = await supabase
+          .from("subscription_collections")
+          .insert({
+            masjid_id: ctx.masjidId,
+            family_id: selectedFamilyId,
+            amount: amountNum,
+            commission_percent: 0,
+            commission_amount: 0,
+            status: "pending",
+            notes: notes.trim() || null,
+            collected_by_user_id: session.user.id,
+            date: new Date().toISOString().split("T")[0],
+          });
+
+        if (insertError) throw insertError;
+        setSuccess("வசூல் பதிவாகியது — நிர்வாகி அனுமதிக்க வேண்டும்");
+      }
+
+      closeModal();
+      loadData();
+    } catch (e: any) {
+      setError(e.message || "பதிவு தோல்வி");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const generatePDF = async () => {
+    if (typeof window === "undefined") return;
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+    if (!printWindow) {
+      alert("PDF-க்கு popup அனுமதி தேவை");
       return;
     }
 
-    setSubmitting(true);
-    setError("");
-    setSuccess("");
+    const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
+    const rows = collections
+      .map(
+        (c) => `<tr>
+          <td>${escapePdfHtml(c.family?.family_code || "")}</td>
+          <td>${escapePdfHtml(c.family?.head_name || "")}</td>
+          <td>${escapePdfHtml(c.date || "")}</td>
+          <td>Rs. ${c.amount?.toLocaleString() || 0}</td>
+          <td>${escapePdfHtml(STATUS_LABEL[c.status] || c.status)}</td>
+        </tr>`
+      )
+      .join("");
 
-    try {
-      const ctx = tenantContext || await getTenantContext();
-      console.log('🔥 ctx:', ctx);
-      if (!ctx) throw new Error("Tenant context not found");
-
-      // Get the authenticated user ID from auth, not from state
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log('🔥 session:', session);
-      if (!session?.user) throw new Error("Not authenticated");
-
-      const authUserId = session.user.id;
-      console.log('🔥 authUserId:', authUserId);
-
-      const amountNum = parseFloat(amount);
-      
-      // Log user IDs for debugging
-      console.log("DEBUG USER IDS:", {
-        authUserId,
-        collected_by_user_id: authUserId,
-        tenantMasjidId: tenantContext.masjidId
-      });
-      
-      // Fetch collector profile to get commission rate
-      const { data: profile } = await supabase
-        .from("subscription_collector_profiles")
-        .select("default_commission_percent")
-        .eq("user_id", authUserId)
-        .eq("masjid_id", tenantContext.masjidId)
-        .single();
-
-      console.log("PROFILE RESULT:", profile);
-      
-      // Force fallback commission rate if profile query fails
-      const commissionRate = profile?.default_commission_percent ?? 10;
-      
-      console.log('🔥 amountNum:', amountNum);
-      console.log('🔥 commissionRate:', commissionRate);
-      const commissionAmount = (amountNum * commissionRate) / 100;
-      console.log('🔥 commissionAmount:', commissionAmount);
-      
-      const insertPayload = {
-        masjid_id: ctx.masjidId,
-        family_id: selectedFamilyId,
-        amount: amountNum,
-        commission_percent: 0,
-        commission_amount: 0,
-        status: 'pending',
-        notes: notes || null,
-        collected_by_user_id: authUserId,
-        date: new Date().toISOString().split('T')[0]
-      };
-      
-      console.log('🔥 Insert payload:', insertPayload);
-
-      const { data, error: insertError } = await supabase
-        .from("subscription_collections")
-        .insert(insertPayload)
-        .select()
-        .single();
-
-      console.log('🔥 Insert result data:', data);
-      console.log('🔥 Insert error:', insertError);
-
-      if (insertError) {
-        console.error('🔥 Insert failed:', insertError);
-        throw insertError;
-      }
-
-      // Phase 1: Commission creation moved to approval time
-      // No employee_commissions record created at collection time
-
-      console.log('🔥 Collection successful, calling loadData()');
-      setSuccess("Collection recorded successfully!");
-      setIsModalOpen(false);
-      setSelectedFamilyId("");
-      setAmount("");
-      setNotes("");
-      loadData(); // Refresh data
-    } catch (e: any) {
-      console.error('🔥 Submit error:', e);
-      setError(e.message || "Failed to record collection");
-    } finally {
-      setSubmitting(false);
-      console.log('🔥 handleSubmit finished');
-    }
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>வசூல் அறிக்கை</title>
+      <style>body{font-family:Arial;margin:20px;font-size:12px}table{width:100%;border-collapse:collapse}
+      th,td{border:1px solid #333;padding:8px}th{background:#f0f0f0}</style></head><body>
+      <h2 style="text-align:center;color:#064e3b">${escapePdfHtml(masjidName)}</h2>
+      <h3 style="text-align:center">எனது வசூல் அறிக்கை</h3>
+      <table><thead><tr><th>குடும்பம்</th><th>தலைவர்</th><th>தேதி</th><th>தொகை</th><th>நிலை</th></tr></thead>
+      <tbody>${rows}</tbody></table></body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
   };
 
-  const handleEdit = (collection: Collection) => {
-    setEditingCollection(collection);
-    setSelectedFamilyId(collection.family_id);
-    setAmount(collection.amount.toString());
-    setNotes(collection.notes || "");
-    setIsEditModalOpen(true);
-  };
-
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingCollection || !selectedFamilyId || !amount) return;
-
-    setSubmitting(true);
-    setError("");
-    setSuccess("");
-
-    try {
-      const ctx = tenantContext || await getTenantContext();
-      if (!ctx) {
-        setError("Tenant context not found");
-        setSubmitting(false);
-        return;
-      }
-
-      const amountNum = parseFloat(amount);
-      const commissionAmount = (amountNum * commissionRate) / 100;
-
-      const { error: updateError } = await supabase
-        .from("subscription_collections")
-        .update({
-          family_id: selectedFamilyId,
-          amount: amountNum,
-          commission_percent: commissionRate,
-          commission_amount: commissionAmount,
-          notes: notes.trim() || null,
-        })
-        .eq("id", editingCollection.id)
-        .eq("collected_by_user_id", user?.id)
-        .eq("status", "pending");
-
-      if (updateError) throw updateError;
-
-      // Update commission if exists
-      try {
-        await supabase
-          .from("employee_commissions")
-          .update({
-            amount: commissionAmount
-          })
-          .eq("collection_id", editingCollection.id);
-      } catch (commissionErr) {
-        console.error('Failed to update commission:', commissionErr);
-      }
-
-      setSuccess("Collection updated successfully!");
-      setIsEditModalOpen(false);
-      setEditingCollection(null);
-      setSelectedFamilyId("");
-      setAmount("");
-      setNotes("");
-      loadData(); // Refresh data
-    } catch (e: any) {
-      setError(e.message || "Failed to update collection");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const getFamilySubscriptionStatus = (familyId: string) => {
-    return familySubscriptions.get(familyId);
-  };
-
-  const stats = useMemo(() => {
-    const total = collections.reduce((sum, c) => sum + c.amount, 0);
-    const pending = collections.filter(c => c.status === 'pending').reduce((sum, c) => sum + c.amount, 0);
-    const approved = collections.filter(c => c.status === 'accepted').reduce((sum, c) => sum + c.amount, 0);
-    const rejected = collections.filter(c => c.status === 'rejected').reduce((sum, c) => sum + c.amount, 0);
-    const totalCommission = collections.filter(c => c.status === 'accepted').reduce((sum, c) => sum + (c.commission_amount || 0), 0);
-
-    return { total, pending, approved, rejected, totalCommission };
-  }, [collections]);
-
-  if (loading) {
+  if (authLoading || loading) {
     return (
-      <AppShell title="Subscription Collections">
-        <div className="app-card p-6 text-center text-[11px] font-bold text-slate-400">
-          Loading...
-        </div>
+      <AppShell title={t.collections}>
+        <div className="app-card p-8 text-center text-sm font-bold text-slate-400">ஏற்றுகிறது...</div>
       </AppShell>
     );
   }
 
   return (
-    <AppShell 
-      title="Subscription Collections"
+    <AppShell
+      title={t.collections}
       actions={
         <button
           onClick={generatePDF}
-          className="p-3 bg-slate-50 text-blue-600 rounded-3xl hover:bg-blue-50 transition-all active:scale-95"
-          title="Download PDF"
+          className="p-3 bg-slate-50 text-blue-600 rounded-3xl hover:bg-blue-50"
+          title="அறிக்கை"
         >
-          <FileText className="w-6 h-6" />
+          <FileText className="w-5 h-5" />
         </button>
       }
     >
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <div className="app-card p-4 text-center">
-          <div className="text-2xl font-black text-emerald-600">{stats.total.toFixed(2)}</div>
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Collected</div>
-        </div>
-        <div className="app-card p-4 text-center">
-          <div className="text-2xl font-black text-amber-600">{stats.pending.toFixed(2)}</div>
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Waiting Approval</div>
-        </div>
-        <div className="app-card p-4 text-center">
-          <div className="text-2xl font-black text-blue-600">{stats.approved.toFixed(2)}</div>
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Approved Amount</div>
-        </div>
-        <div className="app-card p-4 text-center">
-          <div className="text-2xl font-black text-purple-600">{stats.totalCommission.toFixed(2)}</div>
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">My Commission</div>
-        </div>
-      </div>
-
-      {/* Waiting Balance Card */}
-      {waitingBalance && waitingBalance.total_waiting_amount > 0 && (
-        <div className="app-card p-4 mb-6 bg-amber-50 border-amber-200">
-          <div className="flex items-center justify-between">
+      {/* கமிஷன் சுருக்கம் */}
+      {commissionRate > 0 && (
+        <div className="app-card p-4 mb-4 bg-purple-50 border border-purple-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <div className="text-sm font-bold text-amber-800">Waiting Balance</div>
-              <div className="text-xs text-amber-600">
-                {waitingBalance.total_collections_count} collections pending approval
-              </div>
+              <p className="text-xs font-bold text-purple-600 uppercase">உங்கள் கமிஷன் வீதம்</p>
+              <p className="text-2xl font-black text-purple-800">{commissionRate}%</p>
             </div>
-            <div className="text-2xl font-black text-amber-600">
-              {waitingBalance.total_waiting_amount.toFixed(2)}
+            <div className="text-right">
+              <p className="text-xs text-purple-600">அனுமதிக்கப்பட்ட கமிஷன்</p>
+              <p className="font-black text-purple-800">Rs. {commissionEarned.toLocaleString()}</p>
+              {commissionPending > 0 && (
+                <p className="text-[10px] text-amber-700 mt-0.5">
+                  நிலுவை (~Rs. {commissionPending.toLocaleString()})
+                </p>
+              )}
             </div>
           </div>
+          <p className="text-[10px] text-purple-500 mt-2">
+            அனுமதிக்கப்பட்ட வசூலில் மட்டும் கமிஷன் கணக்கிடப்படும்
+          </p>
         </div>
       )}
 
-      {/* Commission Summary Card */}
-      <div className="bg-white rounded-3xl p-6 border border-neutral-200 mb-6">
-        <h3 className="text-lg font-black text-neutral-900 mb-4">Commission Summary</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-emerald-600 mb-1">Total Earned</p>
-                <p className="text-xl font-black text-emerald-700">Rs. {commissionEarned.toLocaleString()}</p>
-              </div>
-              <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-emerald-600" />
-              </div>
-            </div>
-          </div>
-          <div className="bg-blue-50 rounded-2xl p-4 border border-blue-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-blue-600 mb-1">Total Paid</p>
-                <p className="text-xl font-black text-blue-700">Rs. {commissionPaid.toLocaleString()}</p>
-              </div>
-              <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                <CreditCard className="w-5 h-5 text-blue-600" />
-              </div>
-            </div>
-          </div>
-          <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-amber-600 mb-1">Current Balance</p>
-                <p className="text-xl font-black text-amber-700">Rs. {commissionBalance.toLocaleString()}</p>
-              </div>
-              <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
-                <Briefcase className="w-5 h-5 text-amber-600" />
-              </div>
-            </div>
-          </div>
+      {/* எளிய சுருக்கம் */}
+      <div className="grid grid-cols-2 gap-3 mb-6">
+        <div className="app-card p-4 text-center">
+          <div className="text-2xl font-black text-amber-600">{stats.pending.toFixed(0)}</div>
+          <div className="text-xs font-bold text-slate-400 uppercase">நிலுவை (Rs.)</div>
+        </div>
+        <div className="app-card p-4 text-center">
+          <div className="text-2xl font-black text-emerald-600">{stats.approved.toFixed(0)}</div>
+          <div className="text-xs font-bold text-slate-400 uppercase">அனுமதி (Rs.)</div>
         </div>
       </div>
 
-      {/* Action Button */}
+      <p className="text-xs text-slate-500 mb-4 text-center">
+        குடும்பத்தைத் தேர்ந்தெடுத்து தொகை பதிவு செய்யுங்கள். நிர்வாகி அனுமதித்த பிறகு கணக்கில் சேரும்.
+      </p>
+
       <button
-        onClick={() => setIsModalOpen(true)}
+        onClick={openAddModal}
         className="w-full app-btn-primary py-4 mb-6 flex items-center justify-center gap-2"
       >
         <Plus className="w-5 h-5" />
-        Add Collection
+        புதிய வசூல்
       </button>
 
-      {/* My Collections */}
-      {collections.filter(c => c.collected_by_user_id === user?.id).length > 0 && (
-        <>
-          {/* Mobile Card Layout */}
-          <div className="sm:hidden app-card p-5 mb-6">
-            <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4">
-              My Collections
-            </h2>
-            <div className="space-y-3">
-              {collections
-                .filter(c => c.collected_by_user_id === user?.id)
-                .map((collection) => (
-                  <div
-                    key={collection.id}
-                    className="bg-white rounded-2xl p-4 shadow-md border border-slate-200 space-y-3"
-                  >
-                    {/* Family Name and Code */}
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-bold text-slate-800">
-                          {collection.family?.family_code} - {collection.family?.head_name}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          {new Date(collection.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-emerald-600">
-                          {collection.amount.toFixed(2)}
-                        </div>
-                        <div className={`text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full ${
-                          collection.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                          collection.status === 'accepted' ? 'bg-green-100 text-green-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
-                          {collection.status}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Notes */}
-                    {collection.notes && (
-                      <div className="text-xs text-slate-500">{collection.notes}</div>
-                    )}
-
-                    {/* Action Button */}
-                    <div className="pt-2">
-                      <button
-                        onClick={() => handleEdit(collection)}
-                        className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-xl font-medium transition-colors"
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-
-          {/* Desktop Layout */}
-          <div className="hidden sm:block app-card p-5 mb-6">
-            <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4">
-              My Pending Collections
-            </h2>
-            <div className="space-y-2">
-              {collections
-                .filter(c => c.status === 'pending' && c.collected_by_user_id === user?.id)
-                .map((collection) => (
-                  <div
-                    key={collection.id}
-                    className="border border-amber-200 rounded-2xl p-4 bg-amber-50"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <div className="font-bold text-slate-800">
-                          {collection.family?.family_code} - {collection.family?.head_name}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          {new Date(collection.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-emerald-600">
-                          {collection.amount.toFixed(2)}
-                        </div>
-                        <div className="text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full bg-amber-100 text-amber-700">
-                          Pending
-                        </div>
-                      </div>
-                    </div>
-                    {collection.commission_amount > 0 && (
-                      <div className="text-xs text-purple-600 font-bold">
-                        Commission: {collection.commission_amount.toFixed(2)} ({collection.commission_percent}%)
-                      </div>
-                    )}
-                    {collection.notes && (
-                      <div className="text-xs text-slate-500 mt-1">{collection.notes}</div>
-                    )}
-                    <div className="mt-3">
-                      <button
-                        onClick={() => handleEdit(collection)}
-                        className="text-xs px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        </>
+      {error && !isModalOpen && (
+        <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          {error}
+        </div>
       )}
 
-      {/* Recent Collections */}
+      {/* ஒரே பட்டியல் */}
       <div className="app-card p-5">
         <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4">
-          My Collections
+          எனது வசூல்கள் ({stats.count})
         </h2>
-        <>
-          {/* Mobile Card Layout */}
-          <div className="sm:hidden space-y-3">
-            {collections.filter(c => c.status !== 'pending').length === 0 ? (
-              <p className="text-[11px] font-bold text-slate-400 text-center py-8">
-                No collections yet
-              </p>
-            ) : (
-              collections.filter(c => c.status !== 'pending').map((collection) => (
-                <div
-                  key={collection.id}
-                  className="bg-white rounded-2xl p-4 shadow-md border border-slate-100 space-y-3"
-                >
-                  {/* Family Name and Code */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-bold text-slate-800">
-                        {collection.family?.family_code} - {collection.family?.head_name}
-                      </div>
-                      <div className="text-xs text-slate-400">
-                        {new Date(collection.created_at).toLocaleDateString()}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-emerald-600">
-                        {collection.amount.toFixed(2)}
-                      </div>
-                      <div className={`text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full ${
-                        collection.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                        collection.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' :
-                        'bg-rose-100 text-rose-700'
-                      }`}>
-                        {collection.status}
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* Commission and Notes */}
-                  {collection.commission_amount > 0 && (
-                    <div className="text-xs text-purple-600 font-bold">
-                      Commission: {collection.commission_amount.toFixed(2)} ({collection.commission_percent}%)
+        {collections.length === 0 ? (
+          <p className="text-center text-sm text-slate-400 py-8">இன்னும் வசூல் இல்லை</p>
+        ) : (
+          <div className="space-y-3">
+            {collections.map((c) => (
+              <div
+                key={c.id}
+                className="border border-slate-100 rounded-2xl p-4 bg-white flex items-start justify-between gap-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-slate-800 truncate">
+                    {c.family?.family_code} — {c.family?.head_name}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-0.5">
+                    {new Date(c.created_at).toLocaleDateString("ta-LK")}
+                  </div>
+                  {c.notes && <div className="text-xs text-slate-500 mt-1">{c.notes}</div>}
+                  {c.status === "accepted" && (c.commission_amount ?? 0) > 0 && (
+                    <div className="text-xs text-purple-600 font-bold mt-1">
+                      கமிஷன்: Rs. {c.commission_amount?.toLocaleString()} ({c.commission_percent}%)
                     </div>
-                  )}
-                  {collection.notes && (
-                    <div className="text-xs text-slate-500">{collection.notes}</div>
                   )}
                 </div>
-              ))
-            )}
-          </div>
-
-          {/* Desktop Layout */}
-          <div className="hidden sm:block space-y-2">
-            {collections.filter(c => c.status !== 'pending').length === 0 ? (
-              <p className="text-[11px] font-bold text-slate-400 text-center py-8">
-                No collections yet
-              </p>
-            ) : (
-              collections.filter(c => c.status !== 'pending').map((collection) => (
-                <div
-                  key={collection.id}
-                  className="border border-slate-100 rounded-2xl p-4 bg-white"
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <div className="font-bold text-slate-800">
-                        {collection.family?.family_code} - {collection.family?.head_name}
-                      </div>
-                      <div className="text-xs text-slate-400">
-                        {new Date(collection.created_at).toLocaleDateString()}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-emerald-600">
-                        {collection.amount.toFixed(2)}
-                      </div>
-                      <div className={`text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full ${
-                        collection.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                        collection.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' :
-                        'bg-rose-100 text-rose-700'
-                      }`}>
-                        {collection.status}
-                      </div>
-                    </div>
-                  </div>
-                  {collection.commission_amount > 0 && (
-                    <div className="text-xs text-purple-600 font-bold">
-                      Commission: {collection.commission_amount.toFixed(2)} ({collection.commission_percent}%)
-                    </div>
-                  )}
-                  {collection.notes && (
-                    <div className="text-xs text-slate-500 mt-1">{collection.notes}</div>
+                <div className="text-right shrink-0">
+                  <div className="font-black text-emerald-600">Rs. {c.amount.toLocaleString()}</div>
+                  <span className={`inline-block mt-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${STATUS_CLASS[c.status]}`}>
+                    {STATUS_LABEL[c.status]}
+                  </span>
+                  {c.status === "pending" && (
+                    <button
+                      onClick={() => openEditModal(c)}
+                      className="mt-2 flex items-center gap-1 text-xs text-blue-600 font-bold ml-auto"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      திருத்து
+                    </button>
                   )}
                 </div>
-              ))
-            )}
+              </div>
+            ))}
           </div>
-        </>
+        )}
       </div>
 
-      {/* Add Collection Modal */}
+      {/* வசூல் படிவம் */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-black text-slate-900">Add Collection</h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-2 hover:bg-slate-50 rounded-2xl"
-              >
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-black text-slate-900">
+                {editingCollection ? "வசூல் திருத்து" : "புதிய வசூல்"}
+              </h3>
+              <button onClick={closeModal} className="p-2 hover:bg-slate-50 rounded-2xl">
                 <X className="w-5 h-5 text-slate-400" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* QR Scanner */}
-              <div>
+              {!editingCollection && (
                 <button
                   type="button"
-                  onClick={startScanner}
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setIsScannerOpen(true);
+                  }}
                   className="w-full app-btn-secondary py-3 flex items-center justify-center gap-2"
                 >
                   <QrCode className="w-5 h-5" />
-                  Scan QR Code
+                  QR ஸ்கேன்
                 </button>
-              </div>
+              )}
 
-              {/* Search */}
-              <div>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search family by code or name..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-emerald-500/20 outline-none text-sm"
-                  />
-                </div>
-              </div>
-
-              {/* Family Selection */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                  Select Family
-                </label>
-                <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-2xl">
-                  {filteredFamilies.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-slate-400">
-                      {searchTerm ? 'No families found' : 'No families available'}
-                    </div>
-                  ) : (
-                    filteredFamilies.map((family) => {
-                      const subscriptionStatus = getFamilySubscriptionStatus(family.id);
-                      return (
-                        <div
-                          key={family.id}
-                          onClick={() => setSelectedFamilyId(family.id)}
-                          className={`p-3 border-b border-slate-100 last:border-b-0 cursor-pointer hover:bg-emerald-50 transition-colors ${
-                            selectedFamilyId === family.id ? 'bg-emerald-50 border-emerald-200' : ''
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="font-bold text-sm text-slate-800">
-                                {family.family_code} - {family.head_name}
-                              </div>
-                              {family.address && (
-                                <div className="text-xs text-slate-400">{family.address}</div>
-                              )}
-                            </div>
-                            {subscriptionStatus && (
-                              <div className="text-xs text-right">
-                                <div className="text-emerald-600 font-bold">
-                                  {subscriptionStatus.approved_amount.toFixed(2)}
-                                </div>
-                                <div className="text-amber-600">
-                                  {subscriptionStatus.waiting_amount.toFixed(2)} waiting
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              {/* Family Details */}
-              {selectedFamilyId && (() => {
-                const selectedFamily = families.find(f => f.id === selectedFamilyId);
-                if (!selectedFamily) return null;
-                
-                const familyCollections = collections.filter(c => c.family_id === selectedFamilyId);
-                const totalPaid = familyCollections
-                  .filter(c => c.status === 'accepted' || c.status === 'pending')
-                  .reduce((sum, c) => sum + c.amount, 0);
-                
-                const annualFee = selectedFamily.subscription_amount || 0;
-                const balance = Math.max(0, annualFee - totalPaid);
-                
-                return (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-bold text-emerald-800">Family Details</h4>
-                      <button
-                        onClick={() => setShowPaymentHistory(!showPaymentHistory)}
-                        className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded-full hover:bg-blue-200 transition-colors"
-                      >
-                        {showPaymentHistory ? 'Hide' : 'View'} Payment History
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-emerald-600 font-semibold">Family Code:</span>
-                        <div className="font-bold">{selectedFamily.family_code}</div>
-                      </div>
-                      <div>
-                        <span className="text-emerald-600 font-semibold">Head Name:</span>
-                        <div className="font-bold">{selectedFamily.head_name}</div>
-                      </div>
-                      <div>
-                        <span className="text-emerald-600 font-semibold">Annual Fee:</span>
-                        <div className="font-bold">Rs. {annualFee.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <span className="text-emerald-600 font-semibold">Total Paid:</span>
-                        <div className="font-bold text-emerald-700">Rs. {totalPaid.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <span className="text-emerald-600 font-semibold">Balance:</span>
-                        <div className="font-bold text-rose-600">Rs. {balance.toLocaleString()}</div>
-                      </div>
-                    </div>
-                    
-                    {/* Payment History */}
-                    {showPaymentHistory && (
-                      <div className="mt-4 pt-4 border-t border-emerald-200">
-                        <h5 className="font-bold text-emerald-800 mb-3">Payment History</h5>
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {familyCollections.length === 0 ? (
-                            <p className="text-xs text-slate-400 text-center py-4">No payment history found</p>
-                          ) : (
-                            familyCollections
-                              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                              .map((collection) => (
-                                <div key={collection.id} className="bg-white rounded-lg p-3 border border-slate-200">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-bold text-sm text-slate-800">
-                                          Rs. {collection.amount.toFixed(2)}
-                                        </span>
-                                        <div className={`text-xs font-black uppercase tracking-widest px-2 py-1 rounded-full ${
-                                          collection.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                          collection.status === 'accepted' ? 'bg-green-100 text-green-700' :
-                                          'bg-red-100 text-red-700'
-                                        }`}>
-                                          {collection.status}
-                                        </div>
-                                      </div>
-                                      <div className="text-xs text-slate-400">
-                                        {new Date(collection.created_at).toLocaleDateString()}
-                                      </div>
-                                      {collection.notes && (
-                                        <div className="text-xs text-slate-500 mt-1">{collection.notes}</div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Amount */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                  Amount
-                </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                  placeholder="0.00"
-                  required
+                  type="text"
+                  placeholder="குடும்பம் தேடு..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
-              
-              {/* Notes */}
+              <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-2xl">
+                {filteredFamilies.length === 0 ? (
+                  <p className="p-4 text-center text-xs text-slate-400">குடும்பம் இல்லை</p>
+                ) : (
+                  filteredFamilies.map((family) => (
+                    <button
+                      key={family.id}
+                      type="button"
+                      onClick={() => selectFamily(family)}
+                      className={`w-full text-left p-3 border-b border-slate-100 last:border-0 hover:bg-emerald-50 ${
+                        selectedFamilyId === family.id ? "bg-emerald-50" : ""
+                      }`}
+                    >
+                      <div className="font-bold text-sm">{family.family_code} — {family.head_name}</div>
+                      {family.subscription_amount ? (
+                        <div className="text-xs text-emerald-600">சந்தா: Rs. {family.subscription_amount}</div>
+                      ) : null}
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {selectedFamily && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-sm">
+                  <span className="font-bold text-emerald-800">{selectedFamily.head_name}</span>
+                  {selectedFamily.subscription_amount ? (
+                    <span className="text-emerald-600"> — சந்தா Rs. {selectedFamily.subscription_amount}</span>
+                  ) : null}
+                </div>
+              )}
+
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                  Notes (Optional)
-                </label>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">தொகை (Rs.)</label>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  required
+                />
+                {commissionRate > 0 && estimatedCommission > 0 && !editingCollection && (
+                  <p className="text-xs text-purple-600 mt-2 font-bold">
+                    மதிப்பிடப்பட்ட கமிஷன் ({commissionRate}%): Rs. {estimatedCommission.toLocaleString()}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">குறிப்பு (விரும்பினால்)</label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-emerald-500/20 outline-none resize-none"
-                  rows={3}
-                  placeholder="Add any notes..."
+                  rows={2}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-2xl outline-none resize-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
-              {/* Error/Success Messages */}
               {error && (
-                <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3">
-                  <div className="flex items-center gap-2 text-rose-600">
-                    <AlertCircle className="w-4 h-4" />
-                    <span className="text-xs font-bold">{error}</span>
-                  </div>
-                </div>
-              )}
-
-              {success && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
-                  <div className="flex items-center gap-2 text-emerald-600">
-                    <Check className="w-4 h-4" />
-                    <span className="text-xs font-bold">{success}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={!selectedFamilyId || !amount || submitting}
-                className="w-full app-btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submitting ? 'Recording...' : 'Record Collection'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Collection Modal */}
-      {isEditModalOpen && editingCollection && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-black text-slate-900">Edit Collection</h3>
-              <button
-                onClick={() => setIsEditModalOpen(false)}
-                className="p-2 hover:bg-slate-50 rounded-2xl"
-              >
-                <X className="w-5 h-5 text-slate-400" />
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdate} className="space-y-4">
-              {/* Family Selection */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                  Family
-                </label>
-                <select
-                  value={selectedFamilyId}
-                  onChange={(e) => setSelectedFamilyId(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-2xl bg-white text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-                  required
-                >
-                  <option value="">Select Family</option>
-                  {families.map((family) => (
-                    <option key={family.id} value={family.id}>
-                      {family.family_code} - {family.head_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Amount */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                  Amount
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-2xl bg-white text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-                  required
-                />
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                  Notes
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={3}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-2xl bg-white text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-                  placeholder="Optional notes about this collection"
-                />
-              </div>
-
-              {/* Error/Success Messages */}
-              {error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700">
-                  {error}
-                </div>
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700">{error}</div>
               )}
               {success && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-700">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-700 flex items-center gap-2">
+                  <Check className="w-4 h-4" />
                   {success}
                 </div>
               )}
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={!selectedFamilyId || !amount || submitting}
-                className="w-full app-btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full app-btn-primary py-3 disabled:opacity-50"
               >
-                {submitting ? 'Updating...' : 'Update Collection'}
+                {submitting ? "சேமிக்கிறது..." : editingCollection ? "புதுப்பி" : "பதிவு செய்"}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* QR Scanner Modal */}
-      {isScannerOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-black text-slate-900">Scan QR Code</h3>
-              <button
-                onClick={() => setIsScannerOpen(false)}
-                className="p-2 hover:bg-slate-50 rounded-2xl"
-              >
-                <X className="w-5 h-5 text-slate-400" />
-              </button>
-            </div>
-            <div id="qr-reader" className="rounded-2xl overflow-hidden" />
-          </div>
-        </div>
-      )}
+      <QrScannerModal
+        open={isScannerOpen}
+        title="குடும்ப QR ஸ்கேன்"
+        containerId="collections-qr-reader"
+        onClose={() => setIsScannerOpen(false)}
+        onDecodedText={handleQrDecoded}
+        helperText="குடும்ப QR குறியீட்டை ஸ்கேன் செய்யுங்கள்"
+      />
     </AppShell>
   );
 }

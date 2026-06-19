@@ -1,20 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { QrScannerModal } from "@/components/QrScannerModal";
-import QRCode from "qrcode";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import RouteGuard from "@/components/RouteGuard";
 import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
 import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
+import SearchResultsPrintView from "@/components/SearchResultsPrintView";
+import { getPrintEngine, getPrintButtonLabel, type PrintReportType } from "@/lib/print-engine";
 
 type Family = {
   id: string;
@@ -67,17 +66,6 @@ export default function FamiliesPage() {
   
   // Role-based super admin fallback
   const isSuperAdminByRole = tenantContext?.role === 'super_admin' || user?.role === 'super_admin';
-  
-  // Page-level access control
-  if (authLoading) return <div>Loading...</div>;
-  if (!user) {
-    router.push('/login');
-    return null;
-  }
-  
-  if (!hasFamiliesAccess && !userIsSuperAdmin && !isSuperAdminByRole) {
-    return <div>No access to Families module</div>;
-  }
 
   const [isOpen, setIsOpen] = useState(false);
   const [headName, setHeadName] = useState("");
@@ -126,6 +114,8 @@ export default function FamiliesPage() {
   const [qrSpecificInput, setQrSpecificInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const printViewRef = useRef<HTMLDivElement>(null);
+  const [printMasjidName, setPrintMasjidName] = useState("Masjid");
   
   // Family duplicate prevention state
   const [allMasjidMembers, setAllMasjidMembers] = useState<any[]>([]);
@@ -138,6 +128,12 @@ export default function FamiliesPage() {
   // Restore deleted family code state
   const [isRestoreMode, setIsRestoreMode] = useState(false);
   const [manualFamilyCode, setManualFamilyCode] = useState("");
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [authLoading, user, router]);
 
   const t = getTranslation(lang);
 
@@ -284,6 +280,15 @@ export default function FamiliesPage() {
     // Revalidate in background
     fetchFamilies();
   }, [tenantContext?.masjidId, resumeTick]);
+
+  useEffect(() => {
+    const fetchPrintMasjidName = async () => {
+      if (!tenantContext?.masjidId) return;
+      const name = await getPdfMasjidName(supabase, tenantContext.masjidId);
+      setPrintMasjidName(name);
+    };
+    fetchPrintMasjidName();
+  }, [tenantContext?.masjidId]);
 
 
   useEffect(() => {
@@ -776,6 +781,7 @@ export default function FamiliesPage() {
 
   // Generate QR code as dataURL using canvas
   const generateQRDataURL = async (text: string, pixelSize = 200): Promise<string> => {
+    const QRCode = (await import("qrcode")).default;
     return new Promise((resolve, reject) => {
       QRCode.toDataURL(text, {
         width: pixelSize,
@@ -808,6 +814,8 @@ export default function FamiliesPage() {
         console.error('PDF generation not available in server-side rendering');
         return;
       }
+
+      const { default: jsPDF } = await import("jspdf");
       
       // Create new PDF document
       const doc = new jsPDF({
@@ -935,6 +943,11 @@ export default function FamiliesPage() {
         alert("PDF generation not available in server-side rendering");
         return;
       }
+
+      const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+        import("jspdf"),
+        import("jspdf-autotable"),
+      ]);
 
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -1065,9 +1078,39 @@ export default function FamiliesPage() {
     return matchesSearch;
   });
 
+  // ADDITIVE ONLY: Print handler for search results
+  const handlePrintSearchResults = () => {
+    const reportType: PrintReportType = "filtered-search-results";
+    const engine = getPrintEngine(reportType);
+    if (engine === "browser-print") {
+      window.print();
+    }
+  };
+
+  // ADDITIVE ONLY: Download PDF handler for search results
+  const handleDownloadSearchResultsPdf = async () => {
+    if (!printViewRef.current) return;
+    const element = printViewRef.current;
+    const { default: html2pdf } = await import("html2pdf.js");
+    const opt = {
+      margin: 10,
+      filename: "masjid-search-results.pdf",
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+    };
+    html2pdf().from(element).set(opt).save();
+  };
+
+  if (authLoading) return <div>Loading...</div>;
+  if (!user) return null;
+  if (!hasFamiliesAccess && !userIsSuperAdmin && !isSuperAdminByRole) {
+    return <div>No access to Families module</div>;
+  }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-24 font-sans">
+    <>
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col pb-24 font-sans print:hidden">
             {/* App Header */}
       <header className="bg-white/80 backdrop-blur-md sticky top-0 z-20 px-4 py-4 border-b border-slate-100">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1191,8 +1234,24 @@ export default function FamiliesPage() {
         </div>
 
         {searchQuery && (
-          <div className="text-sm font-medium text-emerald-700 px-1">
-            {filteredFamilies.length} குடும்பங்கள் கண்டறியப்பட்டன (Families found)
+          <div className="flex items-center justify-between gap-4">
+            <div className="text-sm font-medium text-emerald-700 px-1">
+              {filteredFamilies.length} குடும்பங்கள் கண்டறியப்பட்டன (Families found)
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={handlePrintSearchResults}
+                className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors"
+              >
+                {getPrintButtonLabel("filtered-search-results", "Search Results")}
+              </button>
+              <button 
+                onClick={handleDownloadSearchResultsPdf}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors"
+              >
+                Download PDF
+              </button>
+            </div>
           </div>
         )}
 
@@ -1925,6 +1984,43 @@ export default function FamiliesPage() {
           </div>
         </div>
       )}
+
     </div>
+
+    {/* Hidden Print View for html2pdf capturing */}
+    {searchQuery && filteredFamilies.length > 0 && (
+      <div className="hidden">
+        <SearchResultsPrintView
+          ref={printViewRef}
+          title="Families Search Results"
+          results={filteredFamilies}
+          columns={[
+            { key: "family_code", label: "Family Code" },
+            { key: "head_name", label: "Head Name" },
+            { key: "address", label: "Address" },
+            { key: "phone", label: "Phone" }
+          ]}
+          masjidName={printMasjidName}
+        />
+      </div>
+    )}
+
+    {/* Print View for Browser Print (window.print) */}
+    {searchQuery && filteredFamilies.length > 0 && (
+      <div className="hidden print:block">
+        <SearchResultsPrintView
+          title="Families Search Results"
+          results={filteredFamilies}
+          columns={[
+            { key: "family_code", label: "Family Code" },
+            { key: "head_name", label: "Head Name" },
+            { key: "address", label: "Address" },
+            { key: "phone", label: "Phone" }
+          ]}
+          masjidName={printMasjidName}
+        />
+      </div>
+    )}
+    </>
   );
 }

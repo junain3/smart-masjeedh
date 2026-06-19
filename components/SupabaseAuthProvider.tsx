@@ -43,6 +43,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
     permissions: Record<string, boolean>;
   }>>([]);
   const recoveryLockRef = useRef(false);
+  const initializationLockRef = useRef(false);
   const [resumeTick, setResumeTick] = useState(0);
 
   const loadTenantContext = async (userId: string) => {
@@ -138,7 +139,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
     }
   };
 
-  // Timeout wrapper helper
+  // Timeout wrapper helper (increased timeout to 15s)
   const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
     return await Promise.race([
       promise,
@@ -149,11 +150,15 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
   };
 
   useEffect(() => {
+    // Prevent duplicate initializations (fixes Strict Mode double-run)
+    if (initializationLockRef.current) return;
+    initializationLockRef.current = true;
+
     const initializeAuth = async () => {
       try {
         const { data: { session }, error } = await withTimeout(
           supabase.auth.getSession(),
-          5000,
+          15000,
           "supabase.auth.getSession()"
         );
         
@@ -168,7 +173,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
           // Wait for loadTenantContext to complete before setting loading to false
           await withTimeout(
             loadTenantContext(session.user.id),
-            5000,
+            15000,
             "loadTenantContext()"
           );
           setLoading(false);
@@ -194,15 +199,14 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
             setUser(session.user);
 
             // Skip tenant context reload if already loaded for same user
-            if (tenantContext?.masjidId && user?.id === session.user.id) {
+            if (tenantContext?.masjidId) {
               setLoading(false);
             } else {
               await withTimeout(
                 loadTenantContext(session.user.id),
-                5000,
+                15000,
                 "loadTenantContext() in onAuthStateChange"
               );
-
               setLoading(false);
             }
           } else {
@@ -231,7 +235,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
     try {
       const { data: { session } } = await withTimeout(
         supabase.auth.getSession(),
-        5000,
+        15000,
         "supabase.auth.getSession() in recoverSession"
       );
 
@@ -240,7 +244,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
           setUser(session.user);
           await withTimeout(
             loadTenantContext(session.user.id),
-            5000,
+            15000,
             "loadTenantContext() in recoverSession"
           );
           setLoading(false);

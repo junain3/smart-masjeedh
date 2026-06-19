@@ -65,7 +65,7 @@ BEGIN
         p_user_id,
         NULL,
         v_total_amount,
-        format('Subscription Collections Batch - %s families', array_length(p_collection_ids, 1)),
+        format('சந்தா வசூல் — %s குடும்பங்கள்', array_length(p_collection_ids, 1)),
         'income',
         'subscription',
         NOW()

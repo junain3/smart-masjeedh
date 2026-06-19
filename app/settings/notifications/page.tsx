@@ -16,6 +16,7 @@ export default function NotificationSettingsPage() {
   const router = useRouter();
   const { user, loading: authLoading, tenantContext } = useSupabaseAuth();
   const [lang, setLang] = useState<Language>("en");
+  const [loading, setLoading] = useState(true);
   const t = getTranslation(lang);
 
   // Login redirect effect
@@ -25,20 +26,15 @@ export default function NotificationSettingsPage() {
     }
   }, [authLoading, user, router]);
 
-  // Return null if redirecting
-  if (!authLoading && !user) return null;
+  useEffect(() => {
+    setLoading(false);
+  }, []);
 
-  // Page-level access control (after all hooks)
+  if (!authLoading && !user) return null;
   if (authLoading) return <div>Loading...</div>;
   if (!tenantContext?.permissions?.settings && tenantContext?.role !== 'super_admin') {
     return <div>No access</div>;
   }
-
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(false);
-  }, []);
 
   if (loading) {
     return (

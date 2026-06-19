@@ -12,15 +12,8 @@ import {
   Edit,
   Trash2,
   Search,
-  Menu,
-  LogOut,
-  Settings,
-  HelpCircle,
-  Briefcase,
   Download,
-  Home as HomeIcon,
-  Users,
-  CreditCard,
+  Plus,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
@@ -30,6 +23,21 @@ import { QrScannerModal } from "@/components/QrScannerModal";
 import { useAppToast } from "@/components/ToastProvider";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
+import { AppShell } from "@/components/AppShell";
+import RouteGuard from "@/components/RouteGuard";
+import {
+  formatTransactionCategory,
+  formatTransactionDescription,
+  isAccountSubscriptionTransaction,
+  buildDirectSubscriptionDescription,
+  syncCollectionForAccountTransaction,
+  deleteCollectionForAccountTransaction,
+  createPendingCollectionFromAccounts,
+  updatePendingCollectionFromAccounts,
+  deletePendingCollectionFromAccounts,
+  extractDirectAccountNote,
+  isDirectAccountCollection,
+} from "@/lib/collection-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -50,40 +58,30 @@ type Family = {
   head_name: string;
 };
 
+type PendingAccountCollection = {
+  id: string;
+  family_id: string;
+  amount: number;
+  date: string;
+  notes?: string | null;
+  status: string;
+};
+
 export default function AccountsPage() {
+  // ALL HOOKS FIRST - NO CONDITIONAL CALLS!
   const router = useRouter();
   const { user: authUser, signOut, tenantContext, loading: authLoading, resumeTick } = useSupabaseAuth();
-  
-  // Parse permissions and check access
-  const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
-  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
-  const hasAccountsAccess = hasModulePermission(parsedPermissions, 'accounts');
-  
-  // Login redirect effect
-  useEffect(() => {
-    if (!authLoading && !authUser) {
-      router.push('/login');
-    }
-  }, [authLoading, authUser, router]);
-  
-  // Page-level access control
-  if (authLoading) return <div>Loading...</div>;
-  if (!authUser) {
-    router.push('/login');
-    return null;
-  }
-  
-  if (!hasAccountsAccess && !userIsSuperAdmin) {
-    return <div>No access to Accounts module</div>;
-  }
-
   const { toast } = useAppToast();
+  
+  // State hooks
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
+  const [pendingAccountCollections, setPendingAccountCollections] = useState<PendingAccountCollection[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
   const [showReportOptions, setShowReportOptions] = useState(false);
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
@@ -94,12 +92,62 @@ export default function AccountsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [allowed, setAllowed] = useState(true);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [lang, setLang] = useState<Language>("en");
 
+  // Parse permissions and check access (no hooks here)
+  const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const hasAccountsAccess = hasModulePermission(parsedPermissions, 'accounts');
+  
+  // Login redirect effect
+  useEffect(() => {
+    if (!authLoading && !authUser) {
+      router.push('/login');
+    }
+  }, [authLoading, authUser, router]);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (!authUser) {
+        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+        return;
+      }
+
+      setUser(authUser);
+      // Only fetch data when tenantContext is available
+      if (tenantContext?.masjidId) {
+        await fetchData(authUser);
+      }
+    };
+
+    checkAuth();
+  }, [authUser, tenantContext?.masjidId, resumeTick]);
+
+  useEffect(() => {
+    const savedLang = localStorage.getItem("app_lang") as Language;
+    if (savedLang) setLang(savedLang);
+  }, []);
+  
+  // Page-level access control (after all hooks)
+  if (authLoading) return <div>Loading...</div>;
+  if (!authUser) {
+    router.push('/login');
+    return null;
+  }
+  
+  if (!hasAccountsAccess && !userIsSuperAdmin) {
+    return <div>No access to Accounts module</div>;
+  }
+
   const t = getTranslation(lang);
+
+  const displayDescription = (tx: Transaction) =>
+    formatTransactionDescription(tx.description, tx.category, tx.family_id);
+
+  const displayCategory = (tx: Transaction) =>
+    tx.category ? formatTransactionCategory(tx.category) : "";
 
   const isNonZeroAmount = (value: unknown) => {
     if (typeof value !== "number") return false;
@@ -144,28 +192,6 @@ export default function AccountsPage() {
     );
   });
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      if (!authUser) {
-        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
-        return;
-      }
-
-      setUser(authUser);
-      // Only fetch data when tenantContext is available
-      if (tenantContext?.masjidId) {
-        await fetchData(authUser);
-      }
-    };
-
-    checkAuth();
-  }, [authUser, tenantContext?.masjidId, resumeTick]);
-
-  useEffect(() => {
-    const savedLang = localStorage.getItem("app_lang") as Language;
-    if (savedLang) setLang(savedLang);
-  }, []);
-
   async function fetchData(currentUser: any) {
     if (!supabase || !currentUser) {
       setLoading(false);
@@ -182,7 +208,7 @@ export default function AccountsPage() {
       }
 
       // Run queries in parallel instead of sequentially
-      const [transactionsResponse, familiesResponse] = await Promise.all([
+      const [transactionsResponse, familiesResponse, pendingCollectionsResponse] = await Promise.all([
         supabase
           .from("transactions")
           .select("id, type, amount, category, description, date, family_id, masjid_id, user_id, created_at")
@@ -191,14 +217,25 @@ export default function AccountsPage() {
         supabase
           .from("families")
           .select("id, family_code, head_name")
+          .eq("masjid_id", tenantContext.masjidId),
+        supabase
+          .from("subscription_collections")
+          .select("id, family_id, amount, date, notes, status")
           .eq("masjid_id", tenantContext.masjidId)
+          .eq("status", "pending"),
       ]);
 
       if (transactionsResponse.error) throw transactionsResponse.error;
       if (familiesResponse.error) throw familiesResponse.error;
+      if (pendingCollectionsResponse.error) throw pendingCollectionsResponse.error;
 
       setTransactions((transactionsResponse.data as Transaction[]) || []);
       setFamilies((familiesResponse.data as Family[]) || []);
+      setPendingAccountCollections(
+        ((pendingCollectionsResponse.data as PendingAccountCollection[]) || []).filter((c) =>
+          isDirectAccountCollection(c.notes)
+        )
+      );
       setErrorMessage("");
     } catch (err: any) {
       console.error("Fetch error:", err);
@@ -234,53 +271,122 @@ export default function AccountsPage() {
       }
 
       const authUserId = session.user.id;
+      const amountNum = parseFloat(amount);
+      if (!Number.isFinite(amountNum) || amountNum <= 0) {
+        setErrorMessage("சரியான தொகை உள்ளிடவும்");
+        setSubmitting(false);
+        return;
+      }
 
-      const finalDescription =
-        type === "subscription" ? `Subscription: ${description}` : description;
-      const finalCategory = type === "subscription" ? "subscription" : category;
+      if (type === "subscription" && !selectedFamilyId) {
+        toast({
+          kind: "error",
+          title: "குடும்பம் தேவை",
+          message: "சந்தா வரவுக்கு குடும்பத்தைத் தேர்ந்தெடுக்கவும்",
+        });
+        setSubmitting(false);
+        return;
+      }
 
-      if (editingTransaction) {
+      const selectedFamily = families.find((f) => f.id === selectedFamilyId);
+      const isSubscription = type === "subscription";
+
+      const finalDescription = isSubscription
+        ? buildDirectSubscriptionDescription(
+            selectedFamily?.family_code || "—",
+            selectedFamily?.head_name || "—",
+            description
+          )
+        : description;
+      const finalCategory = isSubscription ? "subscription" : category;
+
+      if (isSubscription && editingCollectionId) {
+        const { error: updateError } = await updatePendingCollectionFromAccounts(
+          supabase,
+          editingCollectionId,
+          ctx.masjidId,
+          {
+            familyId: selectedFamilyId,
+            amount: amountNum,
+            date,
+            notes: description.trim() || null,
+          }
+        );
+        if (updateError) throw updateError;
+      } else if (isSubscription && !editingTransaction) {
+        const { error: insertError } = await createPendingCollectionFromAccounts(supabase, {
+          masjidId: ctx.masjidId,
+          userId: authUserId,
+          familyId: selectedFamilyId,
+          amount: amountNum,
+          date,
+          notes: description.trim() || null,
+        });
+        if (insertError) throw insertError;
+      } else if (editingTransaction) {
         const { error } = await supabase
           .from("transactions")
           .update({
-            amount: parseFloat(amount),
+            amount: amountNum,
             description: finalDescription,
-            type: type === "subscription" ? "income" : type,
+            type: isSubscription ? "income" : type,
             category: finalCategory,
             date,
             masjid_id: ctx.masjidId,
             user_id: authUserId,
-            family_id: type === "subscription" ? selectedFamilyId : null,
+            family_id: null,
           })
           .eq("id", editingTransaction.id)
           .eq("masjid_id", ctx.masjidId);
 
         if (error) throw error;
-      } else {
-        console.log("TRANSACTION INSERT MASJID ID:", ctx?.masjidId);
-console.log("SELECTED FAMILY ID:", selectedFamilyId);
-console.log("AUTH USER ID:", authUserId);
-const { error } = await supabase
-  .from("transactions")
-  .insert([
-    {
-      amount: parseFloat(amount),
-      description: finalDescription,
-      type: type === "subscription" ? "income" : type,
-      category: finalCategory,
-      date,
-      masjid_id: ctx.masjidId,
-      user_id: authUserId,
-      family_id: type === "subscription" ? selectedFamilyId : null,
-    },
-  ]);
+
+        if (isSubscription) {
+          const { error: syncError } = await syncCollectionForAccountTransaction(supabase, {
+            masjidId: ctx.masjidId,
+            userId: authUserId,
+            familyId: selectedFamilyId,
+            amount: amountNum,
+            date,
+            notes: description.trim() || null,
+            transactionId: editingTransaction.id,
+          });
+          if (syncError) throw syncError;
+        } else if (isAccountSubscriptionTransaction(editingTransaction)) {
+          await deleteCollectionForAccountTransaction(supabase, editingTransaction.id);
+        }
+      } else if (!isSubscription) {
+        const { error } = await supabase
+          .from("transactions")
+          .insert([
+            {
+              amount: amountNum,
+              description: finalDescription,
+              type,
+              category: finalCategory,
+              date,
+              masjid_id: ctx.masjidId,
+              user_id: authUserId,
+              family_id: null,
+            },
+          ]);
 
         if (error) throw error;
       }
 
       setIsModalOpen(false);
+      const wasEditingPendingCollection = !!editingCollectionId;
       resetForm();
       await fetchData(user);
+      if (isSubscription) {
+        toast({
+          kind: "success",
+          title: "சந்தா பதிவு",
+          message: wasEditingPendingCollection
+            ? "நிலுவையில் உள்ள சந்தா புதுப்பிக்கப்பட்டது"
+            : "குடும்பம் உடனே புதுப்பிக்கப்பட்டது — Main account-க்கு batch அனுமதியில் சேரும்",
+        });
+      }
     } catch (err: any) {
       console.error("Transaction error:", err);
       toast({
@@ -301,18 +407,114 @@ const { error } = await supabase
     setType("income");
     setDate(new Date().toISOString().split("T")[0]);
     setEditingTransaction(null);
+    setEditingCollectionId(null);
+  };
+
+  const openPendingCollectionEditor = (collection: PendingAccountCollection) => {
+    setEditingTransaction(null);
+    setEditingCollectionId(collection.id);
+    setType("subscription");
+    setAmount(collection.amount.toString());
+    setDate(collection.date);
+    setSelectedFamilyId(collection.family_id);
+    setDescription(extractDirectAccountNote(collection.notes));
+    setCategory("");
+    setIsModalOpen(true);
+  };
+
+  async function deletePendingCollection(id: string) {
+    if (!supabase || !user) return;
+
+    const ok = window.confirm("இந்த நிலுவை சந்தாவை நீக்க வேண்டுமா?");
+    if (!ok) return;
+
+    try {
+      const ctx = tenantContext || (await getTenantContext());
+      if (!ctx) throw new Error("Tenant context not available");
+
+      const { error } = await deletePendingCollectionFromAccounts(supabase, id, ctx.masjidId);
+      if (error) throw error;
+
+      await fetchData(user);
+      toast({
+        kind: "success",
+        title: "நீக்கப்பட்டது",
+        message: "நிலுவை சந்தா நீக்கப்பட்டது",
+      });
+    } catch (err: any) {
+      toast({
+        kind: "error",
+        title: "Error",
+        message: err.message || "Failed to delete pending collection",
+      });
+    }
+  }
+
+  const openTransactionEditor = async (tx: Transaction) => {
+    setEditingCollectionId(null);
+    setEditingTransaction(tx);
+    setAmount(tx.amount.toString());
+    setDate(tx.date);
+    setCategory(tx.category || "");
+
+    if (isAccountSubscriptionTransaction(tx)) {
+      setType("subscription");
+      const { data: linked } = await supabase
+        .from("subscription_collections")
+        .select("family_id, notes")
+        .eq("main_transaction_id", tx.id)
+        .maybeSingle();
+      setSelectedFamilyId(linked?.family_id || tx.family_id || "");
+      setDescription(
+        linked?.notes ||
+          tx.description.replace(/^சந்தா வரவு[^:]*:\s*/i, "").replace(/^Subscription:\s*/i, "")
+      );
+    } else {
+      setType(tx.type === "expense" ? "expense" : "income");
+      setDescription(tx.description.replace(/^(Subscription|Income|Expense):\s*/i, ""));
+      setSelectedFamilyId(tx.family_id || "");
+    }
+    setIsModalOpen(true);
   };
 
   async function deleteTransaction(id: string) {
+    console.log("Deleting transaction ID:", id);
+    console.log("Current tenant context:", tenantContext);
     if (!supabase || !user) return;
 
     const ok = window.confirm(t.confirm_delete);
     if (!ok) return;
 
     try {
-      // Use tenantContext from useMockAuth instead of getTenantContext
       const ctx = tenantContext || await getTenantContext();
-      if (!ctx) return;
+      console.log("Final ctx for delete:", ctx);
+      if (!ctx) {
+        console.error("No tenant context available!");
+        throw new Error("Tenant context not available");
+      }
+
+      // First log the transaction to verify it exists
+      const { data: existingTx, error: fetchError } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("id", id)
+        .eq("masjid_id", ctx.masjidId)
+        .maybeSingle();
+
+      if (fetchError) {
+        console.error("Error fetching transaction to delete:", fetchError);
+        throw fetchError;
+      }
+
+      console.log("Found transaction to delete:", existingTx);
+
+      if (existingTx && isAccountSubscriptionTransaction(existingTx)) {
+        const { error: collectionDeleteError } = await deleteCollectionForAccountTransaction(
+          supabase,
+          id
+        );
+        if (collectionDeleteError) throw collectionDeleteError;
+      }
 
       const { error } = await supabase
         .from("transactions")
@@ -320,13 +522,19 @@ const { error } = await supabase
         .eq("id", id)
         .eq("masjid_id", ctx.masjidId);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase delete error:", error);
+        throw error;
+      }
+
+      console.log("Transaction deleted successfully!");
       await fetchData(user);
     } catch (err: any) {
+      console.error("Full delete error:", err);
       toast({
         kind: "error",
         title: "Error",
-        message: err.message || "Failed",
+        message: err.message || "Failed to delete transaction",
       });
     }
   }
@@ -380,8 +588,8 @@ const { error } = await supabase
                     (tx) => `
                   <tr>
                     <td>${new Date(tx.date).toLocaleDateString()}</td>
-                    <td>${escapePdfHtml(tx.description)}</td>
-                    <td>${escapePdfHtml(tx.category || "-")}</td>
+                    <td>${escapePdfHtml(formatTransactionDescription(tx.description, tx.category, tx.family_id))}</td>
+                    <td>${escapePdfHtml(tx.category ? formatTransactionCategory(tx.category) : "-")}</td>
                     <td>${escapePdfHtml(tx.type)}</td>
                     <td>${tx.type === "expense" ? "-" : "+"}Rs. ${tx.amount}</td>
                   </tr>
@@ -403,18 +611,6 @@ const { error } = await supabase
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      if (signOut) {
-        await signOut();
-      }
-    } catch (error) {
-      console.error("Logout error:", error);
-    } finally {
-      window.location.href = "/login";
-    }
-  };
-
   const handleQrDecodedText = (decodedText: string) => {
     if (!decodedText) return;
     console.log("QR scanned:", decodedText);
@@ -426,220 +622,194 @@ const { error } = await supabase
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      <aside
-        className={`fixed lg:static inset-y-0 left-0 z-40 w-72 bg-white border-r border-neutral-200 transform transition-transform duration-300 ease-in-out ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
-      >
-        <div className="h-full flex flex-col">
-          <div className="p-6 border-b border-neutral-200">
-            <h1 className="text-2xl font-black text-neutral-900">Masjid</h1>
-            <p className="text-sm text-neutral-600">Your Masjid</p>
+    <RouteGuard>
+      <AppShell title={t.accounts}>
+        {errorMessage && (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4">
+            {errorMessage}
           </div>
+        )}
 
-          <nav className="flex-1 p-4 space-y-2">
-            <Link
-              href="/"
-              onClick={() => setIsSidebarOpen(false)}
-              className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
-            >
-              <HomeIcon className="w-5 h-5" />
-              <span>{t.dashboard}</span>
-            </Link>
-
-            <Link
-              href="/families"
-              onClick={() => setIsSidebarOpen(false)}
-              className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
-            >
-              <Users className="w-5 h-5" />
-              <span>{t.families}</span>
-            </Link>
-
-            <Link
-              href="/accounts"
-              onClick={() => setIsSidebarOpen(false)}
-              className="flex items-center gap-4 p-4 bg-emerald-50 text-emerald-700 rounded-3xl font-bold transition-all border-2 border-emerald-200"
-            >
-              <CreditCard className="w-5 h-5" />
-              <span>{t.accounts}</span>
-            </Link>
-
-            <Link
-              href="/staff"
-              onClick={() => setIsSidebarOpen(false)}
-              className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
-            >
-              <Briefcase className="w-5 h-5 text-emerald-600" />
-              <span>{t.staff_management || t.staff}</span>
-            </Link>
-
-            <Link
-              href="/settings"
-              onClick={() => setIsSidebarOpen(false)}
-              className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
-            >
-              <Settings className="w-5 h-5" />
-              <span>{t.settings}</span>
-            </Link>
-
-            <Link
-              href="/events"
-              onClick={() => setIsSidebarOpen(false)}
-              className="flex items-center gap-4 p-4 hover:bg-neutral-50 text-neutral-600 rounded-3xl font-bold transition-all"
-            >
-              <Calendar className="w-5 h-5 text-amber-500" />
-              <span>{t.events || "Events"}</span>
-            </Link>
-
-            <div className="flex items-center gap-4 p-4 opacity-40 text-neutral-600 rounded-3xl font-bold cursor-not-allowed">
-              <HelpCircle className="w-5 h-5" />
-              <span>Help & Support</span>
+        <div className="rounded-3xl p-8 text-white shadow-xl relative overflow-hidden bg-gradient-to-br from-neutral-900 via-neutral-900 to-emerald-900">
+          <div className="absolute top-0 right-0 p-8 opacity-10">
+            <Wallet className="w-24 h-24" />
+          </div>
+          <div className="relative z-10 space-y-4">
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="space-y-1">
+                <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">Total Income</p>
+                <h3 className="text-2xl font-black text-emerald-400">
+                  Rs.{" "}
+                  {financialTransactions
+                    .filter((tx) => getFinancialKind(tx) === "income")
+                    .reduce((sum, tx) => sum + tx.amount, 0)
+                    .toLocaleString()}
+                </h3>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">Total Expense</p>
+                <h3 className="text-2xl font-black text-rose-400">
+                  Rs.{" "}
+                  {financialTransactions
+                    .filter((tx) => getFinancialKind(tx) === "expense")
+                    .reduce((sum, tx) => sum + tx.amount, 0)
+                    .toLocaleString()}
+                </h3>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">{t.balance}</p>
+                <h2 className="text-2xl font-black">
+                  Rs.{" "}
+                  {financialTransactions
+                    .reduce(
+                      (sum, tx) => sum + (getFinancialKind(tx) === "income" ? tx.amount : -tx.amount),
+                      0
+                    )
+                    .toLocaleString()}
+                </h2>
+              </div>
             </div>
-          </nav>
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={() => {
+              resetForm();
+              setIsModalOpen(true);
+            }}
+            className="flex-1 py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            {t.add_transaction}
+          </button>
 
           <button
-            onClick={handleLogout}
-            className="m-4 flex items-center gap-4 p-4 text-red-600 hover:bg-red-50 rounded-3xl font-bold transition-all"
+            onClick={handlePrintPDF}
+            className="flex-1 py-4 bg-blue-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
           >
-            <LogOut className="w-5 h-5" />
-            <span>{t.logout}</span>
+            <Download className="w-5 h-5" />
+            Download PDF
+          </button>
+
+          <button
+            onClick={() => setIsScannerOpen(true)}
+            className="py-4 px-4 bg-purple-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-purple-700 active:scale-95 transition-all"
+          >
+            <QrCode className="w-5 h-5" />
           </button>
         </div>
-      </aside>
 
-      <div className="flex-1 flex flex-col min-h-screen">
-        <header className="p-4 flex items-center justify-between sticky top-0 bg-white/80 backdrop-blur-md z-20 border-b border-neutral-200">
-          <button
-            onClick={() => setIsSidebarOpen(true)}
-            className="lg:hidden p-2 text-neutral-600 hover:bg-neutral-50 rounded-3xl transition-colors"
-          >
-            <Menu className="w-6 h-6" />
-          </button>
-          <h1 className="text-xl font-black text-neutral-900">{t.accounts}</h1>
-          <div className="w-10"></div>
-        </header>
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-neutral-400" />
+          <input
+            type="text"
+            placeholder={t.search || "Search transactions..."}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-12 pr-4 py-4 bg-white border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          />
+        </div>
 
-        <main className="flex-1 p-4 lg:p-6 space-y-6">
-          {errorMessage && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4">
-              {errorMessage}
+        <div className="space-y-3">
+          <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest ml-1">
+            {t.transactions}
+          </h3>
+
+          {filteredTransactions.length === 0 ? (
+            <div className="bg-white rounded-3xl p-8 text-center border border-neutral-200">
+              <Wallet className="w-12 h-12 mx-auto mb-4 text-neutral-300" />
+              <h3 className="font-semibold text-neutral-900 mb-2">
+                {searchQuery ? "No transactions found" : "No transactions"}
+              </h3>
+              <p className="text-sm text-neutral-600">
+                {searchQuery
+                  ? "Try a different search term"
+                  : "Add your first transaction to get started."}
+              </p>
             </div>
-          )}
+          ) : (
+            <>
+              {/* Mobile Card Layout */}
+              <div className="sm:hidden space-y-3 w-full">
+                {filteredTransactions.map((tx, idx) => {
+                  const kind = getFinancialKind(tx);
+                  const altBg = idx % 2 === 0 ? "bg-white/65" : "bg-emerald-50/20";
 
-          <div className="rounded-3xl p-8 text-white shadow-xl relative overflow-hidden bg-gradient-to-br from-neutral-900 via-neutral-900 to-emerald-900">
-            <div className="absolute top-0 right-0 p-8 opacity-10">
-              <Wallet className="w-24 h-24" />
-            </div>
-            <div className="relative z-10 space-y-4">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="space-y-1">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">Total Income</p>
-                  <h3 className="text-2xl font-black text-emerald-400">
-                    Rs.{" "}
-                    {financialTransactions
-                      .filter((tx) => getFinancialKind(tx) === "income")
-                      .reduce((sum, tx) => sum + tx.amount, 0)
-                      .toLocaleString()}
-                  </h3>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">Total Expense</p>
-                  <h3 className="text-2xl font-black text-rose-400">
-                    Rs.{" "}
-                    {financialTransactions
-                      .filter((tx) => getFinancialKind(tx) === "expense")
-                      .reduce((sum, tx) => sum + tx.amount, 0)
-                      .toLocaleString()}
-                  </h3>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">{t.balance}</p>
-                  <h2 className="text-2xl font-black">
-                    Rs.{" "}
-                    {financialTransactions
-                      .reduce(
-                        (sum, tx) => sum + (getFinancialKind(tx) === "income" ? tx.amount : -tx.amount),
-                        0
-                      )
-                      .toLocaleString()}
-                  </h2>
-                </div>
+                  return (
+                    <div
+                      key={tx.id}
+                      className={`bg-white rounded-2xl p-4 shadow-md space-y-3 border ${altBg}`}
+                    >
+                      {/* Transaction Type and Date */}
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`text-sm font-black uppercase tracking-widest ${
+                            kind === "income" ? "text-emerald-600" : "text-rose-600"
+                          }`}
+                        >
+                          {kind === "income" ? "Income" : "Expense"}
+                        </span>
+                        <span className="text-xs text-neutral-500">{tx.date}</span>
+                      </div>
+
+                      {/* Description and Category */}
+                      <div className="space-y-1">
+                        <p className="font-semibold text-neutral-900">{displayDescription(tx)}</p>
+                        {tx.category && (
+                          <p className="text-sm text-neutral-600">{displayCategory(tx)}</p>
+                        )}
+                      </div>
+
+                      {/* Amount and Actions */}
+                      <div className="flex items-center justify-between pt-2">
+                        <p
+                          className={`text-xl font-black ${
+                            kind === "income" ? "text-emerald-600" : "text-rose-600"
+                          }`}
+                        >
+                          {kind === "income" ? "+" : "-"}Rs. {tx.amount.toLocaleString()}
+                        </p>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => openTransactionEditor(tx)}
+                            className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-colors"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={() => deleteTransaction(tx.id)}
+                            className="p-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-          </div>
 
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                resetForm();
-                setIsModalOpen(true);
-              }}
-              className="flex-1 py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all"
-            >
-              {t.add_transaction}
-            </button>
+              {/* Desktop Table Layout */}
+              <div className="hidden sm:block space-y-3 w-full">
+                {filteredTransactions.map((tx, idx) => {
+                  const kind = getFinancialKind(tx);
+                  const altBg = idx % 2 === 0 ? "bg-white/65" : "bg-emerald-50/20";
 
-            <button
-              onClick={handlePrintPDF}
-              className="flex-1 py-4 bg-blue-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-              <Download className="w-5 h-5" />
-              Download PDF
-            </button>
-
-            <button
-              onClick={() => setIsScannerOpen(true)}
-              className="py-4 px-4 bg-purple-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-purple-700 active:scale-95 transition-all"
-            >
-              <QrCode className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-neutral-400" />
-            <input
-              type="text"
-              placeholder={t.search || "Search transactions..."}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 bg-white border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            />
-          </div>
-
-          <div className="space-y-3">
-            <h3 className="text-sm font-black text-neutral-600 uppercase tracking-widest ml-1">
-              {t.transactions}
-            </h3>
-
-            {filteredTransactions.length === 0 ? (
-              <div className="bg-white rounded-3xl p-8 text-center border border-neutral-200">
-                <Wallet className="w-12 h-12 mx-auto mb-4 text-neutral-300" />
-                <h3 className="font-semibold text-neutral-900 mb-2">
-                  {searchQuery ? "No transactions found" : "No transactions"}
-                </h3>
-                <p className="text-sm text-neutral-600">
-                  {searchQuery
-                    ? "Try a different search term"
-                    : "Add your first transaction to get started."}
-                </p>
-              </div>
-            ) : (
-              <>
-                {/* Mobile Card Layout */}
-                <div className="sm:hidden space-y-3 w-full">
-                  {filteredTransactions.map((tx, idx) => {
-                    const kind = getFinancialKind(tx);
-                    const altBg = idx % 2 === 0 ? "bg-white/65" : "bg-emerald-50/20";
-
-                    return (
+                  return (
+                    <div
+                      key={tx.id}
+                      className={`bg-white rounded-3xl p-5 flex items-center justify-between group hover:border-emerald-200 transition-all relative overflow-hidden border ${altBg}`}
+                    >
                       <div
-                        key={tx.id}
-                        className={`bg-white rounded-2xl p-4 shadow-md space-y-3 border ${altBg}`}
-                      >
-                        {/* Transaction Type and Date */}
-                        <div className="flex items-center justify-between">
+                        className={`absolute left-0 top-3 bottom-3 w-1 rounded-full ${
+                          kind === "income" ? "bg-emerald-600" : "bg-rose-600"
+                        }`}
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
                           <span
                             className={`text-sm font-black uppercase tracking-widest ${
                               kind === "income" ? "text-emerald-600" : "text-rose-600"
@@ -649,145 +819,102 @@ const { error } = await supabase
                           </span>
                           <span className="text-xs text-neutral-500">{tx.date}</span>
                         </div>
-
-                        {/* Description and Category */}
-                        <div className="space-y-1">
-                          <p className="font-semibold text-neutral-900">{tx.description}</p>
-                          {tx.category && <p className="text-sm text-neutral-600">{tx.category}</p>}
-                        </div>
-
-                        {/* Amount and Actions */}
-                        <div className="flex items-center justify-between pt-2">
-                          <p
-                            className={`text-xl font-black ${
-                              kind === "income" ? "text-emerald-600" : "text-rose-600"
-                            }`}
-                          >
-                            {kind === "income" ? "+" : "-"}Rs. {tx.amount.toLocaleString()}
-                          </p>
-
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                setEditingTransaction(tx);
-                                setAmount(tx.amount.toString());
-                                setDescription(
-                                  tx.description.replace(/^(Subscription|Income|Expense):\s*/i, "")
-                                );
-                                setCategory(tx.category);
-                                setDate(tx.date);
-                                setType(tx.type);
-                                setSelectedFamilyId(tx.family_id || "");
-                                setIsModalOpen(true);
-                              }}
-                              className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-colors"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-
-                            <button
-                              onClick={() => deleteTransaction(tx.id)}
-                              className="p-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
+                        <p className="font-semibold text-neutral-900 mb-1">{displayDescription(tx)}</p>
+                        {tx.category && (
+                          <p className="text-sm text-neutral-600">{displayCategory(tx)}</p>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
 
-                {/* Desktop Table Layout */}
-                <div className="hidden sm:block space-y-3 w-full">
-                  {filteredTransactions.map((tx, idx) => {
-                    const kind = getFinancialKind(tx);
-                    const altBg = idx % 2 === 0 ? "bg-white/65" : "bg-emerald-50/20";
-
-                    return (
-                      <div
-                        key={tx.id}
-                        className={`bg-white rounded-3xl p-5 flex items-center justify-between group hover:border-emerald-200 transition-all relative overflow-hidden border ${altBg}`}
-                      >
-                        <div
-                          className={`absolute left-0 top-3 bottom-3 w-1 rounded-full ${
-                            kind === "income" ? "bg-emerald-600" : "bg-rose-600"
+                      <div className="text-right">
+                        <p
+                          className={`text-xl font-black ${
+                            kind === "income" ? "text-emerald-600" : "text-rose-600"
                           }`}
-                        />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-1">
-                            <span
-                              className={`text-sm font-black uppercase tracking-widest ${
-                                kind === "income" ? "text-emerald-600" : "text-rose-600"
-                              }`}
-                            >
-                              {kind === "income" ? "Income" : "Expense"}
-                            </span>
-                            <span className="text-xs text-neutral-500">{tx.date}</span>
-                          </div>
-                          <p className="font-semibold text-neutral-900 mb-1">{tx.description}</p>
-                          {tx.category && <p className="text-sm text-neutral-600">{tx.category}</p>}
-                        </div>
+                        >
+                          {kind === "income" ? "+" : "-"}Rs. {tx.amount.toLocaleString()}
+                        </p>
 
-                        <div className="text-right">
-                          <p
-                            className={`text-xl font-black ${
-                              kind === "income" ? "text-emerald-600" : "text-rose-600"
-                            }`}
+                        <div className="flex gap-1 mt-2">
+                          <button
+                            onClick={() => openTransactionEditor(tx)}
+                            className="p-1 text-neutral-400 hover:text-emerald-600 transition-colors"
                           >
-                            {kind === "income" ? "+" : "-"}Rs. {tx.amount.toLocaleString()}
-                          </p>
+                            <Edit className="w-4 h-4" />
+                          </button>
 
-                          <div className="flex gap-1 mt-2">
-                            <button
-                              onClick={() => {
-                                setEditingTransaction(tx);
-                                setAmount(tx.amount.toString());
-                                setDescription(
-                                  tx.description.replace(/^(Subscription|Income|Expense):\s*/i, "")
-                                );
-                                setCategory(tx.category);
-                                setDate(tx.date);
-                                setType(tx.type);
-                                setSelectedFamilyId(tx.family_id || "");
-                                setIsModalOpen(true);
-                              }}
-                              className="p-1 text-neutral-400 hover:text-emerald-600 transition-colors"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-
-                            <button
-                              onClick={() => deleteTransaction(tx.id)}
-                              className="p-1 text-neutral-400 hover:text-rose-600 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => deleteTransaction(tx.id)}
+                            className="p-1 text-neutral-400 hover:text-rose-600 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-        </main>
-      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
 
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
+        {pendingAccountCollections.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-black text-amber-700 uppercase tracking-widest ml-1">
+              நிலுவையில் உள்ள சந்தா (Main account-க்கு batch-ல் சேரும்)
+            </h3>
+            {pendingAccountCollections.map((collection) => {
+              const family = families.find((f) => f.id === collection.family_id);
+              return (
+                <div
+                  key={collection.id}
+                  className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-neutral-900 truncate">
+                      {family
+                        ? `${family.family_code} — ${family.head_name}`
+                        : "குடும்பம்"}
+                    </p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      {collection.date} · நிலுவை — batch அனுமதி pending
+                    </p>
+                    {collection.notes && (
+                      <p className="text-xs text-neutral-600 mt-1 truncate">
+                        {extractDirectAccountNote(collection.notes)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <p className="text-lg font-black text-amber-700">
+                      Rs. {collection.amount.toLocaleString()}
+                    </p>
+                    <button
+                      onClick={() => openPendingCollectionEditor(collection)}
+                      className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-colors"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => deletePendingCollection(collection.id)}
+                      className="p-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </AppShell>
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-black text-neutral-900">
-                {editingTransaction ? "Edit Transaction" : t.add_transaction}
+                {editingTransaction || editingCollectionId ? "Edit Transaction" : t.add_transaction}
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -859,15 +986,19 @@ const { error } = await supabase
                   <select
                     value={selectedFamilyId}
                     onChange={(e) => setSelectedFamilyId(e.target.value)}
+                    required
                     className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    <option value="">Select Family</option>
+                    <option value="">குடும்பம் தேர்ந்தெடுக்கவும்</option>
                     {families.map((family) => (
                       <option key={family.id} value={family.id}>
                         {family.family_code} - {family.head_name}
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs text-emerald-600 mt-1">
+                    குடும்பம் உடனே புதுப்பிக்கப்படும். Main account-க்கு pending batch அனுமதியில் சேரும் (கமிஷன் இல்லை).
+                  </p>
                 </div>
               )}
 
@@ -887,7 +1018,7 @@ const { error } = await supabase
                 disabled={submitting}
                 className="w-full py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-50 transition-all"
               >
-                {submitting ? "Saving..." : editingTransaction ? "Update" : t.save}
+                {submitting ? "Saving..." : editingTransaction || editingCollectionId ? "Update" : t.save}
               </button>
             </form>
           </div>
@@ -903,6 +1034,6 @@ const { error } = await supabase
           onDecodedText={handleQrDecodedText}
         />
       )}
-    </div>
+    </RouteGuard>
   );
 }

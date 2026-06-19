@@ -16,24 +16,6 @@ export default function GeneralSettingsPage() {
   const router = useRouter();
   const { user, loading: authLoading, tenantContext } = useSupabaseAuth();
   const [lang, setLang] = useState<Language>("en");
-  const t = getTranslation(lang);
-
-  // Login redirect effect
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-    }
-  }, [authLoading, user, router]);
-
-  // Return null if redirecting
-  if (!authLoading && !user) return null;
-
-  // Page-level access control (after all hooks)
-  if (authLoading) return <div>Loading...</div>;
-  if (!tenantContext?.permissions?.settings && tenantContext?.role !== 'super_admin') {
-    return <div>No access</div>;
-  }
-
   const [loading, setLoading] = useState(true);
   const [masjidName, setMasjidName] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
@@ -45,12 +27,7 @@ export default function GeneralSettingsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
-
-  useEffect(() => {
-    const savedLang = localStorage.getItem("preferred_language") as Language;
-    if (savedLang) setLang(savedLang);
-    fetchMasjidSettings();
-  }, []);
+  const t = getTranslation(lang);
 
   const fetchMasjidSettings = async () => {
     if (!supabase || !tenantContext?.masjidId) return;
@@ -70,9 +47,9 @@ export default function GeneralSettingsPage() {
         setLogoUrl(data.logo_url || "");
         setTagline(data.tagline || "");
         setPreferredLanguage(data.preferred_language || "en");
-        setAddress(""); // Not confirmed in DB
-        setPhone(""); // Not confirmed in DB
-        setEmail(""); // Not confirmed in DB
+        setAddress("");
+        setPhone("");
+        setEmail("");
       }
     } catch (e: any) {
       console.error("Failed to load masjid settings:", e);
@@ -80,6 +57,19 @@ export default function GeneralSettingsPage() {
       setLoading(false);
     }
   };
+
+  // Login redirect effect
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [authLoading, user, router]);
+
+  useEffect(() => {
+    const savedLang = localStorage.getItem("preferred_language") as Language;
+    if (savedLang) setLang(savedLang);
+    fetchMasjidSettings();
+  }, [tenantContext?.masjidId]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -178,6 +168,12 @@ export default function GeneralSettingsPage() {
       alert("Failed to save settings");
     }
   };
+
+  if (!authLoading && !user) return null;
+  if (authLoading) return <div>Loading...</div>;
+  if (!tenantContext?.permissions?.settings && tenantContext?.role !== 'super_admin') {
+    return <div>No access</div>;
+  }
 
   if (loading) {
     return (

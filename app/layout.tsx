@@ -35,7 +35,6 @@ export const metadata = {
   title: 'Smart Masjeedh',
   description: 'Masjid Management System',
   manifest: '/manifest.json',
-  themeColor: '#047857',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -50,6 +49,10 @@ export const metadata = {
       { url: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml' },
     ],
   },
+};
+
+export const viewport = {
+  themeColor: '#047857',
 };
 
 export default async function RootLayout(props: { children: React.ReactNode }) {

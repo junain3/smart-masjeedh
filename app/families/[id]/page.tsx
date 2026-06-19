@@ -76,6 +76,7 @@ type Payment = {
   id: string;
   amount: number;
   status: string;
+  date?: string;
   collected_by_user_id?: string;
   collected_at?: string;
   created_at: string;
@@ -645,6 +646,7 @@ export default function FamilyDetailsPage() {
         amount: amountNum,
         commission_percent: 0,
         commission_amount: 0,
+        status: "pending",
         notes: collectionNote || null,
         collected_by_user_id: user.id,
         date: collectionDate
@@ -966,32 +968,27 @@ export default function FamilyDetailsPage() {
   );
 
   const annualFee = Number(family?.subscription_amount || 0);
-  const totalApproved = payments.reduce((sum, p) => sum + p.amount, 0);
+  const getPaymentDate = (p: Payment) => p.date || p.collected_at || p.created_at;
+  const creditedPayments = payments.filter(
+    (p) => p.status === "accepted" || p.status === "pending"
+  );
+  const totalApproved = creditedPayments.reduce((sum, p) => sum + p.amount, 0);
   const remainingBalance = annualFee - totalApproved;
   const isOverpaid = remainingBalance < 0;
   const openingBal = family?.opening_balance || 0;
   const recentService = services[0] || null;
 
-  console.log("DEBUG CALCULATIONS:");
-  console.log("- selectedYear:", selectedYear);
-  console.log("- payments array:", payments);
-  console.log("- payments.length:", payments.length);
-  console.log("- annualFee:", annualFee);
-  console.log("- totalApproved:", totalApproved);
-
-  const paidThisYear = payments
+  const paidThisYear = creditedPayments
     .filter((p) => {
-      const paymentDate = p.collected_at || p.created_at;
+      const paymentDate = getPaymentDate(p);
       const y = new Date(paymentDate).getFullYear();
       return y === selectedYear && p.amount > 0;
     })
     .reduce((s, p) => s + p.amount, 0);
 
-  console.log("- paidThisYear:", paidThisYear);
-
-  const paidPrevYear = payments
+  const paidPrevYear = creditedPayments
     .filter((p) => {
-      const paymentDate = p.collected_at || p.created_at;
+      const paymentDate = getPaymentDate(p);
       return new Date(paymentDate).getFullYear() === selectedYear - 1 && p.amount > 0;
     })
     .reduce((s, p) => s + p.amount, 0);
@@ -1312,7 +1309,7 @@ export default function FamilyDetailsPage() {
                       <span className="font-medium">Annual Fee:</span> Rs. {annualFee.toLocaleString()}
                     </p>
                     <p className="text-sm text-blue-700">
-                      <span className="font-medium">Total Approved:</span> Rs. {totalApproved.toLocaleString()}
+                      <span className="font-medium">மொத்தம் செலுத்தியது:</span> Rs. {totalApproved.toLocaleString()}
                     </p>
                     <p className="text-sm text-blue-700">
                       <span className="font-medium">Remaining Balance:</span> Rs. {finalDue.toLocaleString()}
@@ -1349,7 +1346,7 @@ export default function FamilyDetailsPage() {
                           {payment.status === 'pending' ? 'Pending' : 'Accepted'}
                         </span>
                       </div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">{payment.collected_at || payment.created_at}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">{payment.date || payment.collected_at || payment.created_at}</p>
                     </div>
                   </div>
                   <div className="text-right">

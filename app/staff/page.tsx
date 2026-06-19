@@ -65,22 +65,6 @@ export default function StaffPage() {
   const { toast, confirm } = useAppToast();
   const { user, loading: authLoading, tenantContext, signOut } = useSupabaseAuth();
 
-  // Page-level access control
-  if (authLoading) return <div>Loading...</div>;
-  if (!user) {
-    router.push('/login');
-    return null;
-  }
-  
-  // Parse permissions and check access
-  const parsedPermissions = parsePermissions(tenantContext?.permissions || null);
-  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
-  const hasStaffAccess = hasModulePermission(parsedPermissions, 'staff_management');
-  
-  if (!hasStaffAccess && !userIsSuperAdmin) {
-    return <div>No access</div>;
-  }
-  
   const [lang, setLang] = useState<Language>("en");
   const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,6 +93,8 @@ export default function StaffPage() {
   const [userRoles, setUserRoles] = useState<any[]>([]);
   const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState(false);
   const [editingUserRole, setEditingUserRole] = useState<any>(null);
+  const [editingCommissionPercent, setEditingCommissionPercent] = useState("10");
+  const [collectorProfiles, setCollectorProfiles] = useState<Record<string, number>>({});
   const [editingRole, setEditingRole] = useState('staff');
   const [permissions, setPermissions] = useState({
     accounts: false,
@@ -140,6 +126,26 @@ export default function StaffPage() {
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [inviteMessage, setInviteMessage] = useState('');
   const [inviteError, setInviteError] = useState('');
+  const [replacementCheck, setReplacementCheck] = useState<{ [key: string]: boolean }>({});
+
+  const parsedPermissions = parsePermissions(tenantContext?.permissions || null);
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const hasStaffAccess = hasModulePermission(parsedPermissions, 'staff_management');
+
+  const superAdminRoles = useMemo(
+    () => userRoles.filter((userRole) => userRole.role === "super_admin"),
+    [userRoles]
+  );
+
+  const originalSuperAdminUserId = useMemo(() => {
+    if (superAdminRoles.length === 0) return null;
+
+    return [...superAdminRoles].sort((a, b) => {
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : Number.MAX_SAFE_INTEGER;
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : Number.MAX_SAFE_INTEGER;
+      return aTime - bTime;
+    })[0]?.user_id || null;
+  }, [superAdminRoles]);
 
   const t = getTranslation(lang);
 
@@ -151,6 +157,12 @@ export default function StaffPage() {
   }, []);
 
   useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [authLoading, user, router]);
+
+  useEffect(() => {
     if (!user) return;
     fetchStaff();
     fetchUserRoles();
@@ -159,8 +171,27 @@ export default function StaffPage() {
   useEffect(() => {
     if (tenantContext?.masjidId) {
       fetchUserRoles();
+      fetchCollectorProfiles();
     }
   }, [tenantContext?.masjidId]);
+
+  async function fetchCollectorProfiles() {
+    if (!supabase || !tenantContext?.masjidId) return;
+    try {
+      const { data, error } = await supabase
+        .from("subscription_collector_profiles")
+        .select("user_id, default_commission_percent")
+        .eq("masjid_id", tenantContext.masjidId);
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      (data || []).forEach((row) => {
+        if (row.user_id) map[row.user_id] = Number(row.default_commission_percent ?? 0);
+      });
+      setCollectorProfiles(map);
+    } catch (err) {
+      console.error("Failed to load collector profiles:", err);
+    }
+  }
 
   async function fetchUserRoles() {
     if (!supabase || !tenantContext?.masjidId) return;
@@ -454,7 +485,7 @@ export default function StaffPage() {
   };
 
   // User Access Management functions
-  const openPermissionsModal = (userRole: any) => {
+  const openPermissionsModal = async (userRole: any) => {
     setEditingUserRole(userRole);
     setEditingRole(userRole.role || 'staff');
     setPermissions(userRole.permissions || {
@@ -467,6 +498,18 @@ export default function StaffPage() {
       settings: false,
       events: false
     });
+
+    let percent = collectorProfiles[userRole.user_id];
+    if (percent === undefined && tenantContext?.masjidId) {
+      const { data } = await supabase
+        .from("subscription_collector_profiles")
+        .select("default_commission_percent")
+        .eq("masjid_id", tenantContext.masjidId)
+        .eq("user_id", userRole.user_id)
+        .maybeSingle();
+      percent = Number(data?.default_commission_percent ?? 10);
+    }
+    setEditingCommissionPercent(String(percent ?? 10));
     setIsPermissionsModalOpen(true);
   };
 
@@ -599,6 +642,33 @@ export default function StaffPage() {
 
       if (error) throw error;
 
+      const percent = parseFloat(editingCommissionPercent);
+      if (permissions.subscriptions_collect && tenantContext?.masjidId) {
+        if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+          toast({
+            kind: "error",
+            title: "Validation Error",
+            message: "கமிஷன் வீதம் 0–100 இடையே இருக்க வேண்டும்",
+          });
+          return;
+        }
+        const { error: profileError } = await supabase
+          .from("subscription_collector_profiles")
+          .upsert(
+            {
+              masjid_id: tenantContext.masjidId,
+              user_id: editingUserRole.user_id,
+              default_commission_percent: percent,
+            },
+            { onConflict: "masjid_id,user_id" }
+          );
+        if (profileError) throw profileError;
+        setCollectorProfiles((prev) => ({
+          ...prev,
+          [editingUserRole.user_id]: percent,
+        }));
+      }
+
       // Update local state
       setUserRoles(prev => prev.map(ur => 
         ur.user_id === editingUserRole.user_id 
@@ -721,23 +791,6 @@ export default function StaffPage() {
       return false;
     }
   };
-
-  const [replacementCheck, setReplacementCheck] = useState<{ [key: string]: boolean }>({});
-
-  const superAdminRoles = useMemo(
-    () => userRoles.filter((userRole) => userRole.role === "super_admin"),
-    [userRoles]
-  );
-
-  const originalSuperAdminUserId = useMemo(() => {
-    if (superAdminRoles.length === 0) return null;
-
-    return [...superAdminRoles].sort((a, b) => {
-      const aTime = a.created_at ? new Date(a.created_at).getTime() : Number.MAX_SAFE_INTEGER;
-      const bTime = b.created_at ? new Date(b.created_at).getTime() : Number.MAX_SAFE_INTEGER;
-      return aTime - bTime;
-    })[0]?.user_id || null;
-  }, [superAdminRoles]);
 
   const getProtectedAdminRemovalReason = (
     targetUserId?: string | null,
@@ -1151,7 +1204,7 @@ export default function StaffPage() {
     return null;
   }
 
-  if (!tenantContext?.permissions?.staff_management) {
+  if (!hasStaffAccess && !userIsSuperAdmin) {
     return <div>Access Denied</div>;
   }
 
@@ -1460,7 +1513,9 @@ export default function StaffPage() {
                                     </span>
                                   ) : staffMember.permissions?.subscriptions_collect ? (
                                     <span className="text-green-600">
-                                      {(staffMember.commission_rate || 0)}% Commission
+                                      {(staffMember.user_id
+                                        ? collectorProfiles[staffMember.user_id]
+                                        : staffMember.commission_rate) ?? 10}% Commission
                                     </span>
                                   ) : (
                                     <span className="text-gray-500">No Access</span>
@@ -1591,6 +1646,7 @@ export default function StaffPage() {
                     <tr>
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Email</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Role</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">வசூல் கமிஷன்</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Permissions</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Actions</th>
                     </tr>
@@ -1608,6 +1664,15 @@ export default function StaffPage() {
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(userRole.role)}`}>
                             {userRole.role.replace('_', ' ')}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-900">
+                          {userRole.permissions?.subscriptions_collect ? (
+                            <span className="font-bold text-purple-700">
+                              {collectorProfiles[userRole.user_id] ?? 10}%
+                            </span>
+                          ) : (
+                            <span className="text-neutral-400">—</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-900">
                           <div className="flex flex-wrap gap-1">
@@ -2055,6 +2120,27 @@ export default function StaffPage() {
                   ))}
                 </div>
               </div>
+
+              {permissions.subscriptions_collect && (
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    வசூல் கமிஷன் வீதம் (%)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="100"
+                    value={editingCommissionPercent}
+                    onChange={(e) => setEditingCommissionPercent(e.target.value)}
+                    className="w-full px-3 py-2 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="10"
+                  />
+                  <p className="text-xs text-neutral-500 mt-1">
+                    அனுமதிக்கப்பட்ட வசூல் தொகையின் இந்த வீதம் ஊழியருக்கு கமிஷனாக வழங்கப்படும்
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex space-x-3 mt-6">

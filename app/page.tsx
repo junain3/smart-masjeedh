@@ -30,6 +30,8 @@ import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permi
 
 import { useAppToast } from "@/components/ToastProvider";
 
+import { getPrintEngine, getPrintButtonLabel, type PrintReportType } from "@/lib/print-engine";
+
 type Member = {
 
   id: string;
@@ -978,7 +980,7 @@ const requestBody = {
 
   page: 1,
 
-  limit: 10,
+  limit: 1000,
 
   masjidId: tenantContext?.masjidId
 
@@ -1144,7 +1146,7 @@ const requestBody = {
 
   page: 1,
 
-  limit: 10,
+  limit: 1000,
 
   masjidId: tenantContext?.masjidId
 
@@ -1254,6 +1256,14 @@ setReportCount(result.data?.count || 0)
 
     setReportCount(0);
 
+  };
+
+  const handlePrintReport = () => {
+    const reportType: PrintReportType = "smart-members-report";
+    const engine = getPrintEngine(reportType);
+    if (engine === "browser-print") {
+      window.print();
+    }
   };
 
 
@@ -1594,23 +1604,62 @@ setReportCount(result.data?.count || 0)
 
   return (
 
-  <AppShell 
+  <>
 
-    title={t.home}
+    {/* Print-only Report Container (hidden normally, visible only when printing) */}
+    {!reportGenerating && reportResults.length > 0 && (
+      <div className="hidden print:block print:fixed print:inset-0 print:p-8 print:bg-white">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-black text-neutral-900 mb-2">{masjid?.name || 'Masjid'}</h1>
+          <h2 className="text-lg font-bold text-neutral-700 mb-2">Members Report</h2>
+          <p className="text-sm text-neutral-600">{formatDate(new Date())}</p>
+          <p className="text-sm text-neutral-600 font-bold mt-2">Total: {reportCount} members</p>
+        </div>
+        <table className="w-full border-collapse border border-neutral-300">
+          <thead>
+            <tr className="bg-neutral-100">
+              <th className="border border-neutral-300 px-3 py-2 text-center text-sm font-bold text-neutral-800">தொடர் இலக்கம்</th>
+              <th className="border border-neutral-300 px-3 py-2 text-left text-sm font-bold text-neutral-800">பெயர்</th>
+              <th className="border border-neutral-300 px-3 py-2 text-left text-sm font-bold text-neutral-800">குடும்பக் குறியீடு</th>
+              <th className="border border-neutral-300 px-3 py-2 text-left text-sm font-bold text-neutral-800">முகவரி</th>
+              <th className="border border-neutral-300 px-3 py-2 text-left text-sm font-bold text-neutral-800">தொலைபேசி எண்</th>
+              <th className="border border-neutral-300 px-3 py-2 text-center text-sm font-bold text-neutral-800">கையொப்பம்</th>
+            </tr>
+          </thead>
+          <tbody>
+            {reportResults.map((member: any, index: number) => (
+              <tr key={member.id} className="border border-neutral-300">
+                <td className="border border-neutral-300 px-3 py-2 text-center text-sm text-neutral-900">{index + 1}</td>
+                <td className="border border-neutral-300 px-3 py-2 text-left text-sm text-neutral-900">{member.name}</td>
+                <td className="border border-neutral-300 px-3 py-2 text-left text-sm text-neutral-900">{member.family_code || '-'}</td>
+                <td className="border border-neutral-300 px-3 py-2 text-left text-sm text-neutral-900">{member.family_address || '-'}</td>
+                <td className="border border-neutral-300 px-3 py-2 text-left text-sm text-neutral-900">{member.phone || member.family_phone || '-'}</td>
+                <td className="border border-neutral-300 px-3 py-2 text-center" style={{ minHeight: '2rem' }}></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
 
-    headerRight={
+    {/* Main App Content (hidden when printing) */}
+    <AppShell 
 
-      <Link href="/scan" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-3xl transition-colors">
+      title={t.home}
 
-        <QrCode className="w-6 h-6" />
+      headerRight={
 
-      </Link>
+        <Link href="/scan" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-3xl transition-colors">
 
-    }
+          <QrCode className="w-6 h-6" />
 
-  >
+        </Link>
 
-    <main className="flex-1 p-4 space-y-6 w-full">
+      }
+
+    >
+
+      <main className="flex-1 p-4 space-y-6 w-full print:hidden">
 
       {isInitialLoading ? (
 
@@ -1824,7 +1873,7 @@ setReportCount(result.data?.count || 0)
 
           {isReportsModalOpen && (
 
-            <div className="fixed inset-0 z-50 flex flex-col bg-black/50 backdrop-blur-sm">
+            <div className="fixed inset-0 z-50 flex flex-col bg-black/50 backdrop-blur-sm print:hidden">
 
               {/* Overlay */}
 
@@ -1840,7 +1889,7 @@ setReportCount(result.data?.count || 0)
 
               {/* Modal */}
 
-              <div className="bg-white rounded-t-3xl shadow-2xl max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
+              <div className="bg-white rounded-t-3xl shadow-2xl max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300 print:hidden">
 
                 {/* Header */}
 
@@ -2274,6 +2323,22 @@ setReportCount(result.data?.count || 0)
 
                     </button>
 
+                    {!reportGenerating && reportResults.length > 0 && (
+
+                      <button 
+
+                        onClick={handlePrintReport}
+
+                        className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-full text-sm font-bold hover:bg-blue-700 transition-colors"
+
+                      >
+
+                        {getPrintButtonLabel("smart-members-report", "Report")}
+
+                      </button>
+
+                    )}
+
                     <button 
 
                       onClick={clearReports}
@@ -2312,9 +2377,11 @@ setReportCount(result.data?.count || 0)
 
       )}
 
-    </main>
+        </main>
 
-  </AppShell>
+    </AppShell>
+
+  </>
 
 );
 
