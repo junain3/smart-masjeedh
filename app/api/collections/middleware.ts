@@ -64,14 +64,8 @@ export async function collectionSecurityMiddleware(request: NextRequest) {
         );
       }
 
-      if (!employee.salary_amount || employee.salary_amount <= 0) {
-        return NextResponse.json(
-          { error: "Employee salary not configured. Cannot perform collections." },
-          { status: 403 }
-        );
-      }
-
-      // Attach employee details to request for later use
+      // Salary is not required for collection recording/approval in this flow.
+      // Only an active employee profile is required to keep the permission model consistent.
       (request as any).employee = employee;
     }
 

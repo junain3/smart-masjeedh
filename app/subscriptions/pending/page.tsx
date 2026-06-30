@@ -7,6 +7,8 @@ import { translations, getTranslation, Language } from "@/lib/i18n/translations"
 import { supabase } from "@/lib/supabase";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useAppToast } from "@/components/ToastProvider";
+import { EmptyState } from "@/components/EmptyState";
+import { BrandLoadingScreen } from "@/components/BrandLoadingScreen";
 
 export const dynamic = 'force-dynamic';
 
@@ -41,15 +43,27 @@ export default function SubscriptionsPendingPage() {
   const [processing, setProcessing] = useState<string | null>(null);
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>([]);
+  const [collectorProfiles, setCollectorProfiles] = useState<Record<string, string>>({});
 
   // Check if user has approval permission
   const canApprove = tenantContext?.permissions?.subscriptions_approve || tenantContext?.role === 'super_admin';
 
   useEffect(() => {
-    if (!canApprove || !tenantContext?.masjidId) return;
-    
-    fetchPendingCollections();
-  }, [canApprove, tenantContext?.masjidId, resumeTick]);
+    if (!canApprove) {
+      setLoading(false);
+      return;
+    }
+
+    if (!tenantContext?.masjidId) {
+      if (!authLoading) {
+        setLoading(false);
+        setPendingCollections([]);
+      }
+      return;
+    }
+
+    void fetchPendingCollections();
+  }, [canApprove, tenantContext?.masjidId, resumeTick, authLoading]);
 
   const fetchPendingCollections = async () => {
     try {
@@ -68,8 +82,29 @@ export default function SubscriptionsPendingPage() {
         console.error("FETCH_PENDING_ERROR", error);
         throw error;
       }
-      
-      setPendingCollections(data || []);
+
+      const collectionList = data || [];
+      const collectorIds = Array.from(
+        new Set(collectionList.map((c: any) => c.collected_by_user_id).filter(Boolean))
+      ) as string[];
+
+      let profileMap: Record<string, string> = {};
+      if (collectorIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from("user_profiles")
+          .select("id, full_name, email")
+          .in("id", collectorIds);
+
+        profileMap = Object.fromEntries(
+          (profilesData || []).map((profile: any) => [
+            profile.id,
+            profile.full_name || profile.email || "Collector",
+          ])
+        );
+      }
+
+      setPendingCollections(collectionList);
+      setCollectorProfiles(profileMap);
     } catch (error: any) {
       console.error("FETCH_PENDING_CATCH", error);
       toast({
@@ -88,33 +123,38 @@ export default function SubscriptionsPendingPage() {
     setBulkProcessing(true);
     
     try {
-      const { data, error } = await supabase.rpc('approve_subscription_collections', {
-        p_collection_ids: collectionIds,
-        p_user_id: user.id,
-        p_masjid_id: tenantContext.masjidId
+      const response = await fetch('/api/collections/approve-single', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          collection_ids: collectionIds,
+        }),
       });
 
-      if (error) throw error;
+      const result = await response.json();
 
-      const result = data as any;
-      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to approve collections');
+      }
+
       if (result.success) {
         toast({
           kind: "success",
           title: "Collections Approved",
-          message: `Successfully approved ${result.success_count} collections. Total: Rs. ${result.total_amount?.toFixed(2)}`,
+          message: `Successfully approved ${result.success_count} collections. Total: Rs. ${Number(result.total_amount || 0).toFixed(2)}`,
         });
-        
-        // Clear selection and refresh data
+
         setSelectedCollectionIds([]);
-        fetchPendingCollections();
+        await fetchPendingCollections();
       } else {
         toast({
           kind: "error",
           title: "Approval Failed",
           message: result.error || "Failed to approve collections",
         });
-        
+
         if (result.failures && result.failures.length > 0) {
           console.error("Approval failures:", result.failures);
         }
@@ -157,6 +197,10 @@ export default function SubscriptionsPendingPage() {
   const handleAccept = async (collectionId: string) => {
     await processApproval([collectionId]);
   };
+
+  if (authLoading || (loading && canApprove)) {
+    return <BrandLoadingScreen />;
+  }
 
   if (!canApprove) {
     return (
@@ -256,18 +300,16 @@ export default function SubscriptionsPendingPage() {
             )}
 
             {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-gray-400 mr-2" />
-                <span className="text-gray-600">Loading pending collections...</span>
+              <div className="rounded-3xl border border-neutral-200 bg-white p-12 text-center">
+                <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-emerald-600" />
+                <p className="text-sm font-medium text-neutral-500">Loading pending collections...</p>
               </div>
-            ) : !loading && pendingCollections.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Check className="w-6 h-6 text-blue-600" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Pending Collections</h3>
-                <p className="text-gray-600">There are no pending collections to review.</p>
-              </div>
+            ) : pendingCollections.length === 0 ? (
+              <EmptyState
+                title="No pending collections"
+                description="All subscription collections have been reviewed. New submissions from collectors will appear here for approval."
+                icon={<Check className="h-7 w-7 text-emerald-500" />}
+              />
             ) : (
               <div className="space-y-4">
                 {pendingCollections.map((collection) => (
@@ -292,7 +334,7 @@ export default function SubscriptionsPendingPage() {
                               {collection.family?.family_code} - {collection.family?.head_name}
                             </h3>
                             <p className="text-sm text-gray-600">
-                              Collected by: {collection.collector?.email}
+                              Collected by: {collectorProfiles[collection.collected_by_user_id] || collection.collector?.email || "Collector"}
                             </p>
                           </div>
                           <div className="text-right">

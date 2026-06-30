@@ -25,6 +25,8 @@ import { useMockAuth } from "@/components/MockAuthProvider";
 import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
 import { AppShell } from "@/components/AppShell";
 import RouteGuard from "@/components/RouteGuard";
+import { BrandLoadingScreen } from "@/components/BrandLoadingScreen";
+import { EmptyState } from "@/components/EmptyState";
 import {
   formatTransactionCategory,
   formatTransactionDescription,
@@ -111,19 +113,23 @@ export default function AccountsPage() {
   useEffect(() => {
     const checkAuth = async () => {
       if (!authUser) {
-        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+        if (!authLoading) {
+          window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+        }
         return;
       }
 
       setUser(authUser);
-      // Only fetch data when tenantContext is available
+
       if (tenantContext?.masjidId) {
         await fetchData(authUser);
+      } else if (!authLoading) {
+        setLoading(false);
       }
     };
 
     checkAuth();
-  }, [authUser, tenantContext?.masjidId, resumeTick]);
+  }, [authUser, tenantContext?.masjidId, resumeTick, authLoading]);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -131,7 +137,7 @@ export default function AccountsPage() {
   }, []);
   
   // Page-level access control (after all hooks)
-  if (authLoading) return <div>Loading...</div>;
+  if (authLoading) return <BrandLoadingScreen />;
   if (!authUser) {
     router.push('/login');
     return null;
@@ -203,7 +209,9 @@ export default function AccountsPage() {
 
     try {
       if (!tenantContext?.masjidId) {
-        console.log("No tenant context available");
+        setTransactions([]);
+        setFamilies([]);
+        setPendingAccountCollections([]);
         return;
       }
 
@@ -618,12 +626,22 @@ export default function AccountsPage() {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <RouteGuard>
+        <AppShell title={t.accounts}>
+          <div className="rounded-3xl border border-neutral-200 bg-white p-12 text-center">
+            <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-b-2 border-emerald-600" />
+            <p className="text-sm font-medium text-neutral-500">Loading accounts...</p>
+          </div>
+        </AppShell>
+      </RouteGuard>
+    );
   }
 
   return (
     <RouteGuard>
       <AppShell title={t.accounts}>
+        <div className="flex flex-col gap-6">
         {errorMessage && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4">
             {errorMessage}
@@ -717,17 +735,30 @@ export default function AccountsPage() {
           </h3>
 
           {filteredTransactions.length === 0 ? (
-            <div className="bg-white rounded-3xl p-8 text-center border border-neutral-200">
-              <Wallet className="w-12 h-12 mx-auto mb-4 text-neutral-300" />
-              <h3 className="font-semibold text-neutral-900 mb-2">
-                {searchQuery ? "No transactions found" : "No transactions"}
-              </h3>
-              <p className="text-sm text-neutral-600">
-                {searchQuery
-                  ? "Try a different search term"
-                  : "Add your first transaction to get started."}
-              </p>
-            </div>
+            <EmptyState
+              title={searchQuery ? "No transactions found" : "No transactions yet"}
+              description={
+                searchQuery
+                  ? "Try a different search term or clear the search bar."
+                  : "Your account ledger is empty. Add your first income, expense, or subscription entry."
+              }
+              icon={<Wallet className="h-7 w-7" />}
+              action={
+                !searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetForm();
+                      setIsModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-700"
+                  >
+                    <Plus className="h-4 w-4" />
+                    {t.add_transaction}
+                  </button>
+                ) : undefined
+              }
+            />
           ) : (
             <>
               {/* Mobile Card Layout */}
@@ -907,6 +938,7 @@ export default function AccountsPage() {
             })}
           </div>
         )}
+        </div>
       </AppShell>
 
       {isModalOpen && (

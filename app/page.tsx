@@ -25,6 +25,7 @@ import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import RouteGuard from "@/components/RouteGuard";
 
 import { AppShell } from "@/components/AppShell";
+import { BrandLoadingScreen } from "@/components/BrandLoadingScreen";
 
 import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
 
@@ -429,26 +430,9 @@ export default function HomePage() {
   // ONLY ONE conditional render allowed: authLoading
 
   if (authLoading) {
-
-    return (
-
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-
-        <div className="text-center">
-
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-700 mx-auto mb-4"></div>
-
-          <p className="text-gray-600">Loading...</p>
-
-
-
-        </div>
-
-      </div>
-
-    );
-
+    return <BrandLoadingScreen />;
   }
+
 
 
 

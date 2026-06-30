@@ -9,6 +9,7 @@ import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { QrScannerModal } from "@/components/QrScannerModal";
+import { EmptyState } from "@/components/EmptyState";
 import { calcCommission } from "@/lib/collection-utils";
 
 type Family = {
@@ -64,8 +65,12 @@ export default function CollectionsPage() {
   const [commissionRate, setCommissionRate] = useState(0);
   const [commissionEarned, setCommissionEarned] = useState(0);
   const [commissionPending, setCommissionPending] = useState(0);
+  const [collectorProfiles, setCollectorProfiles] = useState<Record<string, string>>({});
 
   const t = getTranslation(lang);
+  const isAdminView = Boolean(
+    tenantContext?.role === "super_admin" || tenantContext?.permissions?.subscriptions_approve
+  );
 
   const filteredFamilies = useMemo(() => {
     if (!searchTerm.trim()) return families;
@@ -101,9 +106,17 @@ export default function CollectionsPage() {
   }, []);
 
   useEffect(() => {
-    if (!tenantContext?.masjidId || !user?.id) return;
-    loadData();
-  }, [tenantContext?.masjidId, user?.id, resumeTick]);
+    if (authLoading) return;
+
+    if (!tenantContext?.masjidId || !user?.id) {
+      setLoading(false);
+      setCollections([]);
+      setFamilies([]);
+      return;
+    }
+
+    void loadData();
+  }, [tenantContext?.masjidId, user?.id, resumeTick, authLoading]);
 
   const selectFamily = (family: Family) => {
     setSelectedFamilyId(family.id);
@@ -117,24 +130,33 @@ export default function CollectionsPage() {
     setLoading(true);
     setError("");
     try {
+      const familiesPromise = supabase
+        .from("families")
+        .select("id, family_code, head_name, address, subscription_amount")
+        .eq("masjid_id", tenantContext.masjidId)
+        .order("family_code");
+
+      const collectionsQuery = supabase
+        .from("subscription_collections")
+        .select("*")
+        .eq("masjid_id", tenantContext.masjidId)
+        .order("created_at", { ascending: false });
+
+      const collectionsPromise = isAdminView
+        ? collectionsQuery
+        : collectionsQuery.eq("collected_by_user_id", user.id);
+
+      const profilePromise = supabase
+        .from("subscription_collector_profiles")
+        .select("default_commission_percent")
+        .eq("masjid_id", tenantContext.masjidId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
       const [familiesRes, collectionsRes, profileRes] = await Promise.all([
-        supabase
-          .from("families")
-          .select("id, family_code, head_name, address, subscription_amount")
-          .eq("masjid_id", tenantContext.masjidId)
-          .order("family_code"),
-        supabase
-          .from("subscription_collections")
-          .select("*")
-          .eq("masjid_id", tenantContext.masjidId)
-          .eq("collected_by_user_id", user.id)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("subscription_collector_profiles")
-          .select("default_commission_percent")
-          .eq("masjid_id", tenantContext.masjidId)
-          .eq("user_id", user.id)
-          .maybeSingle(),
+        familiesPromise,
+        collectionsPromise,
+        profilePromise,
       ]);
 
       if (familiesRes.error) throw familiesRes.error;
@@ -142,6 +164,25 @@ export default function CollectionsPage() {
 
       const familyList = familiesRes.data || [];
       const collectionList = collectionsRes.data || [];
+      const collectorIds = Array.from(
+        new Set(collectionList.map((c) => c.collected_by_user_id).filter(Boolean))
+      ) as string[];
+
+      let collectorProfileMap: Record<string, string> = {};
+      if (collectorIds.length > 0) {
+        const { data: collectorProfilesData } = await supabase
+          .from("user_profiles")
+          .select("id, full_name, email")
+          .in("id", collectorIds);
+
+        collectorProfileMap = Object.fromEntries(
+          (collectorProfilesData || []).map((profile: any) => [
+            profile.id,
+            profile.full_name || profile.email || "Collector",
+          ])
+        );
+      }
+
       const withFamilies = collectionList.map((c) => ({
         ...c,
         family: familyList.find((f) => f.id === c.family_id),
@@ -160,6 +201,7 @@ export default function CollectionsPage() {
       setCommissionPending(pendingComm);
       setFamilies(familyList);
       setCollections(withFamilies);
+      setCollectorProfiles(collectorProfileMap);
     } catch (e: any) {
       setError(e.message || "தரவு ஏற்ற முடியவில்லை");
     } finally {
@@ -317,7 +359,10 @@ export default function CollectionsPage() {
   if (authLoading || loading) {
     return (
       <AppShell title={t.collections}>
-        <div className="app-card p-8 text-center text-sm font-bold text-slate-400">ஏற்றுகிறது...</div>
+        <div className="rounded-3xl border border-neutral-200 bg-white p-12 text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-b-2 border-emerald-600" />
+          <p className="text-sm font-medium text-neutral-500">Loading collections...</p>
+        </div>
       </AppShell>
     );
   }
@@ -393,11 +438,25 @@ export default function CollectionsPage() {
       {/* ஒரே பட்டியல் */}
       <div className="app-card p-5">
         <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4">
-          எனது வசூல்கள் ({stats.count})
+          {isAdminView ? "அனைத்து வசூல்கள்" : "எனது வசூல்கள்"} ({stats.count})
         </h2>
 
         {collections.length === 0 ? (
-          <p className="text-center text-sm text-slate-400 py-8">இன்னும் வசூல் இல்லை</p>
+          <EmptyState
+            title="No collections yet"
+            description="No subscription collections have been recorded. Start by adding a new collection from a family."
+            icon={<FileText className="h-7 w-7" />}
+            action={
+              <button
+                type="button"
+                onClick={openAddModal}
+                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-700"
+              >
+                <Plus className="h-4 w-4" />
+                புதிய வசூல்
+              </button>
+            }
+          />
         ) : (
           <div className="space-y-3">
             {collections.map((c) => (
@@ -412,6 +471,11 @@ export default function CollectionsPage() {
                   <div className="text-xs text-slate-400 mt-0.5">
                     {new Date(c.created_at).toLocaleDateString("ta-LK")}
                   </div>
+                  {isAdminView && (
+                    <div className="text-[11px] font-semibold text-slate-500 mt-1">
+                      Collector: {collectorProfiles[c.collected_by_user_id] || "Collector"}
+                    </div>
+                  )}
                   {c.notes && <div className="text-xs text-slate-500 mt-1">{c.notes}</div>}
                   {c.status === "accepted" && (c.commission_amount ?? 0) > 0 && (
                     <div className="text-xs text-purple-600 font-bold mt-1">
