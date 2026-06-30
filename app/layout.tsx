@@ -42,17 +42,17 @@ export const metadata = {
   },
   icons: {
     icon: [
-      { url: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml' },
-      { url: '/icon-512.svg', sizes: '512x512', type: 'image/svg+xml' },
+      { url: '/logo.png', sizes: '192x192', type: 'image/png' },
+      { url: '/logo.png', sizes: '512x512', type: 'image/png' },
     ],
     apple: [
-      { url: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml' },
+      { url: '/logo.png', sizes: '180x180', type: 'image/png' },
     ],
   },
 };
 
 export const viewport = {
-  themeColor: '#047857',
+  themeColor: '#065f46',
 };
 
 export default async function RootLayout(props: { children: React.ReactNode }) {
