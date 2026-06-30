@@ -60,6 +60,11 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
 
   return (
     <html lang="en">
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/logo.png" />
+        <meta name="apple-mobile-web-app-title" content="Smart Masjeedh" />
+      </head>
       <body className={`${inter.className} min-h-screen bg-neutral-50 text-neutral-900`}>
         <MockAuthProvider>
           <ToastProvider>{props.children}</ToastProvider>
