@@ -68,8 +68,15 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
     <html lang="en">
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/logo.png" />
+        <link rel="apple-touch-icon" href="/logo.png" sizes="180x180" />
+        <link rel="apple-touch-icon" href="/logo.png" sizes="167x167" />
+        <link rel="apple-touch-icon" href="/logo.png" sizes="152x152" />
+        <link rel="apple-touch-icon" href="/logo.png" sizes="120x120" />
+        <link rel="apple-touch-startup-image" href="/logo.png" />
         <meta name="apple-mobile-web-app-title" content="Smart Masjeedh" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body className={`${inter.className} min-h-screen bg-neutral-50 text-neutral-900`}>
         <MockAuthProvider>
