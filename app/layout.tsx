@@ -42,12 +42,17 @@ export const metadata = {
   },
   icons: {
     icon: [
-      { url: '/logo.png', sizes: '64x64 128x128 192x192 256x256 512x512' },
+      { url: '/logo.png', sizes: '512x512' },
+      { url: '/logo.png', sizes: '256x256' },
+      { url: '/logo.png', sizes: '192x192' },
+      { url: '/logo.png', sizes: '128x128' },
+      { url: '/logo.png', sizes: '64x64' },
     ],
     apple: [
       { url: '/logo.png', sizes: '180x180' },
       { url: '/logo.png', sizes: '167x167' },
       { url: '/logo.png', sizes: '152x152' },
+      { url: '/logo.png', sizes: '120x120' },
     ],
   },
 };
