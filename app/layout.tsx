@@ -40,6 +40,16 @@ export const metadata = {
     statusBarStyle: 'default',
     title: 'Smart Masjeedh',
   },
+  icons: {
+    icon: [
+      { url: '/logo.png', sizes: '64x64 128x128 192x192 256x256 512x512' },
+    ],
+    apple: [
+      { url: '/logo.png', sizes: '180x180' },
+      { url: '/logo.png', sizes: '167x167' },
+      { url: '/logo.png', sizes: '152x152' },
+    ],
+  },
 };
 
 export const viewport = {

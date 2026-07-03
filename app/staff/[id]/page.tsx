@@ -21,6 +21,9 @@ type StaffDetail = {
   phone?: string | null;
   role: string;
   monthly_salary?: number | null;
+  allowances?: number | null;
+  category?: string | null;
+  access_permissions?: { edit_salary?: boolean; view_reports?: boolean } | null;
   status?: string | null;
   created_at?: string | null;
 };
@@ -75,7 +78,13 @@ export default function StaffDetailPage() {
     tenantContext?.role === "super_admin" ||
     tenantContext?.role === "co_admin" ||
     canManageStaff ||
-    canManageAccounts;
+    canManageAccounts ||
+    Boolean(staff?.access_permissions?.edit_salary);
+
+  const canViewReports =
+    userIsSuperAdmin ||
+    hasModulePermission(parsedPermissions, "reports") ||
+    Boolean(staff?.access_permissions?.view_reports);
 
   const totalSalaryPaid = useMemo(
     () => salaryHistory.reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
@@ -109,16 +118,12 @@ export default function StaffDetailPage() {
     try {
       const ctx = await resolveTenant();
 
-      if (!canManageSalary) {
-        throw new Error("You do not have permission to view salary details for staff members.");
-      }
-
       console.log("[StaffDetail] Route staffId:", staffId);
       console.log("[StaffDetail] Current tenant masjidId:", ctx.masjidId);
 
       const { data: staffRow, error: staffError } = await supabase
         .from("employees")
-        .select("id, masjid_id, name, phone, role, monthly_salary, status, created_at")
+        .select("id, masjid_id, name, phone, role, monthly_salary, allowances, category, access_permissions, status, created_at")
         .eq("id", staffId)
         .maybeSingle();
 
@@ -305,24 +310,6 @@ export default function StaffDetailPage() {
 
   if (!user) return null;
 
-  if (!canManageSalary) {
-    return (
-      <AppShell title="Staff Detail" backHref="/staff">
-        <div className="rounded-3xl border border-red-200 bg-red-50 p-6">
-          <div className="flex items-start gap-3">
-            <Shield className="mt-0.5 h-5 w-5 text-red-600" />
-            <div>
-              <h2 className="text-lg font-black text-red-900">Access Restricted</h2>
-              <p className="mt-1 text-sm text-red-700">
-                Only authorized admin users can view salary details and create salary payments.
-              </p>
-            </div>
-          </div>
-        </div>
-      </AppShell>
-    );
-  }
-
   if (viewState === "unauthorized") {
     return (
       <AppShell title="Staff Detail" backHref="/staff">
@@ -429,12 +416,21 @@ export default function StaffDetailPage() {
             role={staff.role}
             phone={staff.phone}
             monthlySalary={staff.monthly_salary}
+            allowances={staff.allowances}
             status={staff.status}
+            category={staff.category}
+            accessPermissions={staff.access_permissions}
             masjidName={masjid?.masjid_name || tenantContext?.masjidId}
             joinedAt={staff.created_at}
-            canManageSalary={canManageSalary}
+            canManageSalary={canManageSalary && (staff.category || "Employee") === "Employee"}
             onPaySalary={() => setIsPayModalOpen(true)}
           />
+
+          {!canViewReports && (
+            <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              Reporting access is currently restricted for this staff member.
+            </div>
+          )}
 
           <section className="grid gap-4 md:grid-cols-3">
             <div className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm">
@@ -478,32 +474,43 @@ export default function StaffDetailPage() {
             </div>
           </section>
 
-          <section className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm">
-            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h2 className="text-xl font-black text-neutral-900">Salary Management</h2>
-                <p className="mt-1 text-sm text-neutral-500">
-                  Monthly salary history with finance integration into the Accounts module.
-                </p>
+          {canManageSalary ? (
+            <section className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm">
+              <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-neutral-900">Salary Management</h2>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    Monthly salary history with finance integration into the Accounts module.
+                  </p>
+                </div>
+
+                {(staff.category || "Employee") === "Employee" && (
+                  <button
+                    type="button"
+                    onClick={() => setIsPayModalOpen(true)}
+                    className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-700"
+                  >
+                    Pay Salary
+                  </button>
+                )}
               </div>
 
-              <button
-                type="button"
-                onClick={() => setIsPayModalOpen(true)}
-                className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-700"
-              >
-                Pay Salary
-              </button>
-            </div>
+              {historyWarning && (
+                <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                  {historyWarning}
+                </div>
+              )}
 
-            {historyWarning && (
-              <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                {historyWarning}
-              </div>
-            )}
-
-            <SalaryHistoryTable rows={salaryHistory} loading={refreshing} />
-          </section>
+              <SalaryHistoryTable rows={salaryHistory} loading={refreshing} />
+            </section>
+          ) : (
+            <section className="rounded-3xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+              <h2 className="text-lg font-black text-amber-900">Profile view only</h2>
+              <p className="mt-2 text-sm text-amber-800">
+                Salary payments and management actions are restricted for your role, but the staff profile details remain available.
+              </p>
+            </section>
+          )}
         </div>
       </AppShell>
 

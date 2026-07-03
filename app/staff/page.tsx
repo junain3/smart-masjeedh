@@ -34,7 +34,12 @@ export const dynamic = "force-dynamic";
 
 type AccessRole = "super_admin" | "co_admin" | "staff" | "editor";
 type Status = "active" | "inactive";
-type SectionKey = "directory" | "security";
+type StaffCategory = "Employee" | "Board Member";
+type StaffAccessPermissions = {
+  edit_salary: boolean;
+  view_reports: boolean;
+};
+type SectionKey = "directory" | "security" | "admin_settings";
 
 type Permissions = {
   accounts: boolean;
@@ -56,6 +61,9 @@ type Staff = {
   role: AccessRole;
   basic_salary: number;
   status: Status;
+  category: StaffCategory;
+  allowances: number;
+  access_permissions: StaffAccessPermissions;
   created_at: string;
   masjid_id: string;
 };
@@ -75,7 +83,10 @@ type StaffForm = {
   phone: string;
   role: AccessRole;
   basicSalary: string;
+  allowances: string;
   status: Status;
+  category: StaffCategory;
+  accessPermissions: StaffAccessPermissions;
 };
 
 type InviteForm = {
@@ -103,6 +114,13 @@ const DEFAULT_PERMISSIONS: Permissions = {
   settings: false,
   events: false,
 };
+
+const DEFAULT_ACCESS_PERMISSIONS: StaffAccessPermissions = {
+  edit_salary: false,
+  view_reports: false,
+};
+
+const STAFF_CATEGORY_TABS: StaffCategory[] = ["Employee", "Board Member"];
 
 const PERMISSION_ITEMS: Array<{ key: keyof Permissions; label: string }> = [
   { key: "accounts", label: "Accounts" },
@@ -165,13 +183,20 @@ function normalizePermissions(value: Partial<Permissions> | null | undefined): P
   return { ...DEFAULT_PERMISSIONS, ...(value || {}) };
 }
 
+function normalizeAccessPermissions(value: Partial<StaffAccessPermissions> | null | undefined): StaffAccessPermissions {
+  return { ...DEFAULT_ACCESS_PERMISSIONS, ...(value || {}) };
+}
+
 function createStaffForm(): StaffForm {
   return {
     name: "",
     phone: "",
     role: "staff",
     basicSalary: "",
+    allowances: "",
     status: "active",
+    category: "Employee",
+    accessPermissions: { ...DEFAULT_ACCESS_PERMISSIONS },
   };
 }
 
@@ -205,8 +230,11 @@ function getStatusBadge(status: Status) {
     : "bg-red-100 text-red-800 border-red-200";
 }
 
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+function initials(name: string | null | undefined) {
+  const safeName = (name || "").trim();
+  if (!safeName) return "?";
+  
+  const parts = safeName.split(/\s+/).filter(Boolean);
   const first = parts[0]?.[0] || "?";
   const last = parts.length > 1 ? parts[parts.length - 1]?.[0] || "" : "";
   return `${first}${last}`.toUpperCase();
@@ -227,6 +255,7 @@ export default function StaffPage() {
   const [pageError, setPageError] = useState("");
 
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [activeStaffTab, setActiveStaffTab] = useState<StaffCategory>("Employee");
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [collectorProfiles, setCollectorProfiles] = useState<Record<string, number>>({});
   const [staffBalances, setStaffBalances] = useState<Record<string, number>>({});
@@ -272,15 +301,19 @@ export default function StaffPage() {
 
   const filteredStaff = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return staff;
     return staff.filter((member) => {
+      const matchesCategory = member.category === activeStaffTab;
+      if (!matchesCategory) return false;
+
+      if (!query) return true;
       return (
         member.name.toLowerCase().includes(query) ||
         member.phone.toLowerCase().includes(query) ||
-        formatRole(member.role).toLowerCase().includes(query)
+        formatRole(member.role).toLowerCase().includes(query) ||
+        member.category.toLowerCase().includes(query)
       );
     });
-  }, [searchQuery, staff]);
+  }, [activeStaffTab, searchQuery, staff]);
 
   const totalSalary = useMemo(
     () => staff.reduce((sum, item) => sum + Number(item.basic_salary || 0), 0),
@@ -289,6 +322,16 @@ export default function StaffPage() {
 
   const activeStaffCount = useMemo(
     () => staff.filter((item) => item.status === "active").length,
+    [staff]
+  );
+
+  const employeeCount = useMemo(
+    () => staff.filter((item) => item.category === "Employee").length,
+    [staff]
+  );
+
+  const boardMemberCount = useMemo(
+    () => staff.filter((item) => item.category === "Board Member").length,
     [staff]
   );
 
@@ -390,7 +433,7 @@ export default function StaffPage() {
 
       const { data: employeeRows, error: employeeError } = await supabase
         .from("employees")
-        .select("id, masjid_id, name, phone, role, monthly_salary, created_at")
+        .select("id, masjid_id, name, phone, role, monthly_salary, created_at, category, allowances, access_permissions")
         .eq("masjid_id", ctx.masjidId)
         .order("created_at", { ascending: false });
 
@@ -404,6 +447,9 @@ export default function StaffPage() {
         role: (row.role || "staff") as AccessRole,
         basic_salary: Number(row.monthly_salary || 0),
         status: "active",
+        category: (row.category as StaffCategory) || "Employee",
+        allowances: Number(row.allowances || 0),
+        access_permissions: normalizeAccessPermissions(row.access_permissions),
         created_at: row.created_at || new Date().toISOString(),
         masjid_id: row.masjid_id,
       }));
@@ -553,7 +599,10 @@ export default function StaffPage() {
       phone: member.phone,
       role: member.role,
       basicSalary: String(member.basic_salary),
+      allowances: String(member.allowances || 0),
       status: member.status,
+      category: member.category,
+      accessPermissions: member.access_permissions,
     });
     setIsStaffModalOpen(true);
   };
@@ -578,6 +627,7 @@ export default function StaffPage() {
     const name = staffForm.name.trim();
     const phone = staffForm.phone.trim();
     const salary = Number(staffForm.basicSalary);
+    const allowances = Number(staffForm.allowances || 0);
 
     if (!name) {
       toast({ kind: "error", title: "Validation Error", message: "Full name is required." });
@@ -611,6 +661,9 @@ export default function StaffPage() {
             phone,
             role: staffForm.role,
             monthly_salary: salary,
+            allowances,
+            category: staffForm.category,
+            access_permissions: staffForm.accessPermissions,
           })
           .eq("id", editingStaff.id)
           .eq("masjid_id", ctx.masjidId);
@@ -620,7 +673,17 @@ export default function StaffPage() {
         setStaff((prev) =>
           prev.map((item) =>
             item.id === editingStaff.id
-              ? { ...item, name, phone, role: staffForm.role, basic_salary: salary, status: staffForm.status }
+              ? {
+                  ...item,
+                  name,
+                  phone,
+                  role: staffForm.role,
+                  basic_salary: salary,
+                  status: staffForm.status,
+                  category: staffForm.category,
+                  allowances,
+                  access_permissions: staffForm.accessPermissions,
+                }
               : item
           )
         );
@@ -635,8 +698,11 @@ export default function StaffPage() {
             phone,
             role: staffForm.role,
             monthly_salary: salary,
+            allowances,
+            category: staffForm.category,
+            access_permissions: staffForm.accessPermissions,
           })
-          .select("id, masjid_id, name, phone, role, monthly_salary, created_at")
+          .select("id, masjid_id, name, phone, role, monthly_salary, created_at, category, allowances, access_permissions")
           .single();
 
         if (error) throw error;
@@ -650,6 +716,9 @@ export default function StaffPage() {
             role: (data.role || staffForm.role) as AccessRole,
             basic_salary: Number(data.monthly_salary || salary),
             status: staffForm.status,
+            category: (data.category as StaffCategory) || staffForm.category,
+            allowances: Number(data.allowances || allowances),
+            access_permissions: normalizeAccessPermissions(data.access_permissions),
             created_at: data.created_at || new Date().toISOString(),
             masjid_id: data.masjid_id,
           },
@@ -1051,6 +1120,19 @@ export default function StaffPage() {
               </button>
               {canManageAccess && (
                 <button
+                  onClick={() => setActiveSection("admin_settings")}
+                  className={`flex-1 rounded-2xl px-4 py-3 text-left transition ${
+                    activeSection === "admin_settings" ? "bg-emerald-600 text-white" : "text-neutral-700 hover:bg-neutral-50"
+                  }`}
+                >
+                  <div className="text-sm font-black">Admin Settings</div>
+                  <div className={`text-xs ${activeSection === "admin_settings" ? "text-emerald-100" : "text-neutral-500"}`}>
+                    Manage staff categories and per-member access controls.
+                  </div>
+                </button>
+              )}
+              {canManageAccess && (
+                <button
                   onClick={() => setActiveSection("security")}
                   className={`flex-1 rounded-2xl px-4 py-3 text-left transition ${
                     activeSection === "security" ? "bg-emerald-600 text-white" : "text-neutral-700 hover:bg-neutral-50"
@@ -1067,15 +1149,26 @@ export default function StaffPage() {
 
           {activeSection === "directory" && (
             <div className="flex flex-col gap-6">
-              <div className="grid gap-6 md:grid-cols-3">
+              <div className="grid gap-6 md:grid-cols-4">
                 <div className="rounded-3xl border border-neutral-200 bg-white p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-neutral-500">Total Staff</p>
-                      <p className="mt-2 text-3xl font-black text-neutral-900">{staff.length}</p>
+                      <p className="text-sm text-neutral-500">Employees</p>
+                      <p className="mt-2 text-3xl font-black text-neutral-900">{employeeCount}</p>
                     </div>
                     <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-700">
                       <Users className="h-6 w-6" />
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-3xl border border-neutral-200 bg-white p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-neutral-500">Board Members</p>
+                      <p className="mt-2 text-3xl font-black text-amber-700">{boardMemberCount}</p>
+                    </div>
+                    <div className="rounded-2xl bg-amber-100 p-3 text-amber-700">
+                      <Shield className="h-6 w-6" />
                     </div>
                   </div>
                 </div>
@@ -1086,7 +1179,7 @@ export default function StaffPage() {
                       <p className="mt-2 text-3xl font-black text-emerald-700">{activeStaffCount}</p>
                     </div>
                     <div className="rounded-2xl bg-blue-100 p-3 text-blue-700">
-                      <Shield className="h-6 w-6" />
+                      <Check className="h-6 w-6" />
                     </div>
                   </div>
                 </div>
@@ -1096,7 +1189,7 @@ export default function StaffPage() {
                       <p className="text-sm text-neutral-500">Total Salary</p>
                       <p className="mt-2 text-3xl font-black text-neutral-900">{formatCurrency(totalSalary)}</p>
                     </div>
-                    <div className="rounded-2xl bg-amber-100 p-3 text-amber-700">
+                    <div className="rounded-2xl bg-violet-100 p-3 text-violet-700">
                       <DollarSign className="h-6 w-6" />
                     </div>
                   </div>
@@ -1108,7 +1201,7 @@ export default function StaffPage() {
                   <div>
                     <h2 className="text-xl font-black text-neutral-900">Staff Directory</h2>
                     <p className="mt-1 text-sm text-neutral-500">
-                      Manage staff records separately from platform login access.
+                      Separate employees from board members and open their detailed profiles with one click.
                     </p>
                   </div>
                   <button onClick={openCreateStaffModal} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700">
@@ -1118,6 +1211,21 @@ export default function StaffPage() {
                 </div>
 
                 <div className="p-6">
+                  <div className="mb-4 flex flex-wrap gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-2">
+                    {STAFF_CATEGORY_TABS.map((tab) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setActiveStaffTab(tab)}
+                        className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                          activeStaffTab === tab ? "bg-emerald-600 text-white" : "text-neutral-700 hover:bg-white"
+                        }`}
+                      >
+                        {tab === "Employee" ? "Employees" : "Board Members"}
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="relative mb-6">
                     <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-neutral-400" />
                     <input
@@ -1145,9 +1253,9 @@ export default function StaffPage() {
                         <thead className="bg-neutral-50">
                           <tr>
                             <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-neutral-500">Name</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-neutral-500">Category</th>
                             <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-neutral-500">Role</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-neutral-500">Basic Salary</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-neutral-500">Status</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-neutral-500">Salary</th>
                             <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-neutral-500">Actions</th>
                           </tr>
                         </thead>
@@ -1160,12 +1268,17 @@ export default function StaffPage() {
                                     {initials(member.name)}
                                   </div>
                                   <div>
-                                    <button onClick={() => router.push(`/staff/${member.employee_id}`)} className="text-left text-sm font-bold text-emerald-700 hover:text-emerald-900 hover:underline">
+                                    <button onClick={() => router.push(`/staff/${member.id}`)} className="text-left text-sm font-bold text-emerald-700 hover:text-emerald-900 hover:underline">
                                       {member.name}
                                     </button>
                                     <p className="text-xs text-neutral-500">{member.phone || "No phone number"}</p>
                                   </div>
                                 </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${member.category === "Board Member" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                                  {member.category}
+                                </span>
                               </td>
                               <td className="px-6 py-4">
                                 <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getRoleBadge(member.role)}`}>
@@ -1174,12 +1287,10 @@ export default function StaffPage() {
                               </td>
                               <td className="px-6 py-4 text-sm font-semibold text-neutral-900">{formatCurrency(member.basic_salary)}</td>
                               <td className="px-6 py-4">
-                                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getStatusBadge(member.status)}`}>
-                                  {formatRole(member.status)}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4">
                                 <div className="flex items-center gap-2">
+                                  <button onClick={() => router.push(`/staff/${member.id}`)} className="rounded-xl border border-neutral-200 px-3 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50" title="View profile">
+                                    View
+                                  </button>
                                   <button onClick={() => openEditStaffModal(member)} className="rounded-xl p-2 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800" title="Edit staff">
                                     <Edit2 className="h-4 w-4" />
                                   </button>
@@ -1194,6 +1305,108 @@ export default function StaffPage() {
                       </table>
                     </div>
                   )}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {activeSection === "admin_settings" && canManageAccess && (
+            <div className="flex flex-col gap-6">
+              <section className="rounded-3xl border border-neutral-200 bg-white">
+                <div className="border-b border-neutral-200 p-6">
+                  <h2 className="text-xl font-black text-neutral-900">Admin Settings</h2>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    Configure staff categories and access permissions for salary and reporting actions.
+                  </p>
+                </div>
+
+                <div className="p-6">
+                  <div className="overflow-x-auto rounded-3xl border border-neutral-200">
+                    <table className="min-w-full divide-y divide-neutral-200">
+                      <thead className="bg-neutral-50">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-neutral-500">Name</th>
+                          <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-neutral-500">Category</th>
+                          <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-neutral-500">Access</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-200 bg-white">
+                        {staff.map((member) => (
+                          <tr key={member.id} className="hover:bg-neutral-50">
+                            <td className="px-6 py-4">
+                              <div className="font-semibold text-neutral-900">{member.name}</div>
+                              <div className="text-sm text-neutral-500">{member.phone || "No phone number"}</div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-neutral-700">
+                                {member.category}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex flex-col gap-3">
+                                <label className="flex items-center gap-2 text-sm font-medium text-neutral-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={member.access_permissions.edit_salary}
+                                    onChange={async () => {
+                                      const nextValue = !member.access_permissions.edit_salary;
+                                      const { error } = await supabase
+                                        .from("employees")
+                                        .update({ access_permissions: { ...member.access_permissions, edit_salary: nextValue } })
+                                        .eq("id", member.id)
+                                        .eq("masjid_id", tenantContext?.masjidId);
+                                      if (!error) {
+                                        setStaff((prev) =>
+                                          prev.map((item) =>
+                                            item.id === member.id
+                                              ? {
+                                                  ...item,
+                                                  access_permissions: { ...item.access_permissions, edit_salary: nextValue },
+                                                }
+                                              : item
+                                          )
+                                        );
+                                      }
+                                    }}
+                                    className="h-4 w-4 rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500"
+                                  />
+                                  Edit Salary
+                                </label>
+                                <label className="flex items-center gap-2 text-sm font-medium text-neutral-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={member.access_permissions.view_reports}
+                                    onChange={async () => {
+                                      const nextValue = !member.access_permissions.view_reports;
+                                      const { error } = await supabase
+                                        .from("employees")
+                                        .update({ access_permissions: { ...member.access_permissions, view_reports: nextValue } })
+                                        .eq("id", member.id)
+                                        .eq("masjid_id", tenantContext?.masjidId);
+                                      if (!error) {
+                                        setStaff((prev) =>
+                                          prev.map((item) =>
+                                            item.id === member.id
+                                              ? {
+                                                  ...item,
+                                                  access_permissions: { ...item.access_permissions, view_reports: nextValue },
+                                                }
+                                              : item
+                                          )
+                                        );
+                                      }
+                                    }}
+                                    className="h-4 w-4 rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500"
+                                  />
+                                  View Reports
+                                </label>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </section>
             </div>
@@ -1529,17 +1742,77 @@ export default function StaffPage() {
                 </div>
               </div>
 
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-neutral-700">Category</label>
+                  <select
+                    value={staffForm.category}
+                    onChange={(e) => setStaffForm((prev) => ({ ...prev, category: e.target.value as StaffCategory }))}
+                    className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  >
+                    <option value="Employee">Employee</option>
+                    <option value="Board Member">Board Member</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-neutral-700">Basic Salary</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={staffForm.basicSalary}
+                    onChange={(e) => setStaffForm((prev) => ({ ...prev, basicSalary: e.target.value }))}
+                    placeholder="Enter monthly salary"
+                    className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="mb-2 block text-sm font-semibold text-neutral-700">Basic Salary</label>
+                <label className="mb-2 block text-sm font-semibold text-neutral-700">Allowances</label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
-                  value={staffForm.basicSalary}
-                  onChange={(e) => setStaffForm((prev) => ({ ...prev, basicSalary: e.target.value }))}
-                  placeholder="Enter monthly salary"
+                  value={staffForm.allowances}
+                  onChange={(e) => setStaffForm((prev) => ({ ...prev, allowances: e.target.value }))}
+                  placeholder="Enter monthly allowances"
                   className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 />
+              </div>
+
+              <div className="rounded-2xl border border-neutral-200 p-4">
+                <p className="mb-3 text-sm font-semibold text-neutral-700">Profile Access</p>
+                <div className="flex flex-col gap-3">
+                  <label className="flex items-center gap-2 text-sm font-medium text-neutral-700">
+                    <input
+                      type="checkbox"
+                      checked={staffForm.accessPermissions.edit_salary}
+                      onChange={(e) =>
+                        setStaffForm((prev) => ({
+                          ...prev,
+                          accessPermissions: { ...prev.accessPermissions, edit_salary: e.target.checked },
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    Edit Salary
+                  </label>
+                  <label className="flex items-center gap-2 text-sm font-medium text-neutral-700">
+                    <input
+                      type="checkbox"
+                      checked={staffForm.accessPermissions.view_reports}
+                      onChange={(e) =>
+                        setStaffForm((prev) => ({
+                          ...prev,
+                          accessPermissions: { ...prev.accessPermissions, view_reports: e.target.checked },
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    View Reports
+                  </label>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-2">

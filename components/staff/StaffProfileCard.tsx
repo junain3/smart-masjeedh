@@ -7,15 +7,21 @@ type StaffProfileCardProps = {
   role: string;
   phone?: string | null;
   monthlySalary?: number | null;
+  allowances?: number | null;
   status?: string | null;
+  category?: string | null;
+  accessPermissions?: { edit_salary?: boolean; view_reports?: boolean } | null;
   masjidName?: string | null;
   joinedAt?: string | null;
   canManageSalary?: boolean;
   onPaySalary?: () => void;
 };
 
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+function initials(name: string | null | undefined) {
+  const safeName = (name || "").trim();
+  if (!safeName) return "?";
+  
+  const parts = safeName.split(/\s+/).filter(Boolean);
   const first = parts[0]?.[0] || "?";
   const last = parts.length > 1 ? parts[parts.length - 1]?.[0] || "" : "";
   return `${first}${last}`.toUpperCase();
@@ -46,7 +52,10 @@ export function StaffProfileCard(props: StaffProfileCardProps) {
     role,
     phone,
     monthlySalary,
+    allowances,
     status,
+    category,
+    accessPermissions,
     masjidName,
     joinedAt,
     canManageSalary = false,
@@ -70,6 +79,11 @@ export function StaffProfileCard(props: StaffProfileCardProps) {
               <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-neutral-600">
                 {formatStatus(status)}
               </span>
+              {category && (
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-700">
+                  {category}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -85,7 +99,7 @@ export function StaffProfileCard(props: StaffProfileCardProps) {
         )}
       </div>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-2xl bg-neutral-50 p-4">
           <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-neutral-500">
             <Briefcase className="h-4 w-4" />
@@ -112,6 +126,14 @@ export function StaffProfileCard(props: StaffProfileCardProps) {
 
         <div className="rounded-2xl bg-neutral-50 p-4">
           <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-neutral-500">
+            <Wallet className="h-4 w-4" />
+            Allowances
+          </div>
+          <p className="text-sm font-semibold text-neutral-900">{formatCurrency(allowances)}</p>
+        </div>
+
+        <div className="rounded-2xl bg-neutral-50 p-4">
+          <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-neutral-500">
             <Building2 className="h-4 w-4" />
             Assigned Mosque
           </div>
@@ -119,9 +141,21 @@ export function StaffProfileCard(props: StaffProfileCardProps) {
         </div>
       </div>
 
-      <div className="mt-4 flex items-center gap-2 text-xs font-medium text-neutral-500">
-        <CalendarDays className="h-4 w-4" />
-        <span>Joined: {formatDate(joinedAt)}</span>
+      <div className="mt-4 flex flex-wrap items-center gap-3 text-xs font-medium text-neutral-500">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-4 w-4" />
+          <span>Joined: {formatDate(joinedAt)}</span>
+        </div>
+        {accessPermissions && (
+          <div className="flex flex-wrap gap-2">
+            {accessPermissions.edit_salary && (
+              <span className="rounded-full bg-emerald-100 px-2.5 py-1 font-semibold text-emerald-800">Edit Salary</span>
+            )}
+            {accessPermissions.view_reports && (
+              <span className="rounded-full bg-blue-100 px-2.5 py-1 font-semibold text-blue-800">View Reports</span>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );
