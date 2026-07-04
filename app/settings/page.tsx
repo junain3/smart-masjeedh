@@ -56,7 +56,7 @@ export default function SettingsPage() {
             Configure your masjid settings and preferences.
           </p>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Link href="/settings/general" className="block">
               <div className="bg-gray-50 rounded-lg p-6 hover:bg-gray-100 transition-colors">
                 <h3 className="font-semibold text-gray-900 mb-2">General Settings</h3>
@@ -73,6 +73,18 @@ export default function SettingsPage() {
               <div className="bg-gray-50 rounded-lg p-6 hover:bg-gray-100 transition-colors">
                 <h3 className="font-semibold text-gray-900 mb-2">Notification Settings</h3>
                 <p className="text-sm text-gray-600">Configure notifications and alerts</p>
+              </div>
+            </Link>
+            <Link href="/settings/sms" className="block">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-6 hover:bg-emerald-100 transition-colors">
+                <h3 className="font-semibold text-emerald-900 mb-2">SMS Gateway</h3>
+                <p className="text-sm text-emerald-700">Configure SMS provider settings</p>
+              </div>
+            </Link>
+            <Link href="/settings/whatsapp" className="block">
+              <div className="bg-violet-50 border border-violet-200 rounded-lg p-6 hover:bg-violet-100 transition-colors">
+                <h3 className="font-semibold text-violet-900 mb-2">WhatsApp Settings</h3>
+                <p className="text-sm text-violet-700">Configure WhatsApp API credentials</p>
               </div>
             </Link>
           </div>

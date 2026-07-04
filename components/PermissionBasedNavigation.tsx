@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Users, CreditCard, Briefcase, Settings, Calendar, Home as HomeIcon } from 'lucide-react';
+import { Users, CreditCard, Briefcase, Settings, Calendar, Home as HomeIcon, MessageSquareMore } from 'lucide-react';
 import { parsePermissions, hasModulePermission, ModulePermissions } from '@/lib/permissions-utils';
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 
@@ -56,6 +56,13 @@ export default function PermissionBasedNavigation({
       href: '/settings',
       icon: Settings,
       label: t.settings,
+      permission: 'settings'
+    },
+    {
+      key: 'whatsapp-settings',
+      href: '/settings/whatsapp',
+      icon: MessageSquareMore,
+      label: 'WhatsApp Settings',
       permission: 'settings'
     },
     {
