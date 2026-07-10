@@ -26,6 +26,9 @@ type StaffDetail = {
   access_permissions?: { edit_salary?: boolean; view_reports?: boolean } | null;
   status?: string | null;
   created_at?: string | null;
+  designation?: string | null;
+  term_start?: string | null;
+  term_end?: string | null;
 };
 
 type MasjidSummary = {
@@ -123,7 +126,7 @@ export default function StaffDetailPage() {
 
       const { data: staffRow, error: staffError } = await supabase
         .from("employees")
-        .select("id, masjid_id, name, phone, role, monthly_salary, allowances, category, access_permissions, status, created_at")
+        .select("id, masjid_id, name, phone, role, monthly_salary, allowances, category, access_permissions, created_at, designation, term_start, term_end")
         .eq("id", staffId)
         .maybeSingle();
 
@@ -180,7 +183,7 @@ export default function StaffDetailPage() {
 
       if (masjidError) throw masjidError;
 
-      setStaff(staffRow as StaffDetail);
+      setStaff({ ...staffRow, status: (staffRow as any)?.status || 'active' } as StaffDetail);
       setMasjid((masjidRow as MasjidSummary) || null);
       setViewState("ready");
 
@@ -424,6 +427,9 @@ export default function StaffDetailPage() {
             joinedAt={staff.created_at}
             canManageSalary={canManageSalary && (staff.category || "Employee") === "Employee"}
             onPaySalary={() => setIsPayModalOpen(true)}
+            designation={staff.designation}
+            termStart={staff.term_start}
+            termEnd={staff.term_end}
           />
 
           {!canViewReports && (

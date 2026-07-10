@@ -66,6 +66,9 @@ type Staff = {
   access_permissions: StaffAccessPermissions;
   created_at: string;
   masjid_id: string;
+  designation?: string | null;
+  term_start?: string | null;
+  term_end?: string | null;
 };
 
 type UserRole = {
@@ -87,6 +90,9 @@ type StaffForm = {
   status: Status;
   category: StaffCategory;
   accessPermissions: StaffAccessPermissions;
+  designation: string;
+  termStart: string;
+  termEnd: string;
 };
 
 type InviteForm = {
@@ -187,7 +193,7 @@ function normalizeAccessPermissions(value: Partial<StaffAccessPermissions> | nul
   return { ...DEFAULT_ACCESS_PERMISSIONS, ...(value || {}) };
 }
 
-function createStaffForm(): StaffForm {
+function createStaffForm(category: StaffCategory = "Employee"): StaffForm {
   return {
     name: "",
     phone: "",
@@ -195,8 +201,11 @@ function createStaffForm(): StaffForm {
     basicSalary: "",
     allowances: "",
     status: "active",
-    category: "Employee",
+    category,
     accessPermissions: { ...DEFAULT_ACCESS_PERMISSIONS },
+    designation: "",
+    termStart: "",
+    termEnd: "",
   };
 }
 
@@ -433,7 +442,7 @@ export default function StaffPage() {
 
       const { data: employeeRows, error: employeeError } = await supabase
         .from("employees")
-        .select("id, masjid_id, name, phone, role, monthly_salary, created_at, category, allowances, access_permissions")
+        .select("id, masjid_id, name, phone, role, monthly_salary, created_at, category, allowances, access_permissions, designation, term_start, term_end")
         .eq("masjid_id", ctx.masjidId)
         .order("created_at", { ascending: false });
 
@@ -452,6 +461,9 @@ export default function StaffPage() {
         access_permissions: normalizeAccessPermissions(row.access_permissions),
         created_at: row.created_at || new Date().toISOString(),
         masjid_id: row.masjid_id,
+        designation: row.designation,
+        term_start: row.term_start,
+        term_end: row.term_end,
       }));
 
       setStaff(nextStaff);
@@ -587,22 +599,26 @@ export default function StaffPage() {
   };
 
   const openCreateStaffModal = () => {
+    const defaultForm = createStaffForm(activeStaffTab);
     setEditingStaff(null);
-    setStaffForm(createStaffForm());
+    setStaffForm(defaultForm);
     setIsStaffModalOpen(true);
   };
 
-  const openEditStaffModal = (member: Staff) => {
+  const openEditStaffModal = (member: any) => {
     setEditingStaff(member);
     setStaffForm({
       name: member.name,
       phone: member.phone,
       role: member.role,
-      basicSalary: String(member.basic_salary),
+      basicSalary: String(member.basic_salary || ""),
       allowances: String(member.allowances || 0),
-      status: member.status,
+      status: member.status || "active",
       category: member.category,
       accessPermissions: member.access_permissions,
+      designation: member.designation || "",
+      termStart: member.term_start || "",
+      termEnd: member.term_end || "",
     });
     setIsStaffModalOpen(true);
   };
@@ -628,6 +644,10 @@ export default function StaffPage() {
     const phone = staffForm.phone.trim();
     const salary = Number(staffForm.basicSalary);
     const allowances = Number(staffForm.allowances || 0);
+    const designation = staffForm.designation.trim();
+    const termStart = staffForm.termStart;
+    const termEnd = staffForm.termEnd;
+    const isEmployee = staffForm.category === "Employee";
 
     if (!name) {
       toast({ kind: "error", title: "Validation Error", message: "Full name is required." });
@@ -639,7 +659,7 @@ export default function StaffPage() {
       return;
     }
 
-    if (!Number.isFinite(salary) || salary < 0) {
+    if (isEmployee && (!Number.isFinite(salary) || salary < 0)) {
       toast({
         kind: "error",
         title: "Validation Error",
@@ -653,18 +673,32 @@ export default function StaffPage() {
     try {
       const ctx = await resolveTenant();
 
+      const updateData: any = {
+        name,
+        phone,
+        role: staffForm.role,
+        category: staffForm.category,
+        access_permissions: staffForm.accessPermissions,
+      };
+
+      if (isEmployee) {
+        updateData.monthly_salary = salary;
+        updateData.allowances = allowances;
+        updateData.designation = null;
+        updateData.term_start = null;
+        updateData.term_end = null;
+      } else {
+        updateData.designation = designation || null;
+        updateData.term_start = termStart || null;
+        updateData.term_end = termEnd || null;
+        updateData.monthly_salary = null;
+        updateData.allowances = null;
+      }
+
       if (editingStaff) {
         const { error } = await supabase
           .from("employees")
-          .update({
-            name,
-            phone,
-            role: staffForm.role,
-            monthly_salary: salary,
-            allowances,
-            category: staffForm.category,
-            access_permissions: staffForm.accessPermissions,
-          })
+          .update(updateData)
           .eq("id", editingStaff.id)
           .eq("masjid_id", ctx.masjidId);
 
@@ -678,11 +712,14 @@ export default function StaffPage() {
                   name,
                   phone,
                   role: staffForm.role,
-                  basic_salary: salary,
+                  basic_salary: isEmployee ? salary : 0,
                   status: staffForm.status,
                   category: staffForm.category,
-                  allowances,
+                  allowances: isEmployee ? allowances : 0,
                   access_permissions: staffForm.accessPermissions,
+                  designation: isEmployee ? undefined : designation,
+                  term_start: isEmployee ? undefined : termStart,
+                  term_end: isEmployee ? undefined : termEnd,
                 }
               : item
           )
@@ -694,15 +731,9 @@ export default function StaffPage() {
           .from("employees")
           .insert({
             masjid_id: ctx.masjidId,
-            name,
-            phone,
-            role: staffForm.role,
-            monthly_salary: salary,
-            allowances,
-            category: staffForm.category,
-            access_permissions: staffForm.accessPermissions,
+            ...updateData,
           })
-          .select("id, masjid_id, name, phone, role, monthly_salary, created_at, category, allowances, access_permissions")
+          .select("id, masjid_id, name, phone, role, monthly_salary, created_at, category, allowances, access_permissions, designation, term_start, term_end")
           .single();
 
         if (error) throw error;
@@ -714,18 +745,25 @@ export default function StaffPage() {
             name: data.name || name,
             phone: data.phone || phone,
             role: (data.role || staffForm.role) as AccessRole,
-            basic_salary: Number(data.monthly_salary || salary),
+            basic_salary: Number(data.monthly_salary || salary || 0),
             status: staffForm.status,
             category: (data.category as StaffCategory) || staffForm.category,
-            allowances: Number(data.allowances || allowances),
+            allowances: Number(data.allowances || allowances || 0),
             access_permissions: normalizeAccessPermissions(data.access_permissions),
             created_at: data.created_at || new Date().toISOString(),
             masjid_id: data.masjid_id,
-          },
+            designation: data.designation,
+            term_start: data.term_start,
+            term_end: data.term_end,
+          } as any,
           ...prev,
         ]);
 
-        toast({ kind: "success", title: "Staff Added", message: "Staff record created successfully." });
+        toast({ 
+          kind: "success", 
+          title: isEmployee ? "Employee Added" : "Board Member Added", 
+          message: isEmployee ? "Employee record created successfully." : "Board member record created successfully."
+        });
       }
 
       closeStaffModal();
@@ -1206,7 +1244,7 @@ export default function StaffPage() {
                   </div>
                   <button onClick={openCreateStaffModal} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700">
                     <Plus className="h-4 w-4" />
-                    Add Staff Member
+                    {activeStaffTab === "Employee" ? "Add Employee" : "Add Board Member"}
                   </button>
                 </div>
 
@@ -1682,8 +1720,12 @@ export default function StaffPage() {
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-xl">
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-black text-neutral-900">{editingStaff ? "Edit Staff Member" : "Add Staff Member"}</h2>
-                <p className="text-sm text-neutral-500">Employee information stays separate from login permissions.</p>
+                <h2 className="text-xl font-black text-neutral-900">
+                  {editingStaff ? "Edit Staff Member" : (staffForm.category === "Employee" ? "Add Employee" : "Add Board Member")}
+                </h2>
+                <p className="text-sm text-neutral-500">
+                  {staffForm.category === "Employee" ? "Employee information stays separate from login permissions." : "Board member information stays separate from login permissions."}
+                </p>
               </div>
               <button onClick={closeStaffModal} className="rounded-2xl p-2 text-neutral-500 hover:bg-neutral-100">
                 <X className="h-5 w-5" />
@@ -1713,73 +1755,83 @@ export default function StaffPage() {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-neutral-700">Role</label>
-                  <select
-                    value={staffForm.role}
-                    onChange={(e) => setStaffForm((prev) => ({ ...prev, role: e.target.value as AccessRole }))}
-                    className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                  >
-                    <option value="staff">Staff</option>
-                    <option value="editor">Editor</option>
-                    <option value="co_admin">Co Admin</option>
-                    {(tenantContext?.role === "super_admin" || user?.role === "super_admin") && (
-                      <option value="super_admin">Super Admin</option>
-                    )}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-neutral-700">Status</label>
-                  <select
-                    value={staffForm.status}
-                    onChange={(e) => setStaffForm((prev) => ({ ...prev, status: e.target.value as Status }))}
-                    className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-neutral-700">Category</label>
-                  <select
-                    value={staffForm.category}
-                    onChange={(e) => setStaffForm((prev) => ({ ...prev, category: e.target.value as StaffCategory }))}
-                    className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                  >
-                    <option value="Employee">Employee</option>
-                    <option value="Board Member">Board Member</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-neutral-700">Basic Salary</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={staffForm.basicSalary}
-                    onChange={(e) => setStaffForm((prev) => ({ ...prev, basicSalary: e.target.value }))}
-                    placeholder="Enter monthly salary"
-                    className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="mb-2 block text-sm font-semibold text-neutral-700">Allowances</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={staffForm.allowances}
-                  onChange={(e) => setStaffForm((prev) => ({ ...prev, allowances: e.target.value }))}
-                  placeholder="Enter monthly allowances"
+                <label className="mb-2 block text-sm font-semibold text-neutral-700">Status</label>
+                <select
+                  value={staffForm.status}
+                  onChange={(e) => setStaffForm((prev) => ({ ...prev, status: e.target.value as Status }))}
                   className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                />
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
               </div>
+
+              {staffForm.category === "Employee" && (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-neutral-700">Basic Salary</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={staffForm.basicSalary}
+                        onChange={(e) => setStaffForm((prev) => ({ ...prev, basicSalary: e.target.value }))}
+                        placeholder="Enter monthly salary"
+                        className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-neutral-700">Allowances</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={staffForm.allowances}
+                        onChange={(e) => setStaffForm((prev) => ({ ...prev, allowances: e.target.value }))}
+                        placeholder="Enter monthly allowances"
+                        className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {staffForm.category === "Board Member" && (
+                <>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-neutral-700">Designation</label>
+                    <input
+                      type="text"
+                      value={staffForm.designation}
+                      onChange={(e) => setStaffForm((prev) => ({ ...prev, designation: e.target.value }))}
+                      placeholder="e.g., President, Secretary, Treasurer"
+                      className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-neutral-700">Term Start Date</label>
+                      <input
+                        type="date"
+                        value={staffForm.termStart}
+                        onChange={(e) => setStaffForm((prev) => ({ ...prev, termStart: e.target.value }))}
+                        className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-neutral-700">Term End Date</label>
+                      <input
+                        type="date"
+                        value={staffForm.termEnd}
+                        onChange={(e) => setStaffForm((prev) => ({ ...prev, termEnd: e.target.value }))}
+                        className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="rounded-2xl border border-neutral-200 p-4">
                 <p className="mb-3 text-sm font-semibold text-neutral-700">Profile Access</p>
@@ -1820,7 +1872,7 @@ export default function StaffPage() {
                   Cancel
                 </button>
                 <button type="submit" disabled={staffSubmitting} className="flex-1 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
-                  {staffSubmitting ? "Saving..." : editingStaff ? "Update Staff" : "Create Staff"}
+                  {staffSubmitting ? "Saving..." : (editingStaff ? "Update Staff" : (staffForm.category === "Employee" ? "Create Employee" : "Create Board Member"))}
                 </button>
               </div>
             </form>

@@ -15,6 +15,9 @@ type StaffProfileCardProps = {
   joinedAt?: string | null;
   canManageSalary?: boolean;
   onPaySalary?: () => void;
+  designation?: string | null;
+  termStart?: string | null;
+  termEnd?: string | null;
 };
 
 function initials(name: string | null | undefined) {
@@ -60,7 +63,12 @@ export function StaffProfileCard(props: StaffProfileCardProps) {
     joinedAt,
     canManageSalary = false,
     onPaySalary,
+    designation,
+    termStart,
+    termEnd,
   } = props;
+
+  const isEmployee = category === "Employee";
 
   return (
     <section className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm">
@@ -88,7 +96,7 @@ export function StaffProfileCard(props: StaffProfileCardProps) {
           </div>
         </div>
 
-        {canManageSalary && onPaySalary && (
+        {canManageSalary && onPaySalary && isEmployee && (
           <button
             type="button"
             onClick={onPaySalary}
@@ -116,21 +124,35 @@ export function StaffProfileCard(props: StaffProfileCardProps) {
           <p className="text-sm font-semibold text-neutral-900">{phone || "Not provided"}</p>
         </div>
 
-        <div className="rounded-2xl bg-neutral-50 p-4">
-          <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-neutral-500">
-            <Wallet className="h-4 w-4" />
-            Monthly Salary
-          </div>
-          <p className="text-sm font-semibold text-neutral-900">{formatCurrency(monthlySalary)}</p>
-        </div>
+        {isEmployee && (
+          <>
+            <div className="rounded-2xl bg-neutral-50 p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-neutral-500">
+                <Wallet className="h-4 w-4" />
+                Monthly Salary
+              </div>
+              <p className="text-sm font-semibold text-neutral-900">{formatCurrency(monthlySalary)}</p>
+            </div>
 
-        <div className="rounded-2xl bg-neutral-50 p-4">
-          <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-neutral-500">
-            <Wallet className="h-4 w-4" />
-            Allowances
+            <div className="rounded-2xl bg-neutral-50 p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-neutral-500">
+                <Wallet className="h-4 w-4" />
+                Allowances
+              </div>
+              <p className="text-sm font-semibold text-neutral-900">{formatCurrency(allowances)}</p>
+            </div>
+          </>
+        )}
+
+        {!isEmployee && designation && (
+          <div className="rounded-2xl bg-neutral-50 p-4">
+            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-neutral-500">
+              <Briefcase className="h-4 w-4" />
+              Designation
+            </div>
+            <p className="text-sm font-semibold text-neutral-900">{designation}</p>
           </div>
-          <p className="text-sm font-semibold text-neutral-900">{formatCurrency(allowances)}</p>
-        </div>
+        )}
 
         <div className="rounded-2xl bg-neutral-50 p-4">
           <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-neutral-500">
@@ -146,6 +168,14 @@ export function StaffProfileCard(props: StaffProfileCardProps) {
           <CalendarDays className="h-4 w-4" />
           <span>Joined: {formatDate(joinedAt)}</span>
         </div>
+        {!isEmployee && (termStart || termEnd) && (
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4" />
+            <span>
+              Term: {termStart ? formatDate(termStart) : "Not set"} - {termEnd ? formatDate(termEnd) : "Not set"}
+            </span>
+          </div>
+        )}
         {accessPermissions && (
           <div className="flex flex-wrap gap-2">
             {accessPermissions.edit_salary && (
