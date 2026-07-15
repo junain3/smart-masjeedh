@@ -30,7 +30,7 @@ import { useAppToast } from "@/components/ToastProvider";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { hasModulePermission, isSuperAdmin, parsePermissions } from "@/lib/permissions-utils";
 
-export const dynamic = "force-dynamic";
+
 
 type AccessRole = "super_admin" | "co_admin" | "staff" | "editor";
 type Status = "active" | "inactive";
