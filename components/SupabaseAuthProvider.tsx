@@ -47,12 +47,16 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
   const [resumeTick, setResumeTick] = useState(0);
 
   const loadTenantContext = async (userId: string) => {
+    console.log("[loadTenantContext] Starting with userId:", userId);
     try {
       // Load ALL matching rows from user_roles for current user (multi-masjid support)
       const { data: roleData, error: roleError } = await supabase
         .from("user_roles")
         .select("masjid_id, role, permissions")
         .eq("auth_user_id", userId);
+
+      console.log("[loadTenantContext] roleData:", roleData);
+      console.log("[loadTenantContext] roleError:", roleError);
 
       if (roleError && roleError.code !== "PGRST116") {
         console.error("Error loading tenant context:", roleError);
@@ -73,16 +77,18 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
           role: firstRole.role || "staff",
           permissions: firstRole.permissions || {},
         };
+        console.log("[loadTenantContext] Setting newTenantContext:", newTenantContext);
         setTenantContext(newTenantContext);
         setRequiresOnboarding(false);
       } else {
+        console.log("[loadTenantContext] No role data found, setting requiresOnboarding=true");
         // No roles found
         setAvailableMasjids([]);
         setTenantContext(null);
         setRequiresOnboarding(true);
       }
     } catch (error) {
-      console.error("Error loading tenant context:", error);
+      console.error("[loadTenantContext] Error loading tenant context:", error);
       setAvailableMasjids([]);
       setTenantContext(null);
       setRequiresOnboarding(true);

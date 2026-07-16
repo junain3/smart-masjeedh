@@ -32,6 +32,12 @@ interface SmsLog {
 export default function SmsSettingsPage() {
   const router = useRouter();
   const { user, tenantContext, loading: authLoading, requiresOnboarding } = useSupabaseAuth();
+
+  // Debug logs
+  console.log("[SmsSettingsPage] user:", user);
+  console.log("[SmsSettingsPage] tenantContext:", tenantContext);
+  console.log("[SmsSettingsPage] authLoading:", authLoading);
+  console.log("[SmsSettingsPage] requiresOnboarding:", requiresOnboarding);
   
   // Settings form state
   const [loadingSettings, setLoadingSettings] = useState(true);
