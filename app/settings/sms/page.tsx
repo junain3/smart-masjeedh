@@ -31,7 +31,7 @@ interface SmsLog {
 
 export default function SmsSettingsPage() {
   const router = useRouter();
-  const { user, tenantContext, loading: authLoading } = useSupabaseAuth();
+  const { user, tenantContext, loading: authLoading, requiresOnboarding } = useSupabaseAuth();
   
   // Settings form state
   const [loadingSettings, setLoadingSettings] = useState(true);
@@ -57,23 +57,24 @@ export default function SmsSettingsPage() {
   const [logs, setLogs] = useState<SmsLog[]>([]);
   const [logsError, setLogsError] = useState<string | null>(null);
 
-  // Login redirect effect
+  // Login and onboarding redirect effect
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
+    } else if (!authLoading && requiresOnboarding) {
+      router.push('/setup');
     }
-  }, [authLoading, user, router]);
+  }, [authLoading, user, requiresOnboarding, router]);
 
   // Fetch SMS settings
   useEffect(() => {
     async function fetchSmsSettings() {
       if (!tenantContext?.masjidId) {
-        setSettingsError("Masjid context not found");
-        setLoadingSettings(false);
         return;
       }
       
       try {
+        setSettingsError(null);
         const { data, error: fetchError } = await supabase
           .from('masjids')
           .select('id, sms_api_key, sms_sender_id, sms_provider_url, sms_updated_at')
@@ -98,10 +99,15 @@ export default function SmsSettingsPage() {
     }
     
     if (tenantContext?.masjidId) {
+      setLoadingSettings(true);
+      setSettingsError(null);
       fetchSmsSettings();
       fetchSmsLogs();
+    } else if (!authLoading) {
+      setLoadingSettings(false);
+      setSettingsError("Masjid context not found. Please set up your masjid first.");
     }
-  }, [tenantContext?.masjidId]);
+  }, [tenantContext?.masjidId, authLoading]);
   
   // Fetch SMS logs
   async function fetchSmsLogs() {

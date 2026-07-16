@@ -52,7 +52,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
       const { data: roleData, error: roleError } = await supabase
         .from("user_roles")
         .select("masjid_id, role, permissions")
-        .eq("user_id", userId);
+        .eq("auth_user_id", userId);
 
       if (roleError && roleError.code !== "PGRST116") {
         console.error("Error loading tenant context:", roleError);
