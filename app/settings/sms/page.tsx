@@ -34,14 +34,6 @@ export default function SmsSettingsPage() {
   const { user, tenantContext, loading: authLoading, requiresOnboarding } = useSupabaseAuth();
 
   const lastMasjidIdRef = useRef<string | null>(null);
-
-  // Debug logs
-  console.log("[SmsSettingsPage] user:", user);
-  console.log("[SmsSettingsPage] tenantContext:", tenantContext);
-  console.log("[SmsSettingsPage] tenantContext.masjidId:", tenantContext?.masjidId);
-  console.log("[SmsSettingsPage] tenantContext keys:", tenantContext ? Object.keys(tenantContext) : null);
-  console.log("[SmsSettingsPage] authLoading:", authLoading);
-  console.log("[SmsSettingsPage] requiresOnboarding:", requiresOnboarding);
   
   // Settings form state
   const [loadingSettings, setLoadingSettings] = useState(true);
@@ -78,11 +70,8 @@ export default function SmsSettingsPage() {
 
   // Fetch SMS settings
   useEffect(() => {
-    console.log("[FetchSmsSettings useEffect] Called with tenantContext?.masjidId:", tenantContext?.masjidId, "authLoading:", authLoading, "lastMasjidIdRef.current:", lastMasjidIdRef.current);
     async function fetchSmsSettings() {
-      console.log("[fetchSmsSettings] Starting, tenantContext?.masjidId:", tenantContext?.masjidId);
       if (!tenantContext?.masjidId) {
-        console.log("[fetchSmsSettings] No masjidId, returning");
         return;
       }
       
@@ -93,8 +82,6 @@ export default function SmsSettingsPage() {
           .select('id, sms_api_key, sms_sender_id, sms_provider_url, sms_updated_at')
           .eq('id', tenantContext.masjidId)
           .single();
-        
-        console.log("[fetchSmsSettings] Got data:", data, "fetchError:", fetchError);
         
         if (fetchError) throw fetchError;
         
@@ -116,14 +103,12 @@ export default function SmsSettingsPage() {
     const currentMasjidId = tenantContext?.masjidId;
     
     if (currentMasjidId && currentMasjidId !== lastMasjidIdRef.current) {
-      console.log("[FetchSmsSettings useEffect] masjidId changed, calling fetch functions");
       lastMasjidIdRef.current = currentMasjidId;
       setLoadingSettings(true);
       setSettingsError(null);
       fetchSmsSettings();
       fetchSmsLogs();
     } else if (!authLoading && !tenantContext) {
-      console.log("[FetchSmsSettings useEffect] No tenantContext and not loading, setting error");
       lastMasjidIdRef.current = null;
       setLoadingSettings(false);
       setSettingsError("Masjid context not found. Please set up your masjid first.");

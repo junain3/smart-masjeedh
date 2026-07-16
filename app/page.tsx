@@ -317,11 +317,30 @@ export default function HomePage() {
 
 
 
-  // Fetch all dashboard data in parallel
+  // Fetch all dashboard data in parallel with localStorage caching
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!supabase) return;
       if (!tenantContext?.masjidId) return;
+
+      const cacheKey = `dashboard_data_${tenantContext.masjidId}`;
+
+      // Try to load from localStorage first for instant display
+      const cachedData = typeof window !== "undefined" ? localStorage.getItem(cacheKey) : null;
+      if (cachedData) {
+        try {
+          const parsed = JSON.parse(cachedData);
+          setFamilyCount(parsed.familyCount);
+          setMemberCount(parsed.memberCount);
+          setIsLive(parsed.familyCount > 0 || parsed.memberCount > 0);
+          setMasjid(parsed.masjid);
+          if (parsed.preferredLanguage && ["en", "ta", "si"].includes(parsed.preferredLanguage)) {
+            setLang(parsed.preferredLanguage);
+          }
+        } catch (e) {
+          console.error("Error parsing cached dashboard data:", e);
+        }
+      }
 
       try {
         const [
@@ -359,34 +378,48 @@ export default function HomePage() {
         setIsLive(familiesCount > 0 || membersCount > 0);
         
         // Update masjid data
+        let masjidObj = {
+          name: "Masjid",
+          logo_url: "",
+          tagline: "Your Masjid",
+        };
+        let preferredLanguage: string | null = null;
+
         const { data: masjidData, error: masjidError } = masjidDataResult;
-        if (masjidError || !masjidData) {
-          // Safe fallback: set default masjid if anything fails
+        if (!masjidError && masjidData) {
+          masjidObj = {
+            name: (masjidData as any).masjid_name || "Masjid",
+            logo_url: (masjidData as any).logo_url || "",
+            tagline: (masjidData as any).tagline || "Your Masjid",
+          };
+          preferredLanguage = (masjidData as any).preferred_language || null;
+          
+          if (preferredLanguage && ["en", "ta", "si"].includes(preferredLanguage)) {
+            setLang(preferredLanguage);
+          }
+        }
+
+        setMasjid(masjidObj);
+
+        // Save to localStorage for next time
+        if (typeof window !== "undefined") {
+          localStorage.setItem(cacheKey, JSON.stringify({
+            familyCount: familiesCount,
+            memberCount: membersCount,
+            masjid: masjidObj,
+            preferredLanguage: preferredLanguage,
+          }));
+        }
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+        // Safe fallback for any errors - only set if we don't have cached data
+        if (!cachedData) {
           setMasjid({
             name: "Masjid",
             logo_url: "",
             tagline: "Your Masjid",
           });
-        } else {
-          setMasjid({
-            name: (masjidData as any).masjid_name || "Masjid",
-            logo_url: (masjidData as any).logo_url || "",
-            tagline: (masjidData as any).tagline || "Your Masjid",
-          });
-
-          // Set language from masjid data if available
-          if ((masjidData as any).preferred_language && ["en", "ta", "si"].includes((masjidData as any).preferred_language)) {
-            setLang((masjidData as any).preferred_language);
-          }
         }
-      } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-        // Safe fallback for any errors
-        setMasjid({
-          name: "Masjid",
-          logo_url: "",
-          tagline: "Your Masjid",
-        });
       }
     };
 

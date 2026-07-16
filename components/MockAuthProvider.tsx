@@ -1,5 +1,11 @@
+
 "use client";
 
-// Backward compatibility bridge over SupabaseAuthProvider
-export { useSupabaseAuth as useMockAuth } from "./SupabaseAuthProvider";
-export { SupabaseAuthProvider as MockAuthProvider } from "./SupabaseAuthProvider";
+// Re-export everything from UnifiedAppProvider for backward compatibility
+export {
+  UnifiedAppProvider as MockAuthProvider,
+  useUnifiedApp,
+  useAuth,
+  useTenant,
+  useUnifiedApp as useMockAuth,
+} from "./UnifiedAppProvider";
