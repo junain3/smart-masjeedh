@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Save, CheckCircle2, AlertCircle, Loader2, Send, Clock, Check, XCircle } from "lucide-react";
@@ -32,6 +32,8 @@ interface SmsLog {
 export default function SmsSettingsPage() {
   const router = useRouter();
   const { user, tenantContext, loading: authLoading, requiresOnboarding } = useSupabaseAuth();
+
+  const lastMasjidIdRef = useRef<string | null>(null);
 
   // Debug logs
   console.log("[SmsSettingsPage] user:", user);
@@ -76,7 +78,7 @@ export default function SmsSettingsPage() {
 
   // Fetch SMS settings
   useEffect(() => {
-    console.log("[FetchSmsSettings useEffect] Called with tenantContext?.masjidId:", tenantContext?.masjidId, "authLoading:", authLoading);
+    console.log("[FetchSmsSettings useEffect] Called with tenantContext?.masjidId:", tenantContext?.masjidId, "authLoading:", authLoading, "lastMasjidIdRef.current:", lastMasjidIdRef.current);
     async function fetchSmsSettings() {
       console.log("[fetchSmsSettings] Starting, tenantContext?.masjidId:", tenantContext?.masjidId);
       if (!tenantContext?.masjidId) {
@@ -111,14 +113,18 @@ export default function SmsSettingsPage() {
       }
     }
     
-    if (tenantContext?.masjidId) {
-      console.log("[FetchSmsSettings useEffect] masjidId exists, calling fetch functions");
+    const currentMasjidId = tenantContext?.masjidId;
+    
+    if (currentMasjidId && currentMasjidId !== lastMasjidIdRef.current) {
+      console.log("[FetchSmsSettings useEffect] masjidId changed, calling fetch functions");
+      lastMasjidIdRef.current = currentMasjidId;
       setLoadingSettings(true);
       setSettingsError(null);
       fetchSmsSettings();
       fetchSmsLogs();
     } else if (!authLoading && !tenantContext) {
       console.log("[FetchSmsSettings useEffect] No tenantContext and not loading, setting error");
+      lastMasjidIdRef.current = null;
       setLoadingSettings(false);
       setSettingsError("Masjid context not found. Please set up your masjid first.");
     }
