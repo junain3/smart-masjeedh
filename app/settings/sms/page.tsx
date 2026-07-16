@@ -36,6 +36,8 @@ export default function SmsSettingsPage() {
   // Debug logs
   console.log("[SmsSettingsPage] user:", user);
   console.log("[SmsSettingsPage] tenantContext:", tenantContext);
+  console.log("[SmsSettingsPage] tenantContext.masjidId:", tenantContext?.masjidId);
+  console.log("[SmsSettingsPage] tenantContext keys:", tenantContext ? Object.keys(tenantContext) : null);
   console.log("[SmsSettingsPage] authLoading:", authLoading);
   console.log("[SmsSettingsPage] requiresOnboarding:", requiresOnboarding);
   
@@ -74,8 +76,11 @@ export default function SmsSettingsPage() {
 
   // Fetch SMS settings
   useEffect(() => {
+    console.log("[FetchSmsSettings useEffect] Called with tenantContext?.masjidId:", tenantContext?.masjidId, "authLoading:", authLoading);
     async function fetchSmsSettings() {
+      console.log("[fetchSmsSettings] Starting, tenantContext?.masjidId:", tenantContext?.masjidId);
       if (!tenantContext?.masjidId) {
+        console.log("[fetchSmsSettings] No masjidId, returning");
         return;
       }
       
@@ -86,6 +91,8 @@ export default function SmsSettingsPage() {
           .select('id, sms_api_key, sms_sender_id, sms_provider_url, sms_updated_at')
           .eq('id', tenantContext.masjidId)
           .single();
+        
+        console.log("[fetchSmsSettings] Got data:", data, "fetchError:", fetchError);
         
         if (fetchError) throw fetchError;
         
@@ -105,11 +112,13 @@ export default function SmsSettingsPage() {
     }
     
     if (tenantContext?.masjidId) {
+      console.log("[FetchSmsSettings useEffect] masjidId exists, calling fetch functions");
       setLoadingSettings(true);
       setSettingsError(null);
       fetchSmsSettings();
       fetchSmsLogs();
     } else if (!authLoading) {
+      console.log("[FetchSmsSettings useEffect] No masjidId and not loading, setting error");
       setLoadingSettings(false);
       setSettingsError("Masjid context not found. Please set up your masjid first.");
     }
