@@ -117,8 +117,8 @@ export default function SmsSettingsPage() {
       setSettingsError(null);
       fetchSmsSettings();
       fetchSmsLogs();
-    } else if (!authLoading) {
-      console.log("[FetchSmsSettings useEffect] No masjidId and not loading, setting error");
+    } else if (!authLoading && !tenantContext) {
+      console.log("[FetchSmsSettings useEffect] No tenantContext and not loading, setting error");
       setLoadingSettings(false);
       setSettingsError("Masjid context not found. Please set up your masjid first.");
     }
