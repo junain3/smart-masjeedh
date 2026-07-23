@@ -102,12 +102,18 @@ export default function SmsSettingsPage() {
     
     const currentMasjidId = tenantContext?.masjidId;
     
-    if (currentMasjidId && currentMasjidId !== lastMasjidIdRef.current) {
-      lastMasjidIdRef.current = currentMasjidId;
-      setLoadingSettings(true);
-      setSettingsError(null);
-      fetchSmsSettings();
-      fetchSmsLogs();
+    if (currentMasjidId) {
+      if (currentMasjidId !== lastMasjidIdRef.current) {
+        lastMasjidIdRef.current = currentMasjidId;
+        setLoadingSettings(true);
+        setSettingsError(null);
+        fetchSmsSettings();
+        fetchSmsLogs();
+      } else {
+        // If we already have the masjidId, just clear any lingering error
+        setSettingsError(null);
+        setLoadingSettings(false);
+      }
     } else if (!authLoading && !tenantContext) {
       lastMasjidIdRef.current = null;
       setLoadingSettings(false);
@@ -180,7 +186,7 @@ export default function SmsSettingsPage() {
   async function handleSendSms(e: React.FormEvent) {
     e.preventDefault();
     
-    if (!tenantContext?.masjidId || !tenantContext?.user?.id) {
+    if (!tenantContext?.masjidId || !tenantContext?.userId) {
       setSendError("Masjid context not found");
       return;
     }
@@ -203,7 +209,7 @@ export default function SmsSettingsPage() {
           phone_number: phoneNumber.trim(),
           message: smsMessage.trim(),
           status: 'pending',
-          created_by: tenantContext.user.id
+          created_by: tenantContext.userId
         })
         .select('id')
         .single();
@@ -351,9 +357,14 @@ export default function SmsSettingsPage() {
                         id="sms_api_key"
                         value={formData.sms_api_key}
                         onChange={(e) => setFormData({ ...formData, sms_api_key: e.target.value })}
-                        placeholder="Enter API key from your provider"
+                        placeholder="For TextIt.biz: username:password"
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                       />
+                      {formData.sms_provider_url?.includes('textit.biz') && (
+                        <p className="text-sm text-gray-500 mt-1">
+                          Format: your_username:your_password
+                        </p>
+                      )}
                     </div>
                     
                     {/* Sender ID */}
@@ -381,9 +392,12 @@ export default function SmsSettingsPage() {
                         id="sms_provider_url"
                         value={formData.sms_provider_url}
                         onChange={(e) => setFormData({ ...formData, sms_provider_url: e.target.value })}
-                        placeholder="https://api.your-sms-provider.com/v1/send"
+                        placeholder="https://textit.biz/sendmsg/"
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                       />
+                      <p className="text-sm text-gray-500 mt-1">
+                        For TextIt.biz use: https://textit.biz/sendmsg/
+                      </p>
                     </div>
                     
                     {/* Save Button */}

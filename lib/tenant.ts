@@ -50,7 +50,7 @@ export async function getTenantContext(): Promise<TenantContext | null> {
       };
     }
 
-    // Step 3: Fallback to super admin (created_by)
+    // Step 3: Fall back to super admin (created_by)
     const { data: masjid, error: masjidError } = await supabase
       .from("masjids")
       .select("id")

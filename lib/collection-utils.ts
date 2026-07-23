@@ -4,6 +4,26 @@ export function calcCommission(amount: number, percent: number): number {
   return Math.round((amount * percent) / 100 * 100) / 100;
 }
 
+const COLLECTION_SMS_SIGN_OFF = "நிர்வாக சபை";
+
+/** SMS when a collection is recorded (pending admin approval). Lines separated with \\n for providers. */
+export function buildCollectionRecordedSms(headName: string, amount: number): string {
+  return [
+    "அஸ்ஸலாமு அலைக்கும்!",
+    `${headName} அவர்களின் சந்தா ரூ.${amount} வசூல் பதிவு செய்யப்பட்டுள்ளது. நிர்வாகி அனுமதியின் பின் நிறைவேறும்.`,
+    COLLECTION_SMS_SIGN_OFF,
+  ].join("\n");
+}
+
+/** SMS when a collection is approved. */
+export function buildCollectionApprovedSms(headName: string, amount: number): string {
+  return [
+    "அஸ்ஸலாமு அலைக்கும்!",
+    `${headName} அவர்களின் சந்தா ரூ.${amount} வசூல் நன்றாக ஏற்றுக்கொள்ளப்பட்டுள்ளது.`,
+    COLLECTION_SMS_SIGN_OFF,
+  ].join("\n");
+}
+
 export function isAccountSubscriptionTransaction(tx: {
   type?: string;
   category?: string;

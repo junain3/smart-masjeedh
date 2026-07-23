@@ -72,7 +72,7 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Get authorization header for user validation
+    // Get authorization header for user or service-role validation
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(
@@ -84,25 +84,38 @@ serve(async (req: Request) => {
       );
     }
 
-    // Validate user session
     const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseAdmin.auth.getUser(token);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const isServiceRoleCall =
+      Boolean(serviceRoleKey) && token === serviceRoleKey;
 
-    if (authError || !user) {
-      console.error("[send-sms] Invalid authentication:", authError);
-      return new Response(
-        JSON.stringify({ error: "Invalid authentication token" }),
-        {
-          status: 401,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        }
+    let user: { id: string } | null = null;
+
+    if (isServiceRoleCall) {
+      console.log(
+        `[send-sms] Service-role automated send for log: ${log_id}`
       );
-    }
+    } else {
+      // Validate user session for manual/browser-triggered sends
+      const {
+        data: { user: authUser },
+        error: authError,
+      } = await supabaseAdmin.auth.getUser(token);
 
-    console.log(`[send-sms] Processing log: ${log_id} for user: ${user.id}`);
+      if (authError || !authUser) {
+        console.error("[send-sms] Invalid authentication:", authError);
+        return new Response(
+          JSON.stringify({ error: "Invalid authentication token" }),
+          {
+            status: 401,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          }
+        );
+      }
+
+      user = authUser;
+      console.log(`[send-sms] Processing log: ${log_id} for user: ${user.id}`);
+    }
 
     // ========================================================
     // Step 1: Fetch the sms_logs entry by log_id
@@ -125,44 +138,46 @@ serve(async (req: Request) => {
     }
 
     // ========================================================
-    // Step 2: Verify user has access to this masjid
+    // Step 2: Verify user has access to this masjid (skip for automated sends)
     // ========================================================
-    const { data: userRole, error: roleError } = await supabaseAdmin
-      .from("user_roles")
-      .select("id, role")
-      .eq("auth_user_id", user.id)
-      .eq("masjid_id", smsLog.masjid_id)
-      .single();
+    if (!isServiceRoleCall && user) {
+      const { data: userRole, error: roleError } = await supabaseAdmin
+        .from("user_roles")
+        .select("id, role")
+        .eq("auth_user_id", user.id)
+        .eq("masjid_id", smsLog.masjid_id)
+        .single();
 
-    if (roleError || !userRole) {
-      console.error("[send-sms] User access denied for masjid:", {
-        user_id: user.id,
-        masjid_id: smsLog.masjid_id,
-      });
-      return new Response(
-        JSON.stringify({
-          error: "Unauthorized: You do not have access to this masjid's SMS.",
-        }),
-        {
-          status: 403,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        }
-      );
-    }
+      if (roleError || !userRole) {
+        console.error("[send-sms] User access denied for masjid:", {
+          user_id: user.id,
+          masjid_id: smsLog.masjid_id,
+        });
+        return new Response(
+          JSON.stringify({
+            error: "Unauthorized: You do not have access to this masjid's SMS.",
+          }),
+          {
+            status: 403,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          }
+        );
+      }
 
-    // Verify role has permission to send SMS
-    const allowedRoles = ["super_admin", "admin", "co_admin"];
-    if (!allowedRoles.includes(userRole.role)) {
-      console.error("[send-sms] User has insufficient permissions:", userRole.role);
-      return new Response(
-        JSON.stringify({
-          error: "Unauthorized: You do not have permission to send SMS.",
-        }),
-        {
-          status: 403,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        }
-      );
+      // Verify role has permission to send SMS
+      const allowedRoles = ["super_admin", "admin", "co_admin"];
+      if (!allowedRoles.includes(userRole.role)) {
+        console.error("[send-sms] User has insufficient permissions:", userRole.role);
+        return new Response(
+          JSON.stringify({
+            error: "Unauthorized: You do not have permission to send SMS.",
+          }),
+          {
+            status: 403,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          }
+        );
+      }
     }
 
     // ========================================================
@@ -226,25 +241,46 @@ serve(async (req: Request) => {
     // ========================================================
     let providerResponse;
     try {
-      // Prepare the payload (works with most providers - adjust as needed)
-      const smsPayload = {
-        to: smsLog.phone_number,
-        message: smsLog.message,
-        sender_id: sms_sender_id
-      };
-
       console.log(`[send-sms] Sending SMS to: ${smsLog.phone_number}`);
       console.log(`[send-sms] Provider URL: ${sms_provider_url}`);
+      
+      // Check if this is textit.biz (uses GET with query params)
+      if (sms_provider_url.includes('textit.biz')) {
+        // For textit.biz: format is https://textit.biz/sendmsg/?id=USER&pw=PASS&text=MESSAGE&to=PHONE
+        const url = new URL(sms_provider_url);
+        // Split API key into id and pw (assume format "username:password")
+        const [id, pw] = sms_api_key.split(':');
+        
+        url.searchParams.set('id', id || sms_api_key); // fallback if no colon
+        url.searchParams.set('pw', pw || '');
+        url.searchParams.set('text', smsLog.message);
+        url.searchParams.set('to', smsLog.phone_number);
+        if (sms_sender_id) {
+          url.searchParams.set('sender', sms_sender_id);
+        }
+        
+        console.log(`[send-sms] Textit.biz URL: ${url.toString()}`);
+        
+        providerResponse = await fetch(url.toString(), {
+          method: "GET"
+        });
+      } else {
+        // For other providers: use JSON POST
+        const smsPayload = {
+          to: smsLog.phone_number,
+          message: smsLog.message,
+          sender_id: sms_sender_id
+        };
 
-      // Make the actual API call to your SMS provider
-      providerResponse = await fetch(sms_provider_url, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${sms_api_key}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(smsPayload)
-      });
+        providerResponse = await fetch(sms_provider_url, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${sms_api_key}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(smsPayload)
+        });
+      }
 
       // Parse the response (or get text if not JSON)
       let responseText;

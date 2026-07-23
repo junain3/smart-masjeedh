@@ -640,28 +640,39 @@ export default function FamilyDetailsPage() {
     setIsCollectionSubmitting(true);
     
     try {
-      const insertPayload = {
-        masjid_id: tenantContext.masjidId,
-        family_id: familyId,
-        amount: amountNum,
-        commission_percent: 0,
-        commission_amount: 0,
-        status: "pending",
-        notes: collectionNote || null,
-        collected_by_user_id: user.id,
-        date: collectionDate
-      };
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        alert("Not logged in");
+        return;
+      }
 
-      const { data, error: insertError } = await supabase
-        .from("subscription_collections")
-        .insert(insertPayload)
-        .select()
-        .single();
+      const response = await fetch("/api/collections/add", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : {}),
+        },
+        body: JSON.stringify({
+          family_id: familyId,
+          collection_amount: amountNum,
+          notes: collectionNote || "",
+          payment_method: "cash",
+        }),
+      });
 
-      if (insertError) {
-        console.error('Collection insert failed:', insertError);
-        alert("Failed to add collection: " + insertError.message);
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error("Collection insert failed:", result);
+        alert("Failed to add collection: " + (result.error || "Unknown error"));
       } else {
+        if (result.sms_sent && !result.sms_sent.success) {
+          console.error("[families/page] auto SMS failed after add", result.sms_sent);
+        }
+
         // Reset form
         setCollectionAmount("");
         setCollectionNote("");

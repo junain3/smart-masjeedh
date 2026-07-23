@@ -297,21 +297,32 @@ export default function CollectionsPage() {
         if (updateError) throw updateError;
         setSuccess("வசூல் புதுப்பிக்கப்பட்டது");
       } else {
-        const { error: insertError } = await supabase
-          .from("subscription_collections")
-          .insert({
-            masjid_id: ctx.masjidId,
+        const response = await fetch("/api/collections/add", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session.access_token
+              ? { Authorization: `Bearer ${session.access_token}` }
+              : {}),
+          },
+          body: JSON.stringify({
             family_id: selectedFamilyId,
-            amount: amountNum,
-            commission_percent: 0,
-            commission_amount: 0,
-            status: "pending",
-            notes: notes.trim() || null,
-            collected_by_user_id: session.user.id,
-            date: new Date().toISOString().split("T")[0],
-          });
+            collection_amount: amountNum,
+            notes: notes.trim() || "",
+            payment_method: "cash",
+          }),
+        });
 
-        if (insertError) throw insertError;
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || "வசூல் பதிவு தோல்வி");
+        }
+
+        if (result.sms_sent && !result.sms_sent.success) {
+          console.error("[collections/page] auto SMS failed after add", result.sms_sent);
+        }
+
         setSuccess("வசூல் பதிவாகியது — நிர்வாகி அனுமதிக்க வேண்டும்");
       }
 

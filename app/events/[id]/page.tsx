@@ -43,6 +43,9 @@ export default function EventDetailPage() {
   const [isPdfFilterOpen, setIsPdfFilterOpen] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfCols, setPdfCols] = useState<{serialTick: boolean; family_code: boolean; head_name: boolean; members: boolean; address: boolean; phone: boolean; signature: boolean}>({serialTick: false, family_code: true, head_name: true, members: false, address: false, phone: false, signature: false});
+  const [isSmsModalOpen, setIsSmsModalOpen] = useState(false);
+  const [isSendingSms, setIsSendingSms] = useState(false);
+  const [smsFilter, setSmsFilter] = useState<"all" | "received" | "pending">("all");
   const { tenantContext } = useMockAuth();
 
   const sortByFamilyCode = (a: Att, b: Att) => {
@@ -174,6 +177,44 @@ export default function EventDetailPage() {
     setShowSuggestions(false);
   }
 
+  async function updateAttendanceStatus(
+    familyId: string,
+    status: "Received" | "Pending",
+    familyCode = ""
+  ) {
+    if (!supabase) return false;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      toast({ kind: "error", title: "Error", message: "Please log in to update attendance" });
+      return false;
+    }
+
+    const response = await fetch("/api/events/mark-status", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(session.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : {}),
+      },
+      body: JSON.stringify({
+        eventId,
+        familyId,
+        status,
+        familyCode,
+      }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "Failed to update attendance");
+    }
+
+    return true;
+  }
+
   async function markStatus(
     familyId: string,
     toReceived: boolean,
@@ -197,76 +238,25 @@ export default function EventDetailPage() {
     localStorage.setItem(getCacheKey(eventId), JSON.stringify(optimisticRows));
     
     try {
-      // Use tenantContext from auth provider instead of getTenantContext
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
-      const serviceName = ev ? `Event: ${ev.title}` : "Event Service";
-      const serviceDate = ev?.event_date || new Date().toISOString().split("T")[0];
 
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
       const canEvents = isAdmin || ctx.permissions?.events !== false;
       if (!canEvents) {
         toast({ kind: "error", title: "Access denied", message: "" });
-        // Rollback on access denied
         const rollbackRows = rows.map(r => r.family_id === familyId ? { ...r, status: originalStatus } : r);
         setRows(rollbackRows);
         localStorage.setItem(getCacheKey(eventId), JSON.stringify(rollbackRows));
         return;
       }
-      
-      // Update event attendance in background
-      const { error: attendanceError } = await supabase
-        .from("event_attendance")
-        .update({ status: nextStatus })
-        .eq("event_id", eventId)
-        .eq("family_id", familyId)
-        .eq("masjid_id", ctx.masjidId);
-      
-      if (attendanceError) throw attendanceError;
 
-      // Update service distribution in background
-      const { data: existingService } = await supabase
-        .from("service_distributions")
-        .select("id")
-        .eq("family_id", familyId)
-        .eq("masjid_id", ctx.masjidId)
-        .eq("name", serviceName)
-        .eq("date", serviceDate)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingService?.id) {
-        await supabase
-          .from("service_distributions")
-          .update({ status: nextStatus })
-          .eq("id", existingService.id)
-          .eq("masjid_id", ctx.masjidId);
-      } else if (toReceived) {
-        await supabase
-          .from("service_distributions")
-          .insert({
-            family_id: familyId,
-            masjid_id: ctx.masjidId,
-            name: serviceName,
-            date: serviceDate,
-            status: nextStatus,
-          });
-      }
-
-      // Log to accounts as zero-amount info row when marking Received
-      if (toReceived && ev) {
-        await supabase.from("transactions").insert([{
-          masjid_id: ctx.masjidId,
-          family_id: familyId,
-          amount: 0,
-          description: `Event: ${ev.title} (${familyCode === false ? "" : (familyCode || "")})`,
-          type: "income",
-          category: `Event: ${ev.title}`,
-          date: ev.event_date || new Date().toISOString().split("T")[0]
-        }]);
-      }
+      await updateAttendanceStatus(
+        familyId,
+        nextStatus,
+        familyCode === false ? "" : (familyCode || "")
+      );
     } catch (e: any) {
-      // 3. Error Rollback
       toast({ kind: "error", title: "Error", message: e.message || "Failed" });
       const rollbackRows = rows.map(r => r.family_id === familyId ? { ...r, status: originalStatus } : r);
       setRows(rollbackRows);
@@ -290,38 +280,22 @@ export default function EventDetailPage() {
     try {
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) return;
-      const serviceName = ev ? `Event: ${ev.title}` : "Event Service";
-      const serviceDate = ev?.event_date || new Date().toISOString().split("T")[0];
 
       const isAdmin = ctx.role === "super_admin" || ctx.role === "co_admin";
       const canEvents = isAdmin || ctx.permissions?.events !== false;
       if (!canEvents) {
         toast({ kind: "error", title: "Access denied", message: "" });
-        // Rollback on access denied
         const rollbackRows = rows.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: originalStatus } : r);
         setRows(rollbackRows);
         localStorage.setItem(getCacheKey(eventId), JSON.stringify(rollbackRows));
         return;
       }
-      
-      // Update event attendance in background
-      const { error: attendanceError } = await supabase
-        .from("event_attendance")
-        .update({ status: nextStatus })
-        .eq("event_id", eventId)
-        .eq("family_id", confirmUnmark.familyId)
-        .eq("masjid_id", ctx.masjidId);
-      
-      if (attendanceError) throw attendanceError;
 
-      // Update service distribution in background
-      await supabase
-        .from("service_distributions")
-        .update({ status: nextStatus })
-        .eq("family_id", confirmUnmark.familyId)
-        .eq("masjid_id", ctx.masjidId)
-        .eq("name", serviceName)
-        .eq("date", serviceDate);
+      await updateAttendanceStatus(
+        confirmUnmark.familyId,
+        nextStatus,
+        confirmUnmark.familyCode
+      );
       
       toast({ kind: "success", title: "Success", message: "Marked as not received" });
     } catch (e: any) {
@@ -330,6 +304,41 @@ export default function EventDetailPage() {
       const rollbackRows = rows.map(r => r.family_id === confirmUnmark.familyId ? { ...r, status: originalStatus } : r);
       setRows(rollbackRows);
       localStorage.setItem(getCacheKey(eventId), JSON.stringify(rollbackRows));
+    }
+  }
+
+  const handleSendSms = async () => {
+    if (!ev) return;
+    setIsSendingSms(true);
+    try {
+      const response = await fetch('/api/events/send-sms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          eventId: ev.id,
+          filter: smsFilter
+        })
+      });
+
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
+
+      toast({
+        kind: 'success',
+        title: 'SMS Sent',
+        message: `Successfully sent ${result.sent} SMS${result.sent !== 1 ? 's' : ''}${result.skipped > 0 ? ` (${result.skipped} skipped)` : ''}`
+      });
+      setIsSmsModalOpen(false);
+    } catch (e: any) {
+      toast({
+        kind: 'error',
+        title: 'SMS Failed',
+        message: e.message || 'Failed to send SMS notifications'
+      });
+    } finally {
+      setIsSendingSms(false);
     }
   }
 
@@ -603,6 +612,16 @@ export default function EventDetailPage() {
           >
             <FileText className="w-6 h-6" />
           </button>
+          <button
+            onClick={() => setIsSmsModalOpen(true)}
+            disabled={isSendingSms}
+            className="p-3 bg-slate-50 text-purple-600 rounded-2xl hover:bg-purple-50 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Send SMS Notifications"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -728,6 +747,66 @@ export default function EventDetailPage() {
         onDecodedText={handleScan}
         helperText={t.attendance}
       />
+
+      {isSmsModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm border border-slate-100 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="mb-5 text-center">
+              <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                </svg>
+              </div>
+              <h3 className="text-lg font-black text-slate-900">Send Event SMS Notifications</h3>
+              <p className="text-xs font-semibold text-slate-400 mt-1">
+                Choose which families to send notifications to.
+              </p>
+            </div>
+
+            <div className="space-y-2 mb-4">
+              {([
+                { key: "all", label: "All Families", helper: "Send notifications to all families." },
+                { key: "received", label: "Received Only", helper: "Notify only families who received items." },
+                { key: "pending", label: "Pending Only", helper: "Notify only families who haven't received yet." },
+              ] as { key: "all" | "received" | "pending"; label: string; helper: string }[]).map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setSmsFilter(option.key)}
+                  className={`w-full text-left p-4 rounded-2xl border transition-all ${
+                    smsFilter === option.key
+                      ? "border-purple-200 bg-purple-50/60"
+                      : "border-slate-100 hover:border-purple-100 hover:bg-purple-50/40"
+                  }`}
+                >
+                  <span className="block text-sm font-black text-slate-800">
+                    {option.label}
+                  </span>
+                  <span className="block text-[11px] font-semibold text-slate-400 mt-1">{option.helper}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setIsSmsModalOpen(false)}
+                className="flex-1 py-3 rounded-2xl bg-slate-100 text-slate-600 text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendSms}
+                disabled={isSendingSms}
+                className="flex-1 py-3 rounded-2xl bg-purple-600 text-white text-xs font-black uppercase tracking-widest hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSendingSms ? "Sending..." : "Send SMS"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isPdfFilterOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">

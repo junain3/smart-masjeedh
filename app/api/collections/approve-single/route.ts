@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withCollectionSecurity } from '../middleware';
+import { sendSms } from '@/lib/sms-utils';
+import { buildCollectionApprovedSms } from '@/lib/collection-utils';
 
 export const POST = withCollectionSecurity(async (request: NextRequest) => {
   try {
@@ -30,9 +32,24 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
       return NextResponse.json({ error: 'Collection ID is required' }, { status: 400 });
     }
 
-    const { data: collections, error: fetchError } = await supabase
+    console.info('[collections/approve-single] request received', {
+      masjidId: userContext.masjidId,
+      userId,
+      collectionIds,
+      collectionCount: collectionIds.length,
+    });
+
+    // Get collections with family information
+    const { data: collections, error: fetchError } = await supabaseAdmin
       .from('subscription_collections')
-      .select('*')
+      .select(`
+        *,
+        families (
+          id,
+          head_name,
+          phone
+        )
+      `)
       .in('id', collectionIds)
       .eq('masjid_id', userContext.masjidId)
       .eq('status', 'pending');
@@ -40,6 +57,11 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
     if (fetchError) {
       throw fetchError;
     }
+
+    console.info('[collections/approve-single] pending collections fetched', {
+      masjidId: userContext.masjidId,
+      fetchedCount: collections?.length || 0,
+    });
 
     const pendingCollections = collections || [];
     const foundIds = new Set(pendingCollections.map((item: any) => item.id));
@@ -54,7 +76,7 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
 
     const totalAmount = pendingCollections.reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0);
 
-    const { data: transaction, error: transactionError } = await supabase
+    const { data: transaction, error: transactionError } = await supabaseAdmin
       .from('transactions')
       .insert({
         masjid_id: userContext.masjidId,
@@ -76,10 +98,20 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
 
     const failures: string[] = [];
     let successCount = 0;
+    const smsResults: Array<{ familyId: string; success: boolean; error?: string }> = [];
 
     for (const collection of pendingCollections) {
       try {
-        const profileRes = await supabase
+        console.info('[collections/approve-single] processing collection', {
+          collectionId: collection.id,
+          familyId: collection.family_id,
+          amount: collection.amount,
+          familyHeadName: collection.families?.head_name || null,
+          phonePresent: Boolean(collection.families?.phone),
+          phoneLength: collection.families?.phone?.length || 0,
+        });
+
+        const profileRes = await supabaseAdmin
           .from('subscription_collector_profiles')
           .select('default_commission_percent')
           .eq('masjid_id', userContext.masjidId)
@@ -90,7 +122,7 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
         const commissionAmount = (Number(collection.amount || 0) * commissionPercent) / 100;
 
         try {
-          await supabase.from('employee_commissions').insert({
+          await supabaseAdmin.from('employee_commissions').insert({
             masjid_id: userContext.masjidId,
             employee_id: collection.collected_by_user_id,
             collection_id: collection.id,
@@ -101,7 +133,7 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
         }
 
         try {
-          await supabase.from('staff_commissions').insert({
+          await supabaseAdmin.from('staff_commissions').insert({
             masjid_id: userContext.masjidId,
             collector_user_id: collection.collected_by_user_id,
             amount: commissionAmount,
@@ -111,7 +143,7 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
           console.warn('Staff commission insert skipped:', staffCommissionError);
         }
 
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseAdmin
           .from('subscription_collections')
           .update({
             status: 'accepted',
@@ -127,8 +159,79 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
           throw updateError;
         }
 
+        console.info('[collections/approve-single] collection approval update success', {
+          collectionId: collection.id,
+          mainTransactionId: transaction.id,
+          commissionPercent,
+          commissionAmount,
+        });
+
+        // Send SMS notification if family has phone number
+        const family = collection.families;
+        if (family?.phone) {
+          const message = buildCollectionApprovedSms(family.head_name, collection.amount);
+          console.info('[collections/approve-single] triggering auto SMS', {
+            collectionId: collection.id,
+            familyId: family.id,
+            phoneLength: family.phone.length,
+            messageLength: message.length,
+          });
+
+          try {
+            const smsResult = await sendSms(
+              userContext.masjidId,
+              family.phone,
+              message,
+              userId
+            );
+
+            if (!smsResult.success) {
+              console.error('[collections/approve-single] auto SMS failed', {
+                collectionId: collection.id,
+                familyId: family.id,
+                phoneLength: family.phone.length,
+                error: smsResult.error,
+              });
+            } else {
+              console.info('[collections/approve-single] auto SMS completed', {
+                collectionId: collection.id,
+                familyId: family.id,
+                smsResult,
+              });
+            }
+
+            smsResults.push({
+              familyId: family.id,
+              success: smsResult.success,
+              error: smsResult.error
+            });
+          } catch (smsError) {
+            console.error('[collections/approve-single] auto SMS threw unexpectedly', {
+              collectionId: collection.id,
+              familyId: family.id,
+              smsError,
+            });
+            smsResults.push({
+              familyId: family.id,
+              success: false,
+              error: smsError instanceof Error ? smsError.message : 'Unknown SMS error',
+            });
+          }
+        } else {
+          console.error('[collections/approve-single] auto SMS skipped: missing family phone', {
+            collectionId: collection.id,
+            familyId: family?.id || collection.family_id,
+            familyHeadName: family?.head_name || null,
+          });
+        }
+
         successCount += 1;
       } catch (error: any) {
+        console.error('[collections/approve-single] collection processing failed', {
+          collectionId: collection.id,
+          familyId: collection.family_id,
+          error,
+        });
         failures.push(error?.message || 'Unknown error');
       }
     }
@@ -140,6 +243,7 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
       total_amount: totalAmount,
       failures,
       main_transaction_id: transaction.id,
+      sms_results: smsResults,
     });
   } catch (error: any) {
     console.error('Approve collection error:', error);

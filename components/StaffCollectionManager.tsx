@@ -124,10 +124,20 @@ export function StaffCollectionManager() {
         return;
       }
 
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        alert('Please log in to record a collection');
+        return;
+      }
+
       const response = await fetch('/api/collections/add', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...(session.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : {}),
         },
         body: JSON.stringify({
           member_id: selectedMember,

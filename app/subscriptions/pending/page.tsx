@@ -141,6 +141,10 @@ export default function SubscriptionsPendingPage() {
       }
 
       if (result.success) {
+        if (result.sms_results?.some((sms: { success: boolean }) => !sms.success)) {
+          console.error("[subscriptions/pending] auto SMS failures during approval", result.sms_results);
+        }
+
         toast({
           kind: "success",
           title: "Collections Approved",

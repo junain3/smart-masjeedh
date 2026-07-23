@@ -34,7 +34,7 @@ import {
   buildDirectSubscriptionDescription,
   syncCollectionForAccountTransaction,
   deleteCollectionForAccountTransaction,
-  createPendingCollectionFromAccounts,
+  buildDirectAccountCollectionNotes,
   updatePendingCollectionFromAccounts,
   deletePendingCollectionFromAccounts,
   extractDirectAccountNote,
@@ -322,15 +322,32 @@ export default function AccountsPage() {
         );
         if (updateError) throw updateError;
       } else if (isSubscription && !editingTransaction) {
-        const { error: insertError } = await createPendingCollectionFromAccounts(supabase, {
-          masjidId: ctx.masjidId,
-          userId: authUserId,
-          familyId: selectedFamilyId,
-          amount: amountNum,
-          date,
-          notes: description.trim() || null,
+        const response = await fetch("/api/collections/add", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session.access_token
+              ? { Authorization: `Bearer ${session.access_token}` }
+              : {}),
+          },
+          body: JSON.stringify({
+            family_id: selectedFamilyId,
+            collection_amount: amountNum,
+            notes: buildDirectAccountCollectionNotes(description.trim() || null),
+            payment_method: "cash",
+            date,
+          }),
         });
-        if (insertError) throw insertError;
+
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || "Failed to create pending collection");
+        }
+
+        if (result.sms_sent && !result.sms_sent.success) {
+          console.error("[accounts/page] auto SMS failed after add", result.sms_sent);
+        }
       } else if (editingTransaction) {
         const { error } = await supabase
           .from("transactions")
