@@ -14,6 +14,7 @@ import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permi
 import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 import SearchResultsPrintView from "@/components/SearchResultsPrintView";
 import { getPrintEngine, getPrintButtonLabel, type PrintReportType } from "@/lib/print-engine";
+import { sortFamiliesByCode } from "@/lib/collection-utils";
 
 type Family = {
   id: string;
@@ -377,11 +378,7 @@ export default function FamiliesPage() {
       if (error) throw error;
 
       if (data) {
-        const sortedFamilies = (data || []).sort((a, b) => {
-          const numA = parseInt((a.family_code || "").replace(/\D/g, "")) || 0;
-          const numB = parseInt((b.family_code || "").replace(/\D/g, "")) || 0;
-          return numA - numB;
-        });
+        const sortedFamilies = sortFamiliesByCode(data) as Family[];
 
         setFamilies(sortedFamilies);
         setIsLive(true);

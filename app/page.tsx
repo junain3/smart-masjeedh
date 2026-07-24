@@ -32,6 +32,7 @@ import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permi
 import { useAppToast } from "@/components/ToastProvider";
 
 import { getPrintEngine, getPrintButtonLabel, type PrintReportType } from "@/lib/print-engine";
+import { sortFamiliesByCode } from "@/lib/collection-utils";
 
 type Member = {
 
@@ -659,7 +660,7 @@ export default function HomePage() {
 
         if (requestId !== searchRequestSeq.current) return;
 
-        setFamilyResults(data || []);
+        setFamilyResults(sortFamiliesByCode(data || []) as any[]);
 
         setResultType("families");
 
@@ -833,7 +834,7 @@ export default function HomePage() {
 
 
 
-        const famData = (famRes.data || []) as any[];
+        const famData = sortFamiliesByCode((famRes.data || []) as any[]);
 
         const memData = (memRes.data || []) as any[];
 

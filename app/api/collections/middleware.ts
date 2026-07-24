@@ -34,9 +34,9 @@ async function resolveAuthenticatedUser(
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice("Bearer ".length).trim();
     if (token) {
-      const { data: { user }, error } = await supabase.auth.getUser(token);
+      const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
       if (error) {
-        console.error("[collections/middleware] getUser(token) failed", {
+        console.error("[collections/middleware] supabaseAdmin.getUser(token) failed", {
           message: error.message,
         });
       }
@@ -135,8 +135,12 @@ export async function collectionSecurityMiddleware(request: NextRequest) {
       );
     }
 
-    // Check if user has collection permissions
-    if (!userRole.permissions?.subscriptions_collect && userRole.role !== "super_admin") {
+    // Check if user has any collection-related permission (collect OR approve)
+    // Route handlers enforce specific permission requirements per endpoint
+    const canCollect = Boolean(userRole.permissions?.subscriptions_collect);
+    const canApprove = Boolean(userRole.permissions?.subscriptions_approve);
+    const isSuperAdmin = userRole.role === "super_admin";
+    if (!canCollect && !canApprove && !isSuperAdmin) {
       return NextResponse.json(
         { error: "Collection permissions required" },
         { status: 403 }

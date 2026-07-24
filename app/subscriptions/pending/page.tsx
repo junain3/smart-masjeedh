@@ -120,14 +120,28 @@ export default function SubscriptionsPendingPage() {
 
   const processApproval = async (collectionIds: string[]) => {
     if (!user || !tenantContext?.masjidId || collectionIds.length === 0) return;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      toast({
+        kind: "error",
+        title: "Approval Error",
+        message: "Please log in to approve collections",
+      });
+      return;
+    }
     
     setBulkProcessing(true);
     
     try {
       const response = await fetch('/api/collections/approve-single', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...(session.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : {}),
         },
         body: JSON.stringify({
           collection_ids: collectionIds,

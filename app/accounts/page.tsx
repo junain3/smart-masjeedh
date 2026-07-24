@@ -39,6 +39,7 @@ import {
   deletePendingCollectionFromAccounts,
   extractDirectAccountNote,
   isDirectAccountCollection,
+  sortFamiliesByCode,
 } from "@/lib/collection-utils";
 
 export const dynamic = "force-dynamic";
@@ -238,7 +239,7 @@ export default function AccountsPage() {
       if (pendingCollectionsResponse.error) throw pendingCollectionsResponse.error;
 
       setTransactions((transactionsResponse.data as Transaction[]) || []);
-      setFamilies((familiesResponse.data as Family[]) || []);
+      setFamilies(sortFamiliesByCode(familiesResponse.data as Family[]));
       setPendingAccountCollections(
         ((pendingCollectionsResponse.data as PendingAccountCollection[]) || []).filter((c) =>
           isDirectAccountCollection(c.notes)
@@ -308,6 +309,8 @@ export default function AccountsPage() {
         : description;
       const finalCategory = isSubscription ? "subscription" : category;
 
+      let addApiResult: { auto_approved?: boolean } | null = null;
+
       if (isSubscription && editingCollectionId) {
         const { error: updateError } = await updatePendingCollectionFromAccounts(
           supabase,
@@ -342,8 +345,10 @@ export default function AccountsPage() {
 
         const result = await response.json();
         if (!response.ok) {
-          throw new Error(result.error || "Failed to create pending collection");
+          throw new Error(result.error || "Failed to create collection");
         }
+
+        addApiResult = result;
 
         if (result.sms_sent && !result.sms_sent.success) {
           console.error("[accounts/page] auto SMS failed after add", result.sms_sent);
@@ -404,12 +409,15 @@ export default function AccountsPage() {
       resetForm();
       await fetchData(user);
       if (isSubscription) {
+        const autoApprovedNew = !editingCollectionId && addApiResult?.auto_approved === true;
         toast({
           kind: "success",
           title: "சந்தா பதிவு",
-          message: wasEditingPendingCollection
+          message: editingCollectionId
             ? "நிலுவையில் உள்ள சந்தா புதுப்பிக்கப்பட்டது"
-            : "குடும்பம் உடனே புதுப்பிக்கப்பட்டது — Main account-க்கு batch அனுமதியில் சேரும்",
+            : autoApprovedNew
+              ? "குடும்ப சந்தா நேரடியாக பதிவு செய்யப்பட்டது மற்றும் கணக்கில் சேர்க்கப்பட்டது"
+              : "குடும்பம் உடனே புதுப்பிக்கப்பட்டது — Main account-க்கு batch அனுமதியில் சேரும்",
         });
       }
     } catch (err: any) {

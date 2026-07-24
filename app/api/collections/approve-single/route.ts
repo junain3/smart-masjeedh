@@ -39,17 +39,11 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
       collectionCount: collectionIds.length,
     });
 
-    // Get collections with family information
+    // Get collections (NOTE: no FK constraint exists between subscription_collections.family_id and families.id in schema
+    // so implicit join via families(...) fails schema cache lookup. Fetch families separately and merge.)
     const { data: collections, error: fetchError } = await supabaseAdmin
       .from('subscription_collections')
-      .select(`
-        *,
-        families (
-          id,
-          head_name,
-          phone
-        )
-      `)
+      .select('*')
       .in('id', collectionIds)
       .eq('masjid_id', userContext.masjidId)
       .eq('status', 'pending');
@@ -58,12 +52,39 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
       throw fetchError;
     }
 
+    const rawCollections: any[] = collections || [];
+
     console.info('[collections/approve-single] pending collections fetched', {
       masjidId: userContext.masjidId,
-      fetchedCount: collections?.length || 0,
+      fetchedCount: rawCollections.length,
     });
 
-    const pendingCollections = collections || [];
+    // Resolve families separately (family_id column has no FK constraint → PostgREST cannot auto-join)
+    let pendingCollections: any[] = rawCollections;
+    if (rawCollections.length > 0) {
+      const familyIds = Array.from(new Set(rawCollections.map((c: any) => c.family_id).filter(Boolean)));
+      console.info('[collections/approve-single] resolving families by ids', {
+        familyIdCount: familyIds.length,
+      });
+      const { data: families, error: familyFetchError } = await supabaseAdmin
+        .from('families')
+        .select('id, head_name, phone')
+        .eq('masjid_id', userContext.masjidId)
+        .in('id', familyIds);
+
+      if (familyFetchError) {
+        console.error('[collections/approve-single] families lookup failed', { familyFetchError });
+        throw familyFetchError;
+      }
+
+      const familyMap = new Map<string, any>();
+      (families || []).forEach((f: any) => familyMap.set(f.id, f));
+
+      pendingCollections = rawCollections.map((c: any) => ({
+        ...c,
+        families: familyMap.get(c.family_id) || null,
+      }));
+    }
     const foundIds = new Set(pendingCollections.map((item: any) => item.id));
     const missingIds = collectionIds.filter((id) => !foundIds.has(id));
 

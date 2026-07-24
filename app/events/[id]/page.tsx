@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { getTranslation, translations, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
 import { getPdfMasjidName } from "@/lib/pdf-utils";
+import { compareFamilyByCode } from "@/lib/collection-utils";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { useAppToast } from "@/components/ToastProvider";
@@ -48,17 +49,11 @@ export default function EventDetailPage() {
   const [smsFilter, setSmsFilter] = useState<"all" | "received" | "pending">("all");
   const { tenantContext } = useMockAuth();
 
-  const sortByFamilyCode = (a: Att, b: Att) => {
-    const getNumericPart = (code: string) => {
-      const match = code.match(/(\d+)/);
-      return match ? parseInt(match[1], 10) : 0;
-    };
-    
-    const numA = getNumericPart(a.families.family_code || "");
-    const numB = getNumericPart(b.families.family_code || "");
-    
-    return numA - numB;
-  };
+  const sortByFamilyCode = (a: Att, b: Att) =>
+    compareFamilyByCode(
+      { family_code: a.families?.family_code },
+      { family_code: b.families?.family_code }
+    );
 
   const getCacheKey = (id: string) => `event_attendance_cache_${id}`;
 

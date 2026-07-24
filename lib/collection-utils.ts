@@ -223,3 +223,46 @@ export function formatTransactionCategory(category: string): string {
   };
   return labels[key] || category;
 }
+
+/**
+ * Extracts a numeric sort key from a family code (e.g. M-number).
+ *  - "M3"    → 3
+ *  - "M007"  → 7
+ *  - "M113"  → 113
+ *  - "12"    → 12  (no prefix, fallback)
+ *  - "XYZ", "" → Number.MAX_SAFE_INTEGER (end of list, stable order)
+ */
+export function familyCodeNumericKey(code: string | null | undefined): number {
+  if (!code) return Number.MAX_SAFE_INTEGER;
+  const match = String(code).match(/(\d+)/);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  const n = parseInt(match[1], 10);
+  return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * Stable natural (numeric) sort comparer for family rows by their `family_code`.
+ * When codes share the same numeric portion (e.g. M12 vs M012), falls back to
+ * lexicographic comparison of the full code for determinism.
+ */
+export function compareFamilyByCode<T extends { family_code?: string | null }>(
+  a: T,
+  b: T
+): number {
+  const ka = familyCodeNumericKey(a.family_code);
+  const kb = familyCodeNumericKey(b.family_code);
+  if (ka !== kb) return ka - kb;
+  const sa = a.family_code || "";
+  const sb = b.family_code || "";
+  if (sa < sb) return -1;
+  if (sa > sb) return 1;
+  return 0;
+}
+
+/** Convenience: return a NEW array sorted by family_code (natural numeric ascending). */
+export function sortFamiliesByCode<T extends { family_code?: string | null }>(
+  families: T[] | null | undefined
+): T[] {
+  if (!Array.isArray(families)) return [];
+  return families.slice().sort(compareFamilyByCode);
+}

@@ -10,7 +10,7 @@ import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { EmptyState } from "@/components/EmptyState";
-import { calcCommission } from "@/lib/collection-utils";
+import { calcCommission, sortFamiliesByCode } from "@/lib/collection-utils";
 
 type Family = {
   id: string;
@@ -162,7 +162,7 @@ export default function CollectionsPage() {
       if (familiesRes.error) throw familiesRes.error;
       if (collectionsRes.error) throw collectionsRes.error;
 
-      const familyList = familiesRes.data || [];
+      const familyList = sortFamiliesByCode(familiesRes.data || []) as Family[];
       const collectionList = collectionsRes.data || [];
       const collectorIds = Array.from(
         new Set(collectionList.map((c) => c.collected_by_user_id).filter(Boolean))
@@ -323,7 +323,11 @@ export default function CollectionsPage() {
           console.error("[collections/page] auto SMS failed after add", result.sms_sent);
         }
 
-        setSuccess("வசூல் பதிவாகியது — நிர்வாகி அனுமதிக்க வேண்டும்");
+        if (result.auto_approved) {
+          setSuccess("வசூல் பதிவாகி நேரடியாக அனுமதிக்கப்பட்டது");
+        } else {
+          setSuccess("வசூல் பதிவாகியது — நிர்வாகி அனுமதிக்க வேண்டும்");
+        }
       }
 
       closeModal();
