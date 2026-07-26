@@ -116,6 +116,7 @@ export default function FamilyDetailsPage() {
   const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [serviceName, setServiceName] = useState("");
+  const [serviceCustomName, setServiceCustomName] = useState("");
   const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [isServiceSubmitting, setIsServiceSubmitting] = useState(false);
 
@@ -717,7 +718,12 @@ export default function FamilyDetailsPage() {
     }
 
     if (!serviceName.trim()) {
-      alert("Please enter a service name");
+      alert("Please select a service name");
+      return;
+    }
+
+    if (serviceName === "Other" && !serviceCustomName.trim()) {
+      alert("Please enter a custom service name");
       return;
     }
 
@@ -742,7 +748,7 @@ export default function FamilyDetailsPage() {
         .insert({
           family_id: familyId,
           masjid_id: tenantContext.masjidId,
-          name: serviceName.trim(),
+          name: serviceName === "Other" ? serviceCustomName.trim() : serviceName.trim(),
           date: serviceDate,
           status: "Received",
         });
@@ -750,6 +756,7 @@ export default function FamilyDetailsPage() {
       if (error) throw error;
 
       setServiceName("");
+      setServiceCustomName("");
       setServiceDate(new Date().toISOString().split('T')[0]);
       setIsServiceModalOpen(false);
       await fetchData(user);
@@ -1890,14 +1897,32 @@ export default function FamilyDetailsPage() {
             <div className="space-y-3">
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Service Name</label>
-                <input
-                  type="text"
+                <select
                   value={serviceName}
                   onChange={(e) => setServiceName(e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-amber-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                  placeholder="Enter service name"
-                />
+                  className="w-full px-4 py-3 bg-white border border-amber-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                >
+                  <option value="">Select a service</option>
+                  <option value="திருமணம்">திருமணம் (Marriage Services)</option>
+                  <option value="நற்சான்றிதழ்">நற்சான்றிதழ் (Character Certificate)</option>
+                  <option value="வதிவிடச் சான்றிதழ்">வதிவிடச் சான்றிதழ் (Residence Certificate)</option>
+                  <option value="திருமண அனுமதிக் கடிதம்">திருமண அனுமதிக் கடிதம் (Marriage Permission Letter)</option>
+                  <option value="Other">Other (Custom Service)</option>
+                </select>
               </div>
+
+              {serviceName === "Other" && (
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Custom Service Name</label>
+                  <input
+                    type="text"
+                    value={serviceCustomName}
+                    onChange={(e) => setServiceCustomName(e.target.value)}
+                    className="w-full px-4 py-3 bg-white border border-amber-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                    placeholder="Enter custom service name"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</label>
