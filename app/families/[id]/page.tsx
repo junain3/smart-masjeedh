@@ -132,7 +132,9 @@ export default function FamilyDetailsPage() {
   
   // New fields for enhanced data collection
   const [education, setEducation] = useState("");
+  const [educationOther, setEducationOther] = useState("");
   const [occupation, setOccupation] = useState("");
+  const [occupationOther, setOccupationOther] = useState("");
   const [isMoulavi, setIsMoulavi] = useState(false);
   const [isNewMuslim, setIsNewMuslim] = useState(false);
   
@@ -575,12 +577,14 @@ export default function FamilyDetailsPage() {
     setAge("");
     setGender(inferGenderFromRelationship("மகன்") || "Male");
     setNic("");
-    setPhone("");
+    setPhone(family?.phone || "");
     setCivilStatus("");
     
     // Reset new fields
     setEducation("");
+    setEducationOther("");
     setOccupation("");
+    setOccupationOther("");
     setIsMoulavi(false);
     setIsNewMuslim(false);
     
@@ -611,8 +615,20 @@ export default function FamilyDetailsPage() {
     setCivilStatus(member.civil_status || "");
     
     // Set new fields
-    setEducation(member.education || "");
-    setOccupation(member.occupation || "");
+    if (member.education && !["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "O/L", "A/L", "Diploma", "Degree", "Master Degree", "MPhil / PhD"].includes(member.education)) {
+      setEducation("Other");
+      setEducationOther(member.education || "");
+    } else {
+      setEducation(member.education || "");
+      setEducationOther("");
+    }
+    if (member.occupation && !["Employed", "Self-employed", "Business", "Farmer", "Teacher", "Doctor", "Engineer", "Student", "Unemployed", "Retired"].includes(member.occupation)) {
+      setOccupation("Other");
+      setOccupationOther(member.occupation || "");
+    } else {
+      setOccupation(member.occupation || "");
+      setOccupationOther("");
+    }
     setIsMoulavi(member.is_moulavi || false);
     setIsNewMuslim(member.is_new_muslim || false);
     
@@ -795,8 +811,8 @@ export default function FamilyDetailsPage() {
             phone,
             civil_status: civilStatus,
             // New fields
-            education: education || null,
-            occupation: occupation || null,
+            education: education === "Other" ? (educationOther || null) : (education || null),
+            occupation: occupation === "Other" ? (occupationOther || null) : (occupation || null),
             is_moulavi: isMoulavi,
             is_new_muslim: isNewMuslim,
             // Person-specific fields
@@ -827,8 +843,8 @@ export default function FamilyDetailsPage() {
             phone,
             civil_status: civilStatus,
             // New fields
-            education: education || null,
-            occupation: occupation || null,
+            education: education === "Other" ? (educationOther || null) : (education || null),
+            occupation: occupation === "Other" ? (occupationOther || null) : (occupation || null),
             is_moulavi: isMoulavi,
             is_new_muslim: isNewMuslim,
             // Person-specific fields
@@ -1487,7 +1503,20 @@ export default function FamilyDetailsPage() {
                     required
                     type="date"
                     value={dob}
-                    onChange={(e) => setDob(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Validate year is 4 digits and not exceeding current year
+                      if (value) {
+                        const year = parseInt(value.split('-')[0], 10);
+                        const currentYear = new Date().getFullYear();
+                        if (year < 1900 || year > currentYear || value.split('-')[0].length !== 4) {
+                          return; // Reject invalid year
+                        }
+                      }
+                      setDob(value);
+                    }}
+                    min="1900-01-01"
+                    max={new Date().toISOString().split('T')[0]}
                     className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
                   />
                 </div>
@@ -1563,29 +1592,86 @@ export default function FamilyDetailsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Education</label>
-                  <input
-                    type="text"
+                  <select
                     value={education}
                     onChange={(e) => setEducation(e.target.value)}
                     className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
-                    placeholder="e.g. High School, Bachelor's Degree"
-                  />
+                  >
+                    <option value="">{t.select_option}</option>
+                    <option value="Grade 1">Grade 1</option>
+                    <option value="Grade 2">Grade 2</option>
+                    <option value="Grade 3">Grade 3</option>
+                    <option value="Grade 4">Grade 4</option>
+                    <option value="Grade 5">Grade 5</option>
+                    <option value="Grade 6">Grade 6</option>
+                    <option value="Grade 7">Grade 7</option>
+                    <option value="Grade 8">Grade 8</option>
+                    <option value="Grade 9">Grade 9</option>
+                    <option value="Grade 10">Grade 10</option>
+                    <option value="O/L">O/L</option>
+                    <option value="A/L">A/L</option>
+                    <option value="Diploma">Diploma</option>
+                    <option value="Degree">Degree</option>
+                    <option value="Master Degree">Master Degree</option>
+                    <option value="MPhil / PhD">MPhil / PhD</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
+                {education === "Other" && (
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Specify Education</label>
+                    <input
+                      type="text"
+                      value={educationOther}
+                      onChange={(e) => setEducationOther(e.target.value)}
+                      onBlur={(e) => {
+                        if (e.target.value) {
+                          setEducationOther(formatTitleCase(e.target.value));
+                        }
+                      }}
+                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
+                      placeholder="e.g. Certificate Course, Training"
+                    />
+                  </div>
+                )}
                 <div className="space-y-1">
                   <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Occupation</label>
-                  <input
-                    type="text"
+                  <select
                     value={occupation}
                     onChange={(e) => setOccupation(e.target.value)}
-                    onBlur={(e) => {
-                      if (e.target.value) {
-                        setOccupation(formatTitleCase(e.target.value));
-                      }
-                    }}
                     className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
-                    placeholder="e.g. Teacher, Engineer, Business"
-                  />
+                  >
+                    <option value="">{t.select_option}</option>
+                    <option value="Employed">Employed</option>
+                    <option value="Self-employed">Self-employed</option>
+                    <option value="Business">Business</option>
+                    <option value="Farmer">Farmer</option>
+                    <option value="Teacher">Teacher</option>
+                    <option value="Doctor">Doctor</option>
+                    <option value="Engineer">Engineer</option>
+                    <option value="Student">Student</option>
+                    <option value="Unemployed">Unemployed</option>
+                    <option value="Retired">Retired</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
+                {occupation === "Other" && (
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Specify Occupation</label>
+                    <input
+                      type="text"
+                      value={occupationOther}
+                      onChange={(e) => setOccupationOther(e.target.value)}
+                      onBlur={(e) => {
+                        if (e.target.value) {
+                          setOccupationOther(formatTitleCase(e.target.value));
+                        }
+                      }}
+                      className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
+                      placeholder="e.g. Driver, Mechanic, Artist"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-4 pt-2">
