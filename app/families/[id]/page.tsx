@@ -146,6 +146,8 @@ export default function FamilyDetailsPage() {
   const [hasSpecialNeeds, setHasSpecialNeeds] = useState(false);
   const [specialNeedsDetails, setSpecialNeedsDetails] = useState("");
   const [hasHealthIssue, setHasHealthIssue] = useState(false);
+  const [healthIssueType, setHealthIssueType] = useState("");
+  const [healthIssueOther, setHealthIssueOther] = useState("");
   const [healthDetails, setHealthDetails] = useState("");
 
   const [errorMessage, setErrorMessage] = useState("");
@@ -596,6 +598,8 @@ export default function FamilyDetailsPage() {
     setHasSpecialNeeds(false);
     setSpecialNeedsDetails("");
     setHasHealthIssue(false);
+    setHealthIssueType("");
+    setHealthIssueOther("");
     setHealthDetails("");
     
     // Reset duplicate detection state
@@ -640,6 +644,13 @@ export default function FamilyDetailsPage() {
     setHasSpecialNeeds(member.has_special_needs || false);
     setSpecialNeedsDetails(member.special_needs_details || "");
     setHasHealthIssue(member.has_health_issue || false);
+    if (member.health_details && !["Heart Disease", "Kidney Disease", "Cancer", "BP", "Sugar", "Cholesterol", "Asthma"].includes(member.health_details)) {
+      setHealthIssueType("Other");
+      setHealthIssueOther(member.health_details || "");
+    } else {
+      setHealthIssueType(member.health_details || "");
+      setHealthIssueOther("");
+    }
     setHealthDetails(member.health_details || "");
     
     setIsModalOpen(true);
@@ -772,25 +783,16 @@ export default function FamilyDetailsPage() {
 
   const addMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("=== addMember START ===");
 
     if (!supabase || !familyId || !user || !tenantContext?.masjidId) {
-      console.log("- Exiting: missing dependencies");
       return;
     }
 
-    console.log("- confirmedNoDuplicate:", confirmedNoDuplicate);
-
     // Check for duplicates first
     if (!confirmedNoDuplicate) {
-      console.log("- Checking for duplicates...");
       const hasDuplicates = checkForDuplicates();
-      console.log("- hasDuplicates result:", hasDuplicates);
-      
       if (hasDuplicates) {
-        console.log("- Setting showDuplicateWarning to true");
         setShowDuplicateWarning(true);
-        console.log("- Returning early");
         return;
       }
     }
@@ -829,7 +831,7 @@ export default function FamilyDetailsPage() {
             has_special_needs: hasSpecialNeeds,
             special_needs_details: specialNeedsDetails || null,
             has_health_issue: hasHealthIssue,
-            health_details: healthDetails || null,
+            health_details: healthIssueType === "Other" ? (healthIssueOther || healthDetails || null) : (healthIssueType || healthDetails || null),
           })
           .eq("id", editingMember.id)
           .eq("masjid_id", tenantContext.masjidId);
@@ -861,7 +863,7 @@ export default function FamilyDetailsPage() {
             has_special_needs: hasSpecialNeeds,
             special_needs_details: specialNeedsDetails || null,
             has_health_issue: hasHealthIssue,
-            health_details: healthDetails || null,
+            health_details: healthIssueType === "Other" ? (healthIssueOther || healthDetails || null) : (healthIssueType || healthDetails || null),
             user_id: user.id,
             masjid_id: tenantContext.masjidId,
           },
@@ -879,7 +881,6 @@ export default function FamilyDetailsPage() {
       await fetchData(user);
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (error: any) {
-      console.error("ADD MEMBER Error:", error);
       // Check for unique constraint violation
       if (error.code === '23505' || error.message?.includes('unique constraint')) {
         alert(`This NIC number is already registered for another member in this masjid.`);
@@ -1791,14 +1792,51 @@ export default function FamilyDetailsPage() {
                   </div>
                   
                   {hasHealthIssue && (
-                    <div className="mt-3 animate-in fade-in duration-300">
+                    <div className="mt-3 animate-in fade-in duration-300 space-y-3">
                       <div className="space-y-1">
-                        <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Health Details</label>
+                        <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Health Issue Type</label>
+                        <select
+                          value={healthIssueType}
+                          onChange={(e) => setHealthIssueType(e.target.value)}
+                          className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
+                        >
+                          <option value="">Select health issue</option>
+                          <option value="Heart Disease">Heart Disease</option>
+                          <option value="Kidney Disease">Kidney Disease</option>
+                          <option value="Cancer">Cancer</option>
+                          <option value="BP">BP (Blood Pressure)</option>
+                          <option value="Sugar">Sugar (Diabetes)</option>
+                          <option value="Cholesterol">Cholesterol</option>
+                          <option value="Asthma">Asthma</option>
+                          <option value="Other">Other (Custom)</option>
+                        </select>
+                      </div>
+                      
+                      {healthIssueType === "Other" && (
+                        <div className="space-y-1">
+                          <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Specify Health Issue</label>
+                          <input
+                            type="text"
+                            value={healthIssueOther}
+                            onChange={(e) => setHealthIssueOther(e.target.value)}
+                            onBlur={(e) => {
+                              if (e.target.value) {
+                                setHealthIssueOther(formatTitleCase(e.target.value));
+                              }
+                            }}
+                            className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
+                            placeholder="e.g. Arthritis, Migraine"
+                          />
+                        </div>
+                      )}
+                      
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">Additional Details</label>
                         <textarea
                           value={healthDetails}
                           onChange={(e) => setHealthDetails(e.target.value)}
                           className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
-                          placeholder="Health-related information"
+                          placeholder="Additional health-related information"
                           rows={2}
                         />
                       </div>
