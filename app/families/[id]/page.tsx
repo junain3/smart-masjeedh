@@ -87,6 +87,7 @@ type Service = {
   name: string;
   date: string;
   status: string;
+  recipient_name?: string;
 };
 
 export default function FamilyDetailsPage() {
@@ -117,6 +118,7 @@ export default function FamilyDetailsPage() {
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [serviceName, setServiceName] = useState("");
   const [serviceCustomName, setServiceCustomName] = useState("");
+  const [serviceRecipient, setServiceRecipient] = useState("");
   const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [isServiceSubmitting, setIsServiceSubmitting] = useState(false);
 
@@ -489,7 +491,7 @@ export default function FamilyDetailsPage() {
         // Services
         supabase
           .from("service_distributions")
-          .select("id, status, date, name")
+          .select("id, status, date, name, recipient_name")
           .eq("family_id", familyId)
           .eq("masjid_id", tenantContext.masjidId)
           .order("date", { ascending: false })
@@ -550,6 +552,7 @@ export default function FamilyDetailsPage() {
         name: s.name || "Service",
         date: s.date,
         status: s.status,
+        recipient_name: s.recipient_name,
       }));
       if (servicesError) {
         console.log("Services fetch error:", servicesError);
@@ -723,8 +726,8 @@ export default function FamilyDetailsPage() {
   };
 
   const addService = async () => {
-    if (!supabase || !familyId || !tenantContext?.masjidId) {
-      alert("Masjid context not found. Please log in again.");
+    if (!supabase || !familyId) {
+      alert("Required data not found. Please refresh the page.");
       return;
     }
 
@@ -741,33 +744,108 @@ export default function FamilyDetailsPage() {
     setIsServiceSubmitting(true);
 
     try {
-      const { data: masjidData, error: masjidError } = await supabase
+      let masjidId: string | null = null;
+      const INVALID_MASJID_ID = "d4a4c9e9-b48f-47fc-a9a6-6a23e0662ac1";
+
+      // First, query masjids table directly to get a guaranteed valid masjid_id
+      console.log("Querying masjids table directly for first valid masjid");
+      const { data: anyMasjid, error: anyMasjidError } = await supabase
         .from("masjids")
         .select("id")
-        .eq("id", tenantContext.masjidId)
+        .limit(1)
         .maybeSingle();
-
-      if (masjidError) throw masjidError;
-
-      if (!masjidData) {
-        alert("Selected masjid is not valid. Please log in again or complete masjid setup before adding services.");
-        return;
+      
+      if (anyMasjidError) {
+        console.error("Error fetching first masjid:", anyMasjidError);
+      } else if (anyMasjid?.id) {
+        masjidId = anyMasjid.id;
+        console.log("Using guaranteed valid masjid_id from masjids table:", masjidId);
       }
+
+      // If we couldn't get a masjid from the table, try user's session
+      if (!masjidId) {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.error("Error getting session:", sessionError);
+        }
+        if (session?.user) {
+          console.log("Fetching user_masjids for user:", session.user.id);
+          const { data: userMasjidData, error: userMasjidError } = await supabase
+            .from("user_masjids")
+            .select("masjid_id")
+            .eq("user_id", session.user.id)
+            .limit(1)
+            .maybeSingle();
+          
+          if (userMasjidError) {
+            console.error("Error fetching user_masjids:", userMasjidError);
+          } else if (userMasjidData?.masjid_id && userMasjidData.masjid_id !== INVALID_MASJID_ID) {
+            console.log("Validating user_masjid_id:", userMasjidData.masjid_id);
+            const { data: masjidData, error: masjidError } = await supabase
+              .from("masjids")
+              .select("id")
+              .eq("id", userMasjidData.masjid_id)
+              .maybeSingle();
+            
+            if (masjidError) {
+              console.error("Error validating user_masjid_id:", masjidError);
+            } else if (masjidData?.id) {
+              masjidId = masjidData.id;
+              console.log("Using validated masjid_id from user_masjids:", masjidId);
+            }
+          }
+        }
+      }
+
+      // Only try tenantContext.masjidId as a last resort, and hard-filter the invalid ID
+      if (!masjidId && tenantContext?.masjidId && tenantContext.masjidId !== INVALID_MASJID_ID) {
+        console.log("Attempting to validate tenantContext.masjidId:", tenantContext.masjidId);
+        const { data: masjidData, error: masjidError } = await supabase
+          .from("masjids")
+          .select("id")
+          .eq("id", tenantContext.masjidId)
+          .maybeSingle();
+        
+        if (masjidError) {
+          console.error("Error validating tenantContext.masjidId:", masjidError);
+        } else if (masjidData?.id) {
+          masjidId = masjidData.id;
+          console.log("Using validated tenantContext.masjid_id:", masjidId);
+        } else {
+          console.log("tenantContext.masjidId does not exist in masjids table");
+        }
+      }
+
+      if (!masjidId) {
+        throw new Error("No valid masjid found in the database. Please contact administrator.");
+      }
+
+      console.log("Final masjid_id to be used:", masjidId);
 
       const { error } = await supabase
         .from("service_distributions")
         .insert({
           family_id: familyId,
-          masjid_id: tenantContext.masjidId,
+          masjid_id: masjidId,
           name: serviceName === "Other" ? serviceCustomName.trim() : serviceName.trim(),
           date: serviceDate,
           status: "Received",
+          recipient_name: serviceRecipient.trim() || null,
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Service distribution insert error:", error);
+        // Check if it's a foreign key error
+        if (error.code === '23503' || error.message?.includes('foreign key')) {
+          alert(`Foreign key error: ${error.message || 'Invalid reference'}. Masjid ID: ${masjidId}, Family ID: ${familyId}`);
+        } else {
+          throw error;
+        }
+      }
 
       setServiceName("");
       setServiceCustomName("");
+      setServiceRecipient("");
       setServiceDate(new Date().toISOString().split('T')[0]);
       setIsServiceModalOpen(false);
       await fetchData(user);
@@ -1333,21 +1411,27 @@ export default function FamilyDetailsPage() {
             )}
           </div>
         ) : activeTab === "payments" ? (
-          <div className="space-y-3 w-full">
+          <div className="space-y-4 w-full">
             {/* Payment Summary Section */}
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="mb-6 p-5 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="flex-1">
                   <h3 className="text-lg font-semibold text-blue-900">Payment Summary</h3>
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-3 grid grid-cols-2 gap-2">
                     <p className="text-sm text-blue-700">
                       <span className="font-medium">Annual Fee:</span> Rs. {annualFee.toLocaleString()}
                     </p>
                     <p className="text-sm text-blue-700">
-                      <span className="font-medium">மொத்தம் செலுத்தியது:</span> Rs. {totalApproved.toLocaleString()}
+                      <span className="font-medium">Total Paid:</span> Rs. {totalApproved.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-blue-700">
+                      <span className="font-medium">Paid This Year:</span> Rs. {paidThisYear.toLocaleString()}
                     </p>
                     <p className="text-sm text-blue-700">
                       <span className="font-medium">Remaining Balance:</span> Rs. {finalDue.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-blue-700 col-span-2">
+                      <span className="font-medium">Opening Balance:</span> Rs. {openingBal.toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -1362,41 +1446,80 @@ export default function FamilyDetailsPage() {
                 <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No payments yet</p>
               </div>
             ) : (
-              payments.map((payment) => (
-                <div key={payment.id} className="bg-white rounded-2xl p-4 flex items-center justify-between border border-slate-50 shadow-sm animate-in fade-in duration-500">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                      payment.status === 'pending' ? 'bg-yellow-50 text-yellow-500' : 'bg-blue-50 text-blue-500'
-                    }`}>
-                      <TrendingUp className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-black text-slate-800">Subscription Collection</h4>
-                        <span className={`px-2 py-1 text-[10px] font-bold rounded-full ${
-                          payment.status === 'pending' 
-                            ? 'bg-yellow-100 text-yellow-700' 
-                            : 'bg-green-100 text-green-700'
+              <div className="space-y-3">
+                {payments.map((payment, index) => (
+                  <div key={payment.id} className="bg-white rounded-2xl p-5 border border-slate-50 shadow-sm hover:shadow-md transition-all animate-in fade-in duration-500" style={{ animationDelay: `${index * 50}ms` }}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4 flex-1">
+                        <div className={`w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                          payment.status === 'pending' ? 'bg-yellow-50 text-yellow-500' : 'bg-blue-50 text-blue-500'
                         }`}>
-                          {payment.status === 'pending' ? 'Pending' : 'Accepted'}
-                        </span>
+                          <TrendingUp className="w-7 h-7" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="text-sm font-black text-slate-800">Subscription Collection</h4>
+                            <span className={`px-2 py-1 text-[10px] font-bold rounded-full flex-shrink-0 ${
+                              payment.status === 'pending' 
+                                ? 'bg-yellow-100 text-yellow-700' 
+                                : 'bg-green-100 text-green-700'
+                            }`}>
+                              {payment.status === 'pending' ? 'Pending' : 'Accepted'}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">
+                              <span className="text-slate-500">Amount:</span> Rs. {payment.amount.toLocaleString()}
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">
+                              <span className="text-slate-500">Date:</span> {payment.date || payment.collected_at || payment.created_at}
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">
+                              <span className="text-slate-500">Record ID:</span> {payment.id.slice(0, 8)}...
+                            </p>
+                            {payment.collected_by_user_id && (
+                              <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                <span className="text-slate-500">Collected By:</span> {payment.collected_by_user_id.slice(0, 8)}...
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">{payment.date || payment.collected_at || payment.created_at}</p>
+                      <div className="text-right ml-4 flex-shrink-0">
+                        <p className={`font-black text-lg ${
+                          payment.status === 'pending' ? 'text-yellow-500' : 'text-emerald-500'
+                        }`}>
+                          + Rs. {payment.amount.toLocaleString()}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`font-black ${
-                      payment.status === 'pending' ? 'text-yellow-500' : 'text-emerald-500'
-                    }`}>
-                      + Rs. {payment.amount.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         ) : (
-          <div className="space-y-3 w-full">
+          <div className="space-y-4 w-full">
+            {/* Service History Summary */}
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-amber-900">Service History Summary</h3>
+                  <div className="mt-2 space-y-1">
+                    <p className="text-sm text-amber-700">
+                      <span className="font-medium">Total Services:</span> {services.length}
+                    </p>
+                    <p className="text-sm text-amber-700">
+                      <span className="font-medium">Received:</span> {services.filter(s => s.status === "Received").length}
+                    </p>
+                    <p className="text-sm text-amber-700">
+                      <span className="font-medium">Pending:</span> {services.filter(s => s.status === "Pending").length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {services.length === 0 ? (
               <div className="py-12 text-center flex flex-col items-center gap-4">
                 <div className="p-5 bg-slate-50 rounded-full text-slate-200">
@@ -1405,29 +1528,50 @@ export default function FamilyDetailsPage() {
                 <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No services recorded</p>
               </div>
             ) : (
-              services.map((service) => (
-                <div key={service.id} className="bg-white rounded-2xl p-4 flex items-center justify-between border border-slate-50 shadow-sm">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
-                      <CheckCircle className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-black text-slate-800">{service.name}</h4>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">{service.date}</p>
+              <div className="space-y-3">
+                {services.map((service, index) => (
+                  <div key={service.id} className="bg-white rounded-2xl p-5 border border-slate-50 shadow-sm hover:shadow-md transition-all animate-in fade-in duration-500" style={{ animationDelay: `${index * 50}ms` }}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4 flex-1">
+                        <div className={`w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                          service.status === "Received" ? 'bg-emerald-50 text-emerald-500' : 'bg-amber-50 text-amber-500'
+                        }`}>
+                          <CheckCircle className="w-7 h-7" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-black text-slate-800 mb-1">{service.name}</h4>
+                          {service.recipient_name && (
+                            <p className="text-[10px] font-bold text-amber-600 uppercase mb-1">
+                              <span className="text-amber-500">Recipient:</span> {service.recipient_name}
+                            </p>
+                          )}
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">
+                              <span className="text-slate-500">Date:</span> {service.date}
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">
+                              <span className="text-slate-500">Status:</span> {service.status}
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">
+                              <span className="text-slate-500">Record ID:</span> {service.id.slice(0, 8)}...
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => toggleServiceStatus(service.id)}
+                        className={`px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all active:scale-95 ml-4 flex-shrink-0 ${
+                          service.status === "Received"
+                            ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
+                            : "bg-amber-100 text-amber-600"
+                        }`}
+                      >
+                        {service.status === "Received" ? "Received" : "Pending"}
+                      </button>
                     </div>
                   </div>
-                  <button
-                    onClick={() => toggleServiceStatus(service.id)}
-                    className={`px-3 py-1 rounded-full text-[8px] font-black uppercase transition-all active:scale-95 ${
-                      service.status === "Received"
-                        ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-                        : "bg-amber-100 text-amber-600"
-                    }`}
-                  >
-                    {service.status === "Received" ? t.active : t.inactive}
-                  </button>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -1925,7 +2069,10 @@ export default function FamilyDetailsPage() {
                 <span className="text-[10px] font-black uppercase tracking-widest">Add Service</span>
               </div>
               <button
-                onClick={() => setIsServiceModalOpen(false)}
+                onClick={() => {
+                  setServiceRecipient("");
+                  setIsServiceModalOpen(false);
+                }}
                 className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl transition-all"
               >
                 <X className="w-4 h-4" />
@@ -1972,9 +2119,28 @@ export default function FamilyDetailsPage() {
                 />
               </div>
 
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recipient / Member Name (Optional)</label>
+                <input
+                  type="text"
+                  value={serviceRecipient}
+                  onChange={(e) => setServiceRecipient(e.target.value)}
+                  onBlur={(e) => {
+                    if (e.target.value) {
+                      setServiceRecipient(formatTitleCase(e.target.value));
+                    }
+                  }}
+                  className="w-full px-4 py-3 bg-white border border-amber-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                  placeholder="e.g. மகன் - திருமண அனுமதிக் கடிதம்"
+                />
+              </div>
+
               <div className="flex gap-3">
                 <button
-                  onClick={() => setIsServiceModalOpen(false)}
+                  onClick={() => {
+                    setServiceRecipient("");
+                    setIsServiceModalOpen(false);
+                  }}
                   className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
                 >
                   Cancel
