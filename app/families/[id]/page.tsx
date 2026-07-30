@@ -118,6 +118,8 @@ export default function FamilyDetailsPage() {
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [serviceName, setServiceName] = useState("");
   const [serviceCustomName, setServiceCustomName] = useState("");
+  const [serviceTargetType, setServiceTargetType] = useState<"whole_family" | "specific_member">("whole_family");
+  const [serviceRecipientMemberId, setServiceRecipientMemberId] = useState("");
   const [serviceRecipient, setServiceRecipient] = useState("");
   const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [isServiceSubmitting, setIsServiceSubmitting] = useState(false);
@@ -822,6 +824,10 @@ export default function FamilyDetailsPage() {
 
       console.log("Final masjid_id to be used:", masjidId);
 
+      const recipientName = serviceTargetType === "whole_family" 
+        ? "Whole Family" 
+        : serviceRecipient.trim() || null;
+
       const { error } = await supabase
         .from("service_distributions")
         .insert({
@@ -830,7 +836,7 @@ export default function FamilyDetailsPage() {
           name: serviceName === "Other" ? serviceCustomName.trim() : serviceName.trim(),
           date: serviceDate,
           status: "Received",
-          recipient_name: serviceRecipient.trim() || null,
+          recipient_name: recipientName,
         });
 
       if (error) {
@@ -845,6 +851,8 @@ export default function FamilyDetailsPage() {
 
       setServiceName("");
       setServiceCustomName("");
+      setServiceTargetType("whole_family");
+      setServiceRecipientMemberId("");
       setServiceRecipient("");
       setServiceDate(new Date().toISOString().split('T')[0]);
       setIsServiceModalOpen(false);
@@ -2070,6 +2078,8 @@ export default function FamilyDetailsPage() {
               </div>
               <button
                 onClick={() => {
+                  setServiceTargetType("whole_family");
+                  setServiceRecipientMemberId("");
                   setServiceRecipient("");
                   setIsServiceModalOpen(false);
                 }}
@@ -2120,24 +2130,69 @@ export default function FamilyDetailsPage() {
               </div>
 
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recipient / Member Name (Optional)</label>
-                <input
-                  type="text"
-                  value={serviceRecipient}
-                  onChange={(e) => setServiceRecipient(e.target.value)}
-                  onBlur={(e) => {
-                    if (e.target.value) {
-                      setServiceRecipient(formatTitleCase(e.target.value));
-                    }
-                  }}
-                  className="w-full px-4 py-3 bg-white border border-amber-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                  placeholder="e.g. மகன் - திருமண அனுமதிக் கடிதம்"
-                />
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Service Target</label>
+                <div className="flex gap-3 mt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="serviceTarget"
+                      value="whole_family"
+                      checked={serviceTargetType === "whole_family"}
+                      onChange={(e) => {
+                        setServiceTargetType(e.target.value as "whole_family" | "specific_member");
+                        setServiceRecipientMemberId("");
+                        setServiceRecipient("");
+                      }}
+                      className="w-4 h-4 text-amber-500 focus:ring-amber-500"
+                    />
+                    <span className="text-xs font-medium text-slate-700">முழு குடும்பத்திற்கும் (Whole Family)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="serviceTarget"
+                      value="specific_member"
+                      checked={serviceTargetType === "specific_member"}
+                      onChange={(e) => {
+                        setServiceTargetType(e.target.value as "whole_family" | "specific_member");
+                        setServiceRecipient("");
+                      }}
+                      className="w-4 h-4 text-amber-500 focus:ring-amber-500"
+                    />
+                    <span className="text-xs font-medium text-slate-700">குறிப்பிட்ட உறுப்பினருக்கு (Specific Member)</span>
+                  </label>
+                </div>
               </div>
+
+              {serviceTargetType === "specific_member" && (
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Family Member</label>
+                  <select
+                    value={serviceRecipientMemberId}
+                    onChange={(e) => {
+                      setServiceRecipientMemberId(e.target.value);
+                      const selectedMember = members.find(m => m.id === e.target.value);
+                      if (selectedMember) {
+                        setServiceRecipient(`${selectedMember.relationship} - ${selectedMember.full_name}`);
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-white border border-amber-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                  >
+                    <option value="">Select a member</option>
+                    {members.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.relationship} - {member.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <button
                   onClick={() => {
+                    setServiceTargetType("whole_family");
+                    setServiceRecipientMemberId("");
                     setServiceRecipient("");
                     setIsServiceModalOpen(false);
                   }}

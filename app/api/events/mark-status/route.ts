@@ -123,6 +123,7 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
           name: serviceName,
           date: serviceDate,
           status,
+          recipient_name: null,
         });
 
       if (serviceInsertErr) {
@@ -137,6 +138,7 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
       const { error: txErr } = await supabaseAdmin.from("transactions").insert({
         masjid_id: userContext.masjidId,
         family_id: familyId,
+        user_id: userId,
         amount: 0,
         description: `Event: ${event.title} (${familyCode || ""})`,
         type: "income",

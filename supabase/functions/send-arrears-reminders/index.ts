@@ -148,22 +148,13 @@ serve(async (req: Request) => {
             let message: string;
             if (currentMonth === 1) {
               // January: New Year reminder
-              message =
-                `அஸ்ஸலாமு அலைகும்! புத்தாண்டு வாழ்த்துக்கள்! ${family.head_name} அவர்களின் மீது ` +
-                `ரூ.${pendingArrears.toLocaleString()} முன்பணி தொகை இருக்கிறது. ` +
-                `தயவு செய்து விரைவில் செலுத்துங்கள்.`;
+              message = `Assalamu Alaikum! ${currentYear} Thodangi Vittathu. Ungal Sandha Niluvai Rs.${pendingArrears.toLocaleString()} Seluthumaru Anbudan Vendukirom. - Niruvaka Sabai`;
             } else if (currentMonth === 6) {
               // June: Mid-year reminder for mosque development
-              message =
-                `அஸ்ஸலாமு அலைகும்! அரைப்பண்டு ஆண்டு நிறைவு! ${family.head_name} அவர்களின் மீது ` +
-                `ரூ.${pendingArrears.toLocaleString()} முன்பணி தொகை இருக்கிறது. ` +
-                `மஸ்ஜித் வளர்ச்சிக்கு உதவி செய்ய தயவு செய்து விரைவில் செலுத்துங்கள்.`;
+              message = `Assalamu Alaikum! ${currentYear} Arambithu Aaru Mathangal Kanthuvittana. Ungal Sandha Niluvai Rs.${pendingArrears.toLocaleString()} Seluthumaru Vendukirom. - Niruvaka Sabai`;
             } else {
               // December: Year-end final reminder
-              message =
-                `அஸ்ஸலாமு அலைகும்! ஆண்டு இறுதி நினைவூட்டல்! ${family.head_name} அவர்களின் மீது ` +
-                `ரூ.${pendingArrears.toLocaleString()} முன்பணி தொகை இருக்கிறது. ` +
-                `தயவு செய்து ஆண்டு இறுதிக்குள் செலுத்தி முடிக்கவும்.`;
+              message = `Assalamu Alaikum! ${currentYear} Am Varudam Mudivadaya Pogirathu. Ungal Sandha Niluvai Rs.${pendingArrears.toLocaleString()} Seluthumaru Vendukirom. - Niruvaka Sabai`;
             }
 
             // Step 6: Create sms_logs entry

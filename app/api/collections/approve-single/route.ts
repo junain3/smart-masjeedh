@@ -187,64 +187,8 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
           commissionAmount,
         });
 
-        // Send SMS notification if family has phone number
-        const family = collection.families;
-        if (family?.phone) {
-          const message = buildCollectionApprovedSms(family.head_name, collection.amount);
-          console.info('[collections/approve-single] triggering auto SMS', {
-            collectionId: collection.id,
-            familyId: family.id,
-            phoneLength: family.phone.length,
-            messageLength: message.length,
-          });
-
-          try {
-            const smsResult = await sendSms(
-              userContext.masjidId,
-              family.phone,
-              message,
-              userId
-            );
-
-            if (!smsResult.success) {
-              console.error('[collections/approve-single] auto SMS failed', {
-                collectionId: collection.id,
-                familyId: family.id,
-                phoneLength: family.phone.length,
-                error: smsResult.error,
-              });
-            } else {
-              console.info('[collections/approve-single] auto SMS completed', {
-                collectionId: collection.id,
-                familyId: family.id,
-                smsResult,
-              });
-            }
-
-            smsResults.push({
-              familyId: family.id,
-              success: smsResult.success,
-              error: smsResult.error
-            });
-          } catch (smsError) {
-            console.error('[collections/approve-single] auto SMS threw unexpectedly', {
-              collectionId: collection.id,
-              familyId: family.id,
-              smsError,
-            });
-            smsResults.push({
-              familyId: family.id,
-              success: false,
-              error: smsError instanceof Error ? smsError.message : 'Unknown SMS error',
-            });
-          }
-        } else {
-          console.error('[collections/approve-single] auto SMS skipped: missing family phone', {
-            collectionId: collection.id,
-            familyId: family?.id || collection.family_id,
-            familyHeadName: family?.head_name || null,
-          });
-        }
+        // SMS notification removed from approval to avoid duplicates
+        // Families receive SMS only when collection is initially recorded
 
         successCount += 1;
       } catch (error: any) {
