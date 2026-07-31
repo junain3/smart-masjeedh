@@ -18,6 +18,7 @@ import {
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { supabase } from "@/lib/supabase";
 import { getTenantContext } from "@/lib/tenant";
+import { PWAInstallButton } from "@/components/PWAInstallButton";
 
 type NavItem = {
   href: string;
@@ -200,7 +201,10 @@ export function AppShell(props: {
               )}
               <h1 className="text-lg md:text-xl font-black text-neutral-900 truncate">{title}</h1>
             </div>
-            <div className="shrink-0 flex items-center gap-2">{actions}{headerRight}</div>
+            <div className="shrink-0 flex items-center gap-2">
+              <PWAInstallButton />
+              {actions}{headerRight}
+            </div>
           </div>
         </header>
 
