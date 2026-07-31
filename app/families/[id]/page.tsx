@@ -256,10 +256,15 @@ export default function FamilyDetailsPage() {
       }
       // Smart checks (only if NIC is empty)
       else if (!trimmedNic) {
-        // Same phone
+        // Same phone - only warn if from different family
+        // Same family members can share phone numbers (common for families)
         if (trimmedPhone && member.phone?.trim() === trimmedPhone) {
-          isDuplicate = true;
-          reason = "Same phone number";
+          if (member.family_id !== familyId) {
+            isDuplicate = true;
+            reason = "Same phone number (different family)";
+          } else {
+            console.log("- Skipping same-family phone duplicate:", member.id);
+          }
         }
         // Same date of birth
         else if (trimmedDob && member.dob?.trim() === trimmedDob) {
@@ -312,15 +317,19 @@ export default function FamilyDetailsPage() {
     const memberName = (member.name || "").trim().toLowerCase();
     const familyHeadName = (family?.head_name || "").trim().toLowerCase();
 
+    // Rank 0: Family Head (always first)
     if (
       normalizedRelationship === "family head" ||
       relationshipValue === "head" ||
       relationshipValue === "குடும்பத் தலைவர்" ||
+      relationshipValue === "husband" ||
+      relationshipValue === "கணவன்" ||
       (familyHeadName && memberName === familyHeadName)
     ) {
       return 0;
     }
 
+    // Rank 1: Spouse (Wife if husband is head, or Husband if wife is head)
     if (
       normalizedRelationship === "wife" ||
       normalizedRelationship === "spouse" ||
@@ -329,6 +338,7 @@ export default function FamilyDetailsPage() {
       return 1;
     }
 
+    // Rank 2: Children (Son/Daughter)
     if (
       normalizedRelationship === "son" ||
       normalizedRelationship === "daughter" ||
@@ -338,7 +348,24 @@ export default function FamilyDetailsPage() {
       return 2;
     }
 
-    return 3;
+    // Rank 3: Other dependents (Father, Mother, Brother, Sister, etc.)
+    if (
+      normalizedRelationship === "father" ||
+      normalizedRelationship === "mother" ||
+      normalizedRelationship === "brother" ||
+      normalizedRelationship === "sister" ||
+      relationshipValue === "தந்தை" ||
+      relationshipValue === "தாய்" ||
+      relationshipValue === "அண்ணன்" ||
+      relationshipValue === "தங்கை" ||
+      relationshipValue === "தம்பி" ||
+      relationshipValue === "அக்கா"
+    ) {
+      return 3;
+    }
+
+    // Rank 4: Others
+    return 4;
   };
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -516,12 +543,21 @@ export default function FamilyDetailsPage() {
         const rankDiff = getFamilyMemberSortRank(a) - getFamilyMemberSortRank(b);
         if (rankDiff !== 0) return rankDiff;
 
+        // Within same rank, sort by age (descending for children, ascending for others)
         const aIsChild = getFamilyMemberSortRank(a) === 2;
         const bIsChild = getFamilyMemberSortRank(b) === 2;
         if (aIsChild && bIsChild) {
-          return Number(b.age || 0) - Number(a.age || 0);
+          return Number(b.age || 0) - Number(a.age || 0); // Oldest child first
         }
 
+        // For dependents (rank 3), sort by age ascending (younger first)
+        const aIsDependent = getFamilyMemberSortRank(a) === 3;
+        const bIsDependent = getFamilyMemberSortRank(b) === 3;
+        if (aIsDependent && bIsDependent) {
+          return Number(a.age || 0) - Number(b.age || 0);
+        }
+
+        // For others (rank 4), sort by name
         return (a.name || "").localeCompare(b.name || "");
       });
       setMembers(sortedMembers);
