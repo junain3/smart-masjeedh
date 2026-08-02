@@ -4,16 +4,26 @@ export function calcCommission(amount: number, percent: number): number {
   return Math.round((amount * percent) / 100 * 100) / 100;
 }
 
-const COLLECTION_SMS_SIGN_OFF = "Nirvaga Sabai";
+const COLLECTION_SMS_SIGN_OFF = "Nirvaha Safai";
 
 /** SMS when a collection is recorded (pending admin approval). Lines separated with \\n for providers. */
-export function buildCollectionRecordedSms(headName: string, amount: number): string {
-  return `Assalamu Alaikum! ${headName} avargalin madhantha Rs.${amount} vaasuL padu seiyappaduthu. Nirvaga anumithi pL nirai verum. Nirvaga Sabai`;
+export function buildCollectionRecordedSms(headName: string, amount: number, balance?: number): string {
+  const balanceText = balance !== undefined ? balance : 0;
+  return `Assalamu Alaikkum!
+
+${headName}, Awarhalin Sandha ${amount} Seluththappattullathu. Meedhi Thohai ${balanceText} ahum.
+
+          ~Nirvaha Safai~`;
 }
 
 /** SMS when a collection is approved. */
-export function buildCollectionApprovedSms(headName: string, amount: number): string {
-  return `Assalamu Alaikum! ${headName} avargalin madhantha Rs.${amount} vaasuL nandrai aatukkoLappaduthu. Nirvaga Sabai`;
+export function buildCollectionApprovedSms(headName: string, amount: number, balance?: number): string {
+  const balanceText = balance !== undefined ? balance : 0;
+  return `Assalamu Alaikkum!
+
+${headName}, Awarhalin Sandha ${amount} Seluththappattullathu. Meedhi Thohai ${balanceText} ahum.
+
+          ~Nirvaha Safai~`;
 }
 
 export function isAccountSubscriptionTransaction(tx: {

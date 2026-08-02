@@ -127,8 +127,8 @@ export function AppShell(props: {
     const active = pathname === href || (href !== "/" && pathname?.startsWith(href));
     return `flex items-center gap-3 px-4 py-3 rounded-3xl font-bold transition-all ${
       active
-        ? "bg-emerald-50 text-emerald-700"
-        : "text-neutral-600 hover:bg-neutral-50"
+        ? "bg-white/20 text-white backdrop-blur-sm border border-white/20"
+        : "text-emerald-100 hover:bg-white/10"
     }`;
   };
 
@@ -136,9 +136,9 @@ export function AppShell(props: {
     const active = pathname === href || (href !== "/" && pathname?.startsWith(href));
     return `${
       active
-        ? "app-bottom-nav-item app-bottom-nav-item-active"
-        : "app-bottom-nav-item hover:bg-white/60"
-    }`;
+        ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/30 -translate-y-0.5"
+        : "text-emerald-600 hover:bg-emerald-50"
+    } flex flex-col items-center justify-center gap-1 px-4 py-2 rounded-full transition-all`;
   };
 
   const handleLogout = async () => {
@@ -152,34 +152,34 @@ export function AppShell(props: {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-50 text-neutral-900 font-sans">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 text-neutral-900 font-sans">
       {open && <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)} />}
-      <aside className={`fixed top-0 left-0 z-50 h-full w-72 bg-white border-r border-neutral-200 shadow-2xl transform transition-transform duration-300 ease-in-out
+      <aside className={`fixed top-0 left-0 z-50 h-full w-72 bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-900 border-r border-emerald-600/30 shadow-2xl transform transition-transform duration-300 ease-in-out
         ${open ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:shadow-none`}>
         <div className="p-6 flex flex-col h-full">
           <div className="flex items-center justify-between mb-6">
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t.brand_name}</p>
-              <p className="text-lg font-black text-emerald-700 truncate">{t.dashboard}</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-200">{t.brand_name}</p>
+              <p className="text-lg font-black text-white truncate">{t.dashboard}</p>
             </div>
-            <button className="md:hidden p-2 hover:bg-neutral-50 rounded-3xl" onClick={() => setOpen(false)} aria-label="Close menu">
-              <X className="w-5 h-5 text-slate-400" />
+            <button className="md:hidden p-2 hover:bg-emerald-600/30 rounded-3xl" onClick={() => setOpen(false)} aria-label="Close menu">
+              <X className="w-5 h-5 text-emerald-200" />
             </button>
           </div>
 
           <nav className="flex-1 space-y-2">
             {items.map((it) => (
               <Link key={it.href} href={it.href} className={linkClass(it.href)}>
-                <span className="text-emerald-600">{it.icon}</span>
+                <span className={pathname === it.href || (it.href !== "/" && pathname?.startsWith(it.href)) ? "text-emerald-200" : "text-emerald-300"}>{it.icon}</span>
                 <span className="truncate">{it.label}</span>
               </Link>
             ))}
           </nav>
 
-          <div className="mt-auto pt-4 border-t border-neutral-200">
+          <div className="mt-auto pt-4 border-t border-emerald-600/30">
             <button
               onClick={handleLogout}
-              className="w-full px-4 py-3 rounded-3xl bg-red-50 text-red-700 font-black text-xs uppercase tracking-widest hover:bg-red-100 transition-all"
+              className="w-full px-4 py-3 rounded-3xl bg-red-500/20 text-red-200 font-black text-xs uppercase tracking-widest hover:bg-red-500/30 transition-all border border-red-500/30"
             >
               {t.logout}
             </button>
@@ -188,18 +188,18 @@ export function AppShell(props: {
       </aside>
 
       <div className="pl-0 md:pl-72">
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-neutral-200">
+        <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-emerald-200/50">
           <div className="px-4 py-4 md:px-8 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <button className="md:hidden p-2 rounded-3xl hover:bg-neutral-100 transition-colors" onClick={() => setOpen(true)} aria-label="Open menu">
-                <Menu className="w-6 h-6 text-slate-700" />
+              <button className="md:hidden p-2 rounded-3xl hover:bg-emerald-100 transition-colors" onClick={() => setOpen(true)} aria-label="Open menu">
+                <Menu className="w-6 h-6 text-emerald-700" />
               </button>
               {backHref && (
-                <Link href={backHref} className="hidden sm:inline-flex px-3 py-2 rounded-3xl bg-neutral-50 text-neutral-900 font-black text-xs uppercase tracking-widest hover:bg-neutral-100 transition-all">
+                <Link href={backHref} className="hidden sm:inline-flex px-3 py-2 rounded-3xl bg-emerald-50 text-emerald-900 font-black text-xs uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-200">
                   {t.back}
                 </Link>
               )}
-              <h1 className="text-lg md:text-xl font-black text-neutral-900 truncate">{title}</h1>
+              <h1 className="text-lg md:text-xl font-black text-emerald-900 truncate">{title}</h1>
             </div>
             <div className="shrink-0 flex items-center gap-2">
               <PWAInstallButton />
@@ -212,13 +212,13 @@ export function AppShell(props: {
           <div className="w-full max-w-none sm:max-w-md lg:max-w-6xl mx-auto">{children}</div>
         </main>
 
-        <nav className="md:hidden app-bottom-nav z-20">
+        <nav className="md:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-white/80 backdrop-blur-xl border border-emerald-200/50 shadow-2xl rounded-full px-2 py-2">
           <div className="flex items-center gap-2">
             {items.filter((it) => it.href !== "/admin").slice(0, 5).map((it) => {
               const active = pathname === it.href || (it.href !== "/" && pathname?.startsWith(it.href));
               return (
                 <Link key={it.href} href={it.href} className={bottomItemClass(it.href)}>
-                  <span className={active ? "text-emerald-700" : "text-neutral-600"}>{it.icon}</span>
+                  <span className={active ? "text-white" : "text-emerald-600"}>{it.icon}</span>
                   <span className="text-[10px] font-black uppercase tracking-widest">{it.label}</span>
                 </Link>
               );

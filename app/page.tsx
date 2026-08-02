@@ -1705,15 +1705,15 @@ setReportCount(result.data?.count || 0)
 
           <div className="flex justify-center">
 
-            <div className="w-24 h-24 rounded-full bg-emerald-100 border-4 border-emerald-200 flex items-center justify-center">
+            <div className="w-24 h-24 rounded-full bg-white/80 backdrop-blur-md border-4 border-emerald-300/60 flex items-center justify-center shadow-xl shadow-emerald-500/20">
 
               {masjid?.logo_url ? (
 
-                <img 
+                <img
 
-                  src={masjid.logo_url} 
+                  src={masjid.logo_url}
 
-                  alt="Masjid Logo" 
+                  alt="Masjid Logo"
 
                   className="w-20 h-20 rounded-full object-cover"
 
@@ -1747,15 +1747,15 @@ setReportCount(result.data?.count || 0)
 
           {/* Masjid Name Bar */}
 
-          <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-3xl p-6 text-center shadow-xl">
+          <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-emerald-600 rounded-3xl p-6 text-center shadow-2xl backdrop-blur-sm border border-emerald-500/30">
 
-            <h1 className="text-2xl font-black text-white tracking-wide">
+            <h1 className="text-2xl font-black text-white tracking-wide drop-shadow-lg">
 
               {masjid?.name || "Masjid"}
 
             </h1>
 
-            <p className="text-sm text-emerald-100 mt-1">
+            <p className="text-sm text-emerald-100 mt-1 font-medium">
 
               Smart Masjeedh Management System
 
@@ -1769,7 +1769,7 @@ setReportCount(result.data?.count || 0)
 
           <div className="grid grid-cols-2 gap-4">
 
-            <div className="bg-white border-2 border-emerald-200 rounded-2xl p-4 text-center shadow-lg">
+            <div className="bg-white/90 backdrop-blur-md border-2 border-emerald-300/50 rounded-2xl p-4 text-center shadow-xl shadow-emerald-500/10">
 
               <Users className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
 
@@ -1779,7 +1779,7 @@ setReportCount(result.data?.count || 0)
 
             </div>
 
-            <div className="bg-white border-2 border-emerald-200 rounded-2xl p-4 text-center shadow-lg">
+            <div className="bg-white/90 backdrop-blur-md border-2 border-emerald-300/50 rounded-2xl p-4 text-center shadow-xl shadow-emerald-500/10">
 
               <User className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
 
@@ -1797,7 +1797,7 @@ setReportCount(result.data?.count || 0)
 
           <div className="relative group">
 
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400 group-focus-within:text-emerald-600 transition-colors" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-400 group-focus-within:text-emerald-600 transition-colors" />
 
             <input
 
@@ -1811,7 +1811,7 @@ setReportCount(result.data?.count || 0)
 
               placeholder={t.search_placeholder}
 
-              className="app-input pl-12 pr-12 font-bold text-sm md:text-base"
+              className="w-full pl-12 pr-12 py-4 bg-white/80 backdrop-blur-md border-2 border-emerald-200/60 rounded-2xl font-bold text-sm md:text-base text-neutral-900 placeholder:text-emerald-400/60 outline-none transition-all shadow-lg shadow-emerald-500/5 focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500"
 
             />
 
@@ -1819,7 +1819,7 @@ setReportCount(result.data?.count || 0)
 
               onClick={() => setIsReportsModalOpen(true)}
 
-              className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-neutral-400 hover:text-emerald-600 transition-colors"
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
 
             >
 
@@ -1835,49 +1835,49 @@ setReportCount(result.data?.count || 0)
 
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 sm:gap-4 justify-items-center">
 
-            <Link href="/families" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <Link href="/families" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
 
               <Users className="w-6 h-6 text-emerald-700" />
 
             </Link>
 
-            <Link href="/accounts" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <Link href="/accounts" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
 
               <CreditCard className="w-6 h-6 text-emerald-700" />
 
             </Link>
 
-            <Link href="/collections" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <Link href="/collections" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
 
               <FileText className="w-6 h-6 text-emerald-700" />
 
             </Link>
 
-            <Link href="/events" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <Link href="/events" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
 
               <Calendar className="w-6 h-6 text-emerald-700" />
 
             </Link>
 
-            <Link href="/staff" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <Link href="/staff" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
 
               <Briefcase className="w-6 h-6 text-emerald-700" />
 
             </Link>
 
-            <Link href="/accounts" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <Link href="/accounts" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
 
               <Settings className="w-6 h-6 text-emerald-700" />
 
             </Link>
 
-            <Link href="/settings" className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+            <Link href="/settings" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
 
               <Settings className="w-6 h-6 text-emerald-700" />
 
             </Link>
 
-            <div className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center shadow-lg shadow-emerald-500/10">
 
               <MoreHorizontal className="w-6 h-6 text-emerald-700" />
 

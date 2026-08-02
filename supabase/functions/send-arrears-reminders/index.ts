@@ -148,13 +148,25 @@ serve(async (req: Request) => {
             let message: string;
             if (currentMonth === 1) {
               // January: New Year reminder
-              message = `Assalamu Alaikum! ${currentYear} Thodangi Vittathu. Ungal Sandha Niluvai Rs.${pendingArrears.toLocaleString()} Seluthumaru Anbudan Vendukirom. - Niruvaka Sabai`;
+              message = `Assalamu Alaikkum!
+
+${family.head_name}, ${currentYear} Thodangi Vittathu. Ungal Sandha Niluvai Rs.${pendingArrears.toLocaleString()} Seluthumaru Anbudan Vendukirom.
+
+          ~Nirvaha Safai~`;
             } else if (currentMonth === 6) {
               // June: Mid-year reminder for mosque development
-              message = `Assalamu Alaikum! ${currentYear} Arambithu Aaru Mathangal Kanthuvittana. Ungal Sandha Niluvai Rs.${pendingArrears.toLocaleString()} Seluthumaru Vendukirom. - Niruvaka Sabai`;
+              message = `Assalamu Alaikkum!
+
+${family.head_name}, ${currentYear} Arambithu Aaru Mathangal Kadandhuvittana. Ungal Sandha Niluvai Rs.${pendingArrears.toLocaleString()} Seluthumaru Anbudan Vendukirom.
+
+          ~Nirvaha Safai~`;
             } else {
               // December: Year-end final reminder
-              message = `Assalamu Alaikum! ${currentYear} Am Varudam Mudivadaya Pogirathu. Ungal Sandha Niluvai Rs.${pendingArrears.toLocaleString()} Seluthumaru Vendukirom. - Niruvaka Sabai`;
+              message = `Assalamu Alaikkum!
+
+${family.head_name}, ${currentYear} Am Varudam Mudivadaya Pogirathu. Ungal Sandha Niluvai Rs.${pendingArrears.toLocaleString()} Seluthumaru Vendukirom.
+
+          ~Nirvaha Safai~`;
             }
 
             // Step 6: Create sms_logs entry
