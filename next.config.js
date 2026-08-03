@@ -4,6 +4,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   register: true,
   skipWaiting: true,
   disable: process.env.NODE_ENV === 'development',
+  manifest: false, // Disable auto-generated manifest, use custom manifest.json
 });
 
 const nextConfig = withPWA({
