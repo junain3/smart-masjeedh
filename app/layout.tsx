@@ -16,21 +16,17 @@ export const metadata = {
   },
   icons: {
     icon: [
-      { url: '/logo.png', sizes: 'any', type: 'image/png' },
-      { url: '/logo.png', sizes: '512x512', type: 'image/png' },
-      { url: '/logo.png', sizes: '256x256', type: 'image/png' },
       { url: '/logo.png', sizes: '192x192', type: 'image/png' },
-      { url: '/logo.png', sizes: '128x128', type: 'image/png' },
-      { url: '/logo.png', sizes: '64x64', type: 'image/png' },
+      { url: '/logo.png', sizes: '512x512', type: 'image/png' },
       { url: '/logo.png', sizes: '32x32', type: 'image/png' },
       { url: '/logo.png', sizes: '16x16', type: 'image/png' },
     ],
     apple: [
+      { url: '/logo.png', sizes: '192x192', type: 'image/png' },
       { url: '/logo.png', sizes: '180x180', type: 'image/png' },
       { url: '/logo.png', sizes: '167x167', type: 'image/png' },
       { url: '/logo.png', sizes: '152x152', type: 'image/png' },
       { url: '/logo.png', sizes: '120x120', type: 'image/png' },
-      { url: '/logo.png', sizes: '76x76', type: 'image/png' },
     ],
   },
 };
@@ -43,14 +39,14 @@ export default function RootLayout(props: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
-        <link rel="icon" type="image/png" href="/logo.png" />
+        <link rel="icon" type="image/png" href="/logo.png" sizes="192x192" />
+        <link rel="icon" type="image/png" href="/logo.png" sizes="512x512" />
         <link rel="shortcut icon" type="image/png" href="/logo.png" />
-        <link rel="apple-touch-icon" href="/logo.png" />
+        <link rel="apple-touch-icon" href="/logo.png" sizes="192x192" />
         <link rel="apple-touch-icon" href="/logo.png" sizes="180x180" />
         <link rel="apple-touch-icon" href="/logo.png" sizes="167x167" />
         <link rel="apple-touch-icon" href="/logo.png" sizes="152x152" />
         <link rel="apple-touch-icon" href="/logo.png" sizes="120x120" />
-        <link rel="apple-touch-startup-image" href="/logo.png" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="apple-mobile-web-app-title" content="Smart Masjeedh" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
