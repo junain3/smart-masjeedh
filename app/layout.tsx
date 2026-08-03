@@ -48,6 +48,7 @@ export default function RootLayout(props: { children: React.ReactNode }) {
         <link rel="apple-touch-icon" href="/logo.png" sizes="152x152" />
         <link rel="apple-touch-icon" href="/logo.png" sizes="120x120" />
         <link rel="manifest" href="/manifest.json" />
+        <meta name="application-name" content="Smart Masjeedh" />
         <meta name="apple-mobile-web-app-title" content="Smart Masjeedh" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
