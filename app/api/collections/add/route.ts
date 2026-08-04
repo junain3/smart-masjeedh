@@ -39,14 +39,6 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
       );
     }
 
-    // Auto-approve when the caller has approval permission (admins, super admins,
-    // or users explicitly granted subscriptions_approve). Collections recorded
-    // directly from the Collections or Accounts pages by these users bypass the
-    // pending queue and are credited immediately.
-    const canApprove = Boolean(
-      userContext.role === "super_admin" || userContext.permissions?.subscriptions_approve
-    );
-
     const resolvedFamilyId = family_id || member_id;
     const amount = Number(collection_amount);
 
@@ -69,7 +61,6 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
       resolvedFamilyId,
       amount,
       hasNotes: Boolean(notes),
-      canApprove,
     });
 
     const commissionPercent = Number(employee?.commission_percent ?? 0);
@@ -101,137 +92,53 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
     }
 
     let collection: any;
-    let mainTransactionId: string | null = null;
 
-    if (canApprove) {
-      // --------- DIRECTLY-APPROVED PATH (admin / approver user) ---------
-      // Mirror approve-single flow exactly: main transaction → collection insert
-      // → commission rows (legacy + new) linked by collection.id.
-      const { data: transaction, error: transactionError } = await supabaseAdmin
-        .from("transactions")
-        .insert({
-          masjid_id: userContext.masjidId,
-          user_id: userId,
-          family_id: resolvedFamilyId,
-          amount,
-          type: "income",
-          category: "subscription",
-          description: `சந்தா வசூல் — நேரடி (${familyData?.head_name ?? resolvedFamilyId})`,
-          date: resolvedDate,
-        })
-        .select()
-        .single();
+    // Determine collection source based on user role
+    // Admin direct collections go to pending queue as "admin_direct" for bulk approval
+    // Regular collector collections go to pending queue as "collector"
+    const isAdmin = Boolean(
+      userContext.role === "super_admin" || userContext.role === "co_admin"
+    );
+    const collectionSource = isAdmin ? "admin_direct" : "collector";
 
-      if (transactionError || !transaction) {
-        console.error("[collections/add] direct-approve transaction creation error:", transactionError);
-        return NextResponse.json(
-          { error: "Failed to create account transaction" },
-          { status: 500 }
-        );
-      }
-      mainTransactionId = transaction.id;
+    // All collections now go to pending queue for bulk approval
+    // Admin collections are marked as "admin_direct" for separate tracking
+    const pendingPayload: Record<string, any> = {
+      masjid_id: userContext.masjidId,
+      family_id: resolvedFamilyId,
+      amount,
+      commission_percent: commissionPercent,
+      commission_amount: commissionAmount,
+      notes: notes || null,
+      date: resolvedDate,
+      status: "pending",
+      collected_by_user_id: userId,
+      collector_employee_id: userContext.employeeId || null,
+      collection_source: collectionSource,
+    };
 
-      // 1) Insert the accepted collection FIRST so we have a real collection.id
-      //    to satisfy employee_commissions.collection_id FK (non-nullable).
-      const acceptedPayload: Record<string, any> = {
-        masjid_id: userContext.masjidId,
-        family_id: resolvedFamilyId,
-        amount,
-        commission_percent: commissionPercent,
-        commission_amount: commissionAmount,
-        notes: notes || null,
-        date: resolvedDate,
-        status: "accepted",
-        collected_by_user_id: userId,
-        collector_employee_id: userContext.employeeId || null,
-        accepted_by_user_id: userId,
-        accepted_at: nowIso,
-        main_transaction_id: mainTransactionId,
-      };
+    const { data: insertedPending, error: pendingInsertError } = await supabaseAdmin
+      .from("subscription_collections")
+      .insert(pendingPayload)
+      .select()
+      .single();
 
-      const { data: insertedAccepted, error: acceptedInsertError } = await supabaseAdmin
-        .from("subscription_collections")
-        .insert(acceptedPayload)
-        .select()
-        .single();
-
-      if (acceptedInsertError || !insertedAccepted) {
-        console.error("[collections/add] direct-approve collection insert error:", acceptedInsertError);
-        return NextResponse.json(
-          { error: "Failed to record approved collection" },
-          { status: 500 }
-        );
-      }
-      collection = insertedAccepted;
-
-      // 2) Commission rows written AFTER collection insert (mirrors approve-single
-      //    processing loop where collection.id is already known).
-      try {
-        await supabaseAdmin.from("employee_commissions").insert({
-          masjid_id: userContext.masjidId,
-          employee_id: userId,
-          collection_id: collection.id,
-          amount: commissionAmount,
-        });
-      } catch (commissionError) {
-        console.warn("[collections/add] employee commission insert skipped:", commissionError);
-      }
-
-      try {
-        await supabaseAdmin.from("staff_commissions").insert({
-          masjid_id: userContext.masjidId,
-          collector_user_id: userId,
-          amount: commissionAmount,
-          status: "pending",
-        });
-      } catch (staffCommissionError) {
-        console.warn("[collections/add] staff commission insert skipped:", staffCommissionError);
-      }
-
-      console.info("[collections/add] direct-approve collection recorded", {
-        collectionId: collection.id,
-        masjidId: userContext.masjidId,
-        familyId: resolvedFamilyId,
-        status: collection.status,
-        mainTransactionId,
-      });
-    } else {
-      // --------- PENDING PATH (regular collector without approval rights) ---------
-      const pendingPayload: Record<string, any> = {
-        masjid_id: userContext.masjidId,
-        family_id: resolvedFamilyId,
-        amount,
-        commission_percent: commissionPercent,
-        commission_amount: commissionAmount,
-        notes: notes || null,
-        date: resolvedDate,
-        status: "pending",
-        collected_by_user_id: userId,
-        collector_employee_id: userContext.employeeId || null,
-      };
-
-      const { data: insertedPending, error: pendingInsertError } = await supabaseAdmin
-        .from("subscription_collections")
-        .insert(pendingPayload)
-        .select()
-        .single();
-
-      if (pendingInsertError || !insertedPending) {
-        console.error("[collections/add] pending collection insert error:", pendingInsertError);
-        return NextResponse.json(
-          { error: "Failed to create collection record" },
-          { status: 500 }
-        );
-      }
-      collection = insertedPending;
-
-      console.info("[collections/add] pending collection recorded", {
-        collectionId: collection.id,
-        masjidId: userContext.masjidId,
-        familyId: resolvedFamilyId,
-        status: collection.status,
-      });
+    if (pendingInsertError || !insertedPending) {
+      console.error("[collections/add] pending collection insert error:", pendingInsertError);
+      return NextResponse.json(
+        { error: "Failed to create collection record" },
+        { status: 500 }
+      );
     }
+    collection = insertedPending;
+
+    console.info("[collections/add] pending collection recorded", {
+      collectionId: collection.id,
+      masjidId: userContext.masjidId,
+      familyId: resolvedFamilyId,
+      status: collection.status,
+      collectionSource,
+    });
 
     // Send SMS notification if family has phone number — choose the template
     // that matches the actual final status of the collection so families receive
@@ -298,11 +205,7 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
 
     return NextResponse.json({
       success: true,
-      message:
-        collection.status === "accepted"
-          ? "Collection recorded and approved successfully"
-          : "Collection recorded successfully",
-      auto_approved: collection.status === "accepted",
+      message: "Collection recorded successfully and pending approval",
       collection: {
         id: collection.id,
         amount: collection.amount,
@@ -310,9 +213,7 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
         commission_amount: collection.commission_amount,
         date: collection.date,
         status: collection.status,
-        accepted_by_user_id: collection.accepted_by_user_id ?? null,
-        accepted_at: collection.accepted_at ?? null,
-        main_transaction_id: collection.main_transaction_id ?? null,
+        collection_source: collection.collection_source,
       },
       staff_info: {
         employee_id: userContext.employeeId,

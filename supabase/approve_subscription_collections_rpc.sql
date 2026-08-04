@@ -1,5 +1,6 @@
 -- RPC function for atomic approval of subscription collections
 -- Creates one batch transaction, calculates commissions, and updates all collections atomically
+-- Handles both collector and admin_direct collection sources
 
 CREATE OR REPLACE FUNCTION public.approve_subscription_collections(
     p_collection_ids TEXT[],
@@ -23,6 +24,9 @@ DECLARE
     v_unique_collector_ids UUID[];
     v_existing_commission_ids UUID[];
     v_existing_staff_commission_user_ids UUID[];
+    v_collection_sources TEXT[];
+    v_admin_direct_count INTEGER := 0;
+    v_collector_count INTEGER := 0;
 BEGIN
     -- Validate input parameters
     IF p_collection_ids IS NULL OR array_length(p_collection_ids, 1) = 0 THEN
@@ -50,7 +54,22 @@ BEGIN
     FROM public.subscription_collections
     WHERE id = ANY(p_collection_ids);
     
+    -- Step 3.1: Get collection sources for description
+    SELECT array_agg(DISTINCT collection_source) INTO v_collection_sources
+    FROM public.subscription_collections
+    WHERE id = ANY(p_collection_ids);
+    
+    -- Step 3.2: Count admin_direct vs collector collections
+    SELECT COUNT(*) INTO v_admin_direct_count
+    FROM public.subscription_collections
+    WHERE id = ANY(p_collection_ids) AND collection_source = 'admin_direct';
+    
+    SELECT COUNT(*) INTO v_collector_count
+    FROM public.subscription_collections
+    WHERE id = ANY(p_collection_ids) AND collection_source = 'collector';
+    
     -- Step 4: Create ONE batch transaction (family_id must be null for batch)
+    -- Description includes breakdown of collection sources
     INSERT INTO public.transactions (
         masjid_id,
         user_id,
@@ -65,7 +84,10 @@ BEGIN
         p_user_id,
         NULL,
         v_total_amount,
-        format('சந்தா வசூல் — %s குடும்பங்கள்', array_length(p_collection_ids, 1)),
+        format('சந்தா வசூல் — %s குடும்பங்கள் (நிர்வாகி: %s, சேகரிப்பாளர்: %s)', 
+                array_length(p_collection_ids, 1),
+                v_admin_direct_count,
+                v_collector_count),
         'income',
         'subscription',
         NOW()
@@ -173,7 +195,9 @@ BEGIN
         'total_amount', v_total_amount,
         'success_count', v_success_count,
         'failure_count', v_failure_count,
-        'failures', v_failures
+        'failures', v_failures,
+        'admin_direct_count', v_admin_direct_count,
+        'collector_count', v_collector_count
     );
     
     RETURN v_result;

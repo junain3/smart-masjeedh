@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Plus, QrCode, X, Check, AlertCircle, Search, FileText, Pencil } from "lucide-react";
+import Link from "next/link";
+import { Plus, QrCode, X, Check, AlertCircle, Search, FileText, Pencil, History } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getTranslation, Language } from "@/lib/i18n/translations";
 import { getTenantContext } from "@/lib/tenant";
@@ -452,9 +453,20 @@ export default function CollectionsPage() {
 
       {/* ஒரே பட்டியல் */}
       <div className="app-card p-5">
-        <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-4">
-          {isAdminView ? "அனைத்து வசூல்கள்" : "எனது வசூல்கள்"} ({stats.count})
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-black uppercase tracking-widest text-slate-500">
+            {isAdminView ? "அனைத்து வசூல்கள்" : "எனது வசூல்கள்"} ({stats.count})
+          </h2>
+          {isAdminView && (
+            <Link
+              href="/collections/history"
+              className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700"
+            >
+              <History className="w-4 h-4" />
+              History
+            </Link>
+          )}
+        </div>
 
         {collections.length === 0 ? (
           <EmptyState
