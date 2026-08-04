@@ -1,7 +1,7 @@
 {
   "name": "Smart Masjeedh",
   "short_name": "Smart Masjeedh",
-  "description": "Masjid Management System",
+  "description": "Masjeedh Management System",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f0fdf4",
@@ -12,19 +12,7 @@
       "src": "/original-logo.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/original-logo.png",
-      "sizes": "192x192",
-      "type": "image/png",
       "purpose": "any maskable"
-    },
-    {
-      "src": "/original-logo.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
     },
     {
       "src": "/original-logo.png",
