@@ -24,14 +24,14 @@ export default function RootLayout(props: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
-        <link rel="icon" type="image/png" href="/logo.png" sizes="192x192" />
-        <link rel="icon" type="image/png" href="/logo.png" sizes="512x512" />
-        <link rel="shortcut icon" type="image/png" href="/logo.png" />
-        <link rel="apple-touch-icon" href="/logo.png" sizes="192x192" />
-        <link rel="apple-touch-icon" href="/logo.png" sizes="180x180" />
-        <link rel="apple-touch-icon" href="/logo.png" sizes="167x167" />
-        <link rel="apple-touch-icon" href="/logo.png" sizes="152x152" />
-        <link rel="apple-touch-icon" href="/logo.png" sizes="120x120" />
+        <link rel="icon" type="image/png" href="/original-logo.png" sizes="192x192" />
+        <link rel="icon" type="image/png" href="/original-logo.png" sizes="512x512" />
+        <link rel="shortcut icon" type="image/png" href="/original-logo.png" />
+        <link rel="apple-touch-icon" href="/original-logo.png" sizes="192x192" />
+        <link rel="apple-touch-icon" href="/original-logo.png" sizes="180x180" />
+        <link rel="apple-touch-icon" href="/original-logo.png" sizes="167x167" />
+        <link rel="apple-touch-icon" href="/original-logo.png" sizes="152x152" />
+        <link rel="apple-touch-icon" href="/original-logo.png" sizes="120x120" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="application-name" content="Smart Masjeedh" />
         <meta name="apple-mobile-web-app-title" content="Smart Masjeedh" />
