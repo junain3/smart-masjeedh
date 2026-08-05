@@ -14,7 +14,7 @@ export async function calculateFamilyBalance(
   familyId: string,
   masjidId: string,
   familyData: { subscription_amount?: number; opening_balance?: number }
-): Promise<{ annualFee: number; totalDue: number }> {
+): Promise<{ annualSubscription: number; totalDue: number }> {
   try {
     const annualFee = Number(familyData.subscription_amount || 0);
     const openingBal = Number(familyData.opening_balance || 0);
@@ -50,13 +50,13 @@ export async function calculateFamilyBalance(
     const finalDue = previousArrears + currentDue;
 
     return {
-      annualFee,
+      annualSubscription: annualFee,
       totalDue: Math.max(0, finalDue)
     };
   } catch (error) {
     console.error("Error calculating family balance:", error);
     return {
-      annualFee: Number(familyData.subscription_amount || 0),
+      annualSubscription: Number(familyData.subscription_amount || 0),
       totalDue: Math.max(0, (Number(familyData.opening_balance || 0) + Number(familyData.subscription_amount || 0)))
     };
   }

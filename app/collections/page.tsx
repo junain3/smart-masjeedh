@@ -124,9 +124,6 @@ export default function CollectionsPage() {
 
   const selectFamily = async (family: Family) => {
     setSelectedFamilyId(family.id);
-    if (family.subscription_amount) {
-      setAmount(String(family.subscription_amount));
-    }
     
     // Use centralized balance calculation helper
     try {
@@ -137,12 +134,16 @@ export default function CollectionsPage() {
         family
       );
       setFamilyBalance(balanceData);
+      // Set default amount to total due (remaining balance) instead of annual subscription
+      setAmount(String(balanceData.totalDue));
     } catch (error) {
       console.error("Error fetching family balance:", error);
+      const fallbackTotalDue = (family.opening_balance || 0) + (family.subscription_amount || 0);
       setFamilyBalance({
         annualSubscription: family.subscription_amount || 0,
-        totalDue: (family.opening_balance || 0) + (family.subscription_amount || 0)
+        totalDue: fallbackTotalDue
       });
+      setAmount(String(fallbackTotalDue));
     }
   };
 
