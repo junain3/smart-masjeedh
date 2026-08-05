@@ -131,15 +131,23 @@ export default function CollectionsPage() {
     try {
       const { data: collections } = await supabase
         .from("subscription_collections")
-        .select("amount, status")
+        .select("amount, status, date")
         .eq("family_id", family.id)
         .eq("masjid_id", tenantContext?.masjidId);
       
       const annualSubscription = family.subscription_amount || 0;
-      const totalCollected = (collections || [])
-        .filter(c => c.status === "accepted")
+      const currentYear = new Date().getFullYear();
+      
+      // Only count accepted collections from the current year
+      const paidThisYear = (collections || [])
+        .filter(c => {
+          const collectionDate = c.date || c.created_at;
+          const collectionYear = new Date(collectionDate).getFullYear();
+          return c.status === "accepted" && collectionYear === currentYear;
+        })
         .reduce((sum, c) => sum + Number(c.amount || 0), 0);
-      const totalDue = Math.max(0, annualSubscription - totalCollected);
+      
+      const totalDue = Math.max(0, annualSubscription - paidThisYear);
       
       setFamilyBalance({
         annualSubscription,
