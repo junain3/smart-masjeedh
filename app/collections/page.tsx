@@ -19,6 +19,7 @@ type Family = {
   head_name: string;
   address?: string;
   subscription_amount?: number;
+  opening_balance?: number;
 };
 
 type Collection = {
@@ -127,7 +128,7 @@ export default function CollectionsPage() {
       setAmount(String(family.subscription_amount));
     }
     
-    // Fetch family balance data
+    // Fetch family balance data - matching Family profile page calculation
     try {
       const { data: collections } = await supabase
         .from("subscription_collections")
@@ -135,7 +136,8 @@ export default function CollectionsPage() {
         .eq("family_id", family.id)
         .eq("masjid_id", tenantContext?.masjidId);
       
-      const annualSubscription = family.subscription_amount || 0;
+      const annualFee = family.subscription_amount || 0;
+      const openingBalance = family.opening_balance || 0;
       const currentYear = new Date().getFullYear();
       
       // Only count accepted collections from the current year
@@ -147,17 +149,19 @@ export default function CollectionsPage() {
         })
         .reduce((sum, c) => sum + Number(c.amount || 0), 0);
       
-      const totalDue = Math.max(0, annualSubscription - paidThisYear);
+      // Calculate final due: opening balance + (annual fee - paid this year)
+      const currentDue = annualFee - paidThisYear;
+      const finalDue = openingBalance + currentDue;
       
       setFamilyBalance({
-        annualSubscription,
-        totalDue
+        annualSubscription: annualFee,
+        totalDue: Math.max(0, finalDue)
       });
     } catch (error) {
       console.error("Error fetching family balance:", error);
       setFamilyBalance({
         annualSubscription: family.subscription_amount || 0,
-        totalDue: family.subscription_amount || 0
+        totalDue: (family.opening_balance || 0) + (family.subscription_amount || 0)
       });
     }
   };
@@ -169,7 +173,7 @@ export default function CollectionsPage() {
     try {
       const familiesPromise = supabase
         .from("families")
-        .select("id, family_code, head_name, address, subscription_amount")
+        .select("id, family_code, head_name, address, subscription_amount, opening_balance")
         .eq("masjid_id", tenantContext.masjidId)
         .order("family_code");
 
