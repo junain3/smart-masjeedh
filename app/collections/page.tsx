@@ -578,7 +578,9 @@ export default function CollectionsPage() {
                   <X className="w-5 h-5 text-slate-400" />
                 </button>
               </div>
-
+            </div>
+            
+            <div className="px-6 pb-32 overflow-y-auto flex-1">
               <form onSubmit={handleSubmit} className="space-y-4">
                 {!editingCollection && (
                   <button
