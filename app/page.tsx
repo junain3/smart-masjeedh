@@ -1829,64 +1829,6 @@ setReportCount(result.data?.count || 0)
 
           </div>
 
-
-
-          {/* Menu Grid - Responsive Circular Icons */}
-
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 sm:gap-4 justify-items-center">
-
-            <Link href="/families" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
-
-              <Users className="w-6 h-6 text-emerald-700" />
-
-            </Link>
-
-            <Link href="/accounts" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
-
-              <CreditCard className="w-6 h-6 text-emerald-700" />
-
-            </Link>
-
-            <Link href="/collections" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
-
-              <FileText className="w-6 h-6 text-emerald-700" />
-
-            </Link>
-
-            <Link href="/events" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
-
-              <Calendar className="w-6 h-6 text-emerald-700" />
-
-            </Link>
-
-            <Link href="/staff" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
-
-              <Briefcase className="w-6 h-6 text-emerald-700" />
-
-            </Link>
-
-            <Link href="/accounts" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
-
-              <Settings className="w-6 h-6 text-emerald-700" />
-
-            </Link>
-
-            <Link href="/settings" className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center hover:bg-emerald-100 hover:border-emerald-400 transition-all shadow-lg shadow-emerald-500/10">
-
-              <Settings className="w-6 h-6 text-emerald-700" />
-
-            </Link>
-
-            <div className="w-14 h-14 rounded-full bg-white/80 backdrop-blur-md border-2 border-emerald-300/60 flex items-center justify-center shadow-lg shadow-emerald-500/10">
-
-              <MoreHorizontal className="w-6 h-6 text-emerald-700" />
-
-            </div>
-
-          </div>
-
-
-
           {/* Smart Reports Modal */}
 
           {isReportsModalOpen && (

@@ -11,7 +11,7 @@ export function buildCollectionRecordedSms(headName: string, amount: number, bal
   const balanceText = balance !== undefined ? balance : 0;
   return `Assalamu Alaikkum!
 
-${headName}, Awarhalin Sandha ${amount} Seluththappattullathu. Meedhi Thohai ${balanceText} ahum.
+${headName}, Ungaludaiya Sandha Roofa. ${amount} Seluththappattullathu. Meedhi Thohai Roofa. ${balanceText} ahum.
 
           ~Nirvaha Safai~`;
 }
@@ -21,7 +21,7 @@ export function buildCollectionApprovedSms(headName: string, amount: number, bal
   const balanceText = balance !== undefined ? balance : 0;
   return `Assalamu Alaikkum!
 
-${headName}, Awarhalin Sandha ${amount} Seluththappattullathu. Meedhi Thohai ${balanceText} ahum.
+${headName}, Ungaludaiya Sandha Roofa. ${amount} Seluththappattullathu. Meedhi Thohai Roofa. ${balanceText} ahum.
 
           ~Nirvaha Safai~`;
 }

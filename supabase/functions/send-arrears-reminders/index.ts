@@ -164,7 +164,7 @@ ${family.head_name}, ${currentYear} Arambithu Aaru Mathangal Kadandhuvittana. Un
               // December: Year-end final reminder
               message = `Assalamu Alaikkum!
 
-${family.head_name}, ${currentYear} Am Varudam Mudivadaya Pogirathu. Ungal Sandha Niluvai Rs.${pendingArrears.toLocaleString()} Seluthumaru Vendukirom.
+${family.head_name}, ${currentYear} Am Varudam Mudivadaiya Pohirathu. Ungal Sandha Niluvai Rs.${pendingArrears.toLocaleString()} Seluthumaru Vendukirom.
 
           ~Nirvaha Safai~`;
             }
