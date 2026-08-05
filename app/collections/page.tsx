@@ -11,7 +11,7 @@ import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { EmptyState } from "@/components/EmptyState";
-import { calcCommission, sortFamiliesByCode } from "@/lib/collection-utils";
+import { calcCommission, sortFamiliesByCode, calculateFamilyBalance } from "@/lib/collection-utils";
 
 type Family = {
   id: string;
@@ -128,44 +128,15 @@ export default function CollectionsPage() {
       setAmount(String(family.subscription_amount));
     }
     
-    // Fetch family balance data - matching Family profile page calculation exactly
+    // Use centralized balance calculation helper
     try {
-      const { data: collections } = await supabase
-        .from("subscription_collections")
-        .select("amount, status, date, created_at")
-        .eq("family_id", family.id)
-        .eq("masjid_id", tenantContext?.masjidId);
-      
-      const annualFee = Number(family.subscription_amount || 0);
-      const openingBal = family.opening_balance || 0;
-      const currentYear = new Date().getFullYear();
-      
-      // Helper to get payment date - matching Family profile page
-      const getPaymentDate = (c: any) => c.date || c.created_at;
-      
-      // Include both accepted and pending payments - matching Family profile page
-      const creditedPayments = (collections || []).filter(
-        (c) => c.status === "accepted" || c.status === "pending"
+      const balanceData = await calculateFamilyBalance(
+        supabase,
+        family.id,
+        tenantContext?.masjidId || "",
+        family
       );
-      
-      // Calculate paid this year - matching Family profile page logic exactly
-      const paidThisYear = creditedPayments
-        .filter((p) => {
-          const paymentDate = getPaymentDate(p);
-          const y = new Date(paymentDate).getFullYear();
-          return y === currentYear && p.amount > 0;
-        })
-        .reduce((s, p) => s + Number(p.amount || 0), 0);
-      
-      // Calculate final due - matching Family profile page exactly
-      const previousArrears = openingBal;
-      const currentDue = annualFee - paidThisYear;
-      const finalDue = previousArrears + currentDue;
-      
-      setFamilyBalance({
-        annualSubscription: annualFee,
-        totalDue: Math.max(0, finalDue)
-      });
+      setFamilyBalance(balanceData);
     } catch (error) {
       console.error("Error fetching family balance:", error);
       setFamilyBalance({

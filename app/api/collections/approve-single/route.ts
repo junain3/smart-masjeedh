@@ -68,7 +68,7 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
       });
       const { data: families, error: familyFetchError } = await supabaseAdmin
         .from('families')
-        .select('id, head_name, phone')
+        .select('id, head_name, phone, subscription_amount, opening_balance')
         .eq('masjid_id', userContext.masjidId)
         .in('id', familyIds);
 

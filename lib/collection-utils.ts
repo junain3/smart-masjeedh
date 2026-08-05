@@ -4,6 +4,64 @@ export function calcCommission(amount: number, percent: number): number {
   return Math.round((amount * percent) / 100 * 100) / 100;
 }
 
+/**
+ * Calculate the exact current balance due for a family
+ * Formula: Final Due = Opening Balance + (Annual Subscription - Paid This Year)
+ * Paid This Year includes both accepted and pending payments from the current year
+ */
+export async function calculateFamilyBalance(
+  supabase: any,
+  familyId: string,
+  masjidId: string,
+  familyData: { subscription_amount?: number; opening_balance?: number }
+): Promise<{ annualFee: number; totalDue: number }> {
+  try {
+    const annualFee = Number(familyData.subscription_amount || 0);
+    const openingBal = Number(familyData.opening_balance || 0);
+    const currentYear = new Date().getFullYear();
+
+    // Fetch all collections for this family
+    const { data: collections } = await supabase
+      .from("subscription_collections")
+      .select("amount, status, date, created_at")
+      .eq("family_id", familyId)
+      .eq("masjid_id", masjidId);
+
+    // Helper to get payment date
+    const getPaymentDate = (c: any) => c.date || c.created_at;
+
+    // Include both accepted and pending payments
+    const creditedPayments = (collections || []).filter(
+      (c) => c.status === "accepted" || c.status === "pending"
+    );
+
+    // Calculate paid this year
+    const paidThisYear = creditedPayments
+      .filter((p) => {
+        const paymentDate = getPaymentDate(p);
+        const y = new Date(paymentDate).getFullYear();
+        return y === currentYear && p.amount > 0;
+      })
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+
+    // Calculate final due: opening balance + (annual fee - paid this year)
+    const previousArrears = openingBal;
+    const currentDue = annualFee - paidThisYear;
+    const finalDue = previousArrears + currentDue;
+
+    return {
+      annualFee,
+      totalDue: Math.max(0, finalDue)
+    };
+  } catch (error) {
+    console.error("Error calculating family balance:", error);
+    return {
+      annualFee: Number(familyData.subscription_amount || 0),
+      totalDue: Math.max(0, (Number(familyData.opening_balance || 0) + Number(familyData.subscription_amount || 0)))
+    };
+  }
+}
+
 const COLLECTION_SMS_SIGN_OFF = "Nirvaha Safai";
 
 /** SMS when a collection is recorded (pending admin approval). Lines separated with \\n for providers. */

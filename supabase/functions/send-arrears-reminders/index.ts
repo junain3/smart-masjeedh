@@ -116,28 +116,41 @@ serve(async (req: Request) => {
         // Step 4: For each family, calculate their pending arrears
         for (const family of families) {
           try {
-            // Calculate total paid amount (accepted collections)
-            const { data: acceptedCollections, error: collError } =
+            // Calculate total paid amount (accepted and pending collections from current year)
+            const { data: collections, error: collError } =
               await supabaseAdmin
                 .from("subscription_collections")
-                .select("amount")
+                .select("amount, status, date, created_at")
                 .eq("masjid_id", masjid.id)
-                .eq("family_id", family.id)
-                .eq("status", "accepted");
+                .eq("family_id", family.id);
 
-            const totalPaid = acceptedCollections?.reduce(
-              (sum: number, coll: any) => sum + Number(coll.amount),
-              0
-            ) ?? 0;
+            const currentYear = currentDate.getFullYear();
+            const getPaymentDate = (c: any) => c.date || c.created_at;
 
-            // Calculate total expected amount (based on subscription amount, if available)
-            // Let's assume subscription is monthly, so total expected is subscription * 12 months
+            // Include both accepted and pending payments
+            const creditedPayments = (collections || []).filter(
+              (c) => c.status === "accepted" || c.status === "pending"
+            );
+
+            // Calculate paid this year
+            const paidThisYear = creditedPayments
+              .filter((p) => {
+                const paymentDate = getPaymentDate(p);
+                const y = new Date(paymentDate).getFullYear();
+                return y === currentYear && p.amount > 0;
+              })
+              .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+
+            // Calculate total expected amount (opening balance + annual subscription)
             const subscriptionAmount = Number(
               family.subscription_amount ?? 0
             );
             const openingBalance = Number(family.opening_balance ?? 0);
-            const totalExpected = openingBalance + subscriptionAmount * 12; // 12 months of subscription + opening balance
-            const pendingArrears = Math.max(0, totalExpected - totalPaid);
+            
+            // Calculate final due: opening balance + (annual subscription - paid this year)
+            const currentDue = subscriptionAmount - paidThisYear;
+            const finalDue = openingBalance + currentDue;
+            const pendingArrears = Math.max(0, finalDue);
 
             // If arrears are zero, skip sending
             if (pendingArrears <= 0) {

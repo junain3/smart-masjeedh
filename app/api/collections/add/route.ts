@@ -5,6 +5,7 @@ import { sendSms } from "@/lib/sms-utils";
 import {
   buildCollectionRecordedSms,
   buildCollectionApprovedSms,
+  calculateFamilyBalance,
 } from "@/lib/collection-utils";
 
 export const POST = withCollectionSecurity(async (request: NextRequest) => {
@@ -69,7 +70,7 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
     // First, resolve the family (used for SMS and masjid-scoped consistency checks)
     const { data: familyData, error: familyError } = await supabaseAdmin
       .from("families")
-      .select("id, head_name, phone")
+      .select("id, head_name, phone, subscription_amount, opening_balance")
       .eq("id", resolvedFamilyId)
       .eq("masjid_id", userContext.masjidId)
       .single();
@@ -146,9 +147,18 @@ export const POST = withCollectionSecurity(async (request: NextRequest) => {
     let smsResult: { success: boolean; error?: string } | null = null;
     if (familyData?.phone) {
       const isApproved = collection.status === "accepted";
+      
+      // Calculate the correct balance due for the SMS
+      const balanceData = await calculateFamilyBalance(
+        supabaseAdmin,
+        resolvedFamilyId,
+        userContext.masjidId,
+        familyData
+      );
+      
       const message = isApproved
-        ? buildCollectionApprovedSms(familyData.head_name, amount)
-        : buildCollectionRecordedSms(familyData.head_name, amount);
+        ? buildCollectionApprovedSms(familyData.head_name, amount, balanceData.totalDue)
+        : buildCollectionRecordedSms(familyData.head_name, amount, balanceData.totalDue);
 
       console.info("[collections/add] triggering auto SMS", {
         collectionId: collection.id,
