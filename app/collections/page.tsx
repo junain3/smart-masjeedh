@@ -67,6 +67,8 @@ export default function CollectionsPage() {
   const [commissionEarned, setCommissionEarned] = useState(0);
   const [commissionPending, setCommissionPending] = useState(0);
   const [collectorProfiles, setCollectorProfiles] = useState<Record<string, string>>({});
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [familyBalance, setFamilyBalance] = useState<{ annualSubscription: number; totalDue: number } | null>(null);
 
   const t = getTranslation(lang);
   const isAdminView = Boolean(
@@ -119,10 +121,36 @@ export default function CollectionsPage() {
     void loadData();
   }, [tenantContext?.masjidId, user?.id, resumeTick, authLoading]);
 
-  const selectFamily = (family: Family) => {
+  const selectFamily = async (family: Family) => {
     setSelectedFamilyId(family.id);
     if (family.subscription_amount) {
       setAmount(String(family.subscription_amount));
+    }
+    
+    // Fetch family balance data
+    try {
+      const { data: collections } = await supabase
+        .from("subscription_collections")
+        .select("amount, status")
+        .eq("family_id", family.id)
+        .eq("masjid_id", tenantContext?.masjidId);
+      
+      const annualSubscription = family.subscription_amount || 0;
+      const totalCollected = (collections || [])
+        .filter(c => c.status === "accepted")
+        .reduce((sum, c) => sum + Number(c.amount || 0), 0);
+      const totalDue = Math.max(0, annualSubscription - totalCollected);
+      
+      setFamilyBalance({
+        annualSubscription,
+        totalDue
+      });
+    } catch (error) {
+      console.error("Error fetching family balance:", error);
+      setFamilyBalance({
+        annualSubscription: family.subscription_amount || 0,
+        totalDue: family.subscription_amount || 0
+      });
     }
   };
 
@@ -267,6 +295,12 @@ export default function CollectionsPage() {
     e.preventDefault();
     if (!selectedFamilyId || !amount) return;
 
+    // Show confirmation dialog instead of submitting directly
+    setShowConfirmDialog(true);
+  };
+
+  const confirmSubmit = async () => {
+    setShowConfirmDialog(false);
     setSubmitting(true);
     setError("");
     setSuccess("");
@@ -534,119 +568,183 @@ export default function CollectionsPage() {
       {/* வசூல் படிவம் */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-black text-slate-900">
-                {editingCollection ? "வசூல் திருத்து" : "புதிய வசூல்"}
-              </h3>
-              <button onClick={closeModal} className="p-2 hover:bg-slate-50 rounded-2xl">
-                <X className="w-5 h-5 text-slate-400" />
-              </button>
+          <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] flex flex-col">
+            <div className="p-6 flex-shrink-0">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-lg font-black text-slate-900">
+                  {editingCollection ? "வசூல் திருத்து" : "புதிய வசூல்"}
+                </h3>
+                <button onClick={closeModal} className="p-2 hover:bg-slate-50 rounded-2xl">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {!editingCollection && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setIsScannerOpen(true);
+                    }}
+                    className="w-full app-btn-secondary py-3 flex items-center justify-center gap-2"
+                  >
+                    <QrCode className="w-5 h-5" />
+                    QR ஸ்கேன்
+                  </button>
+                )}
+
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="குடும்பம் தேடு..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                </div>
+
+                <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-2xl">
+                  {filteredFamilies.length === 0 ? (
+                    <p className="p-4 text-center text-xs text-slate-400">குடும்பம் இல்லை</p>
+                  ) : (
+                    filteredFamilies.map((family) => (
+                      <button
+                        key={family.id}
+                        type="button"
+                        onClick={() => selectFamily(family)}
+                        className={`w-full text-left p-3 border-b border-slate-100 last:border-0 hover:bg-emerald-50 ${
+                          selectedFamilyId === family.id ? "bg-emerald-50" : ""
+                        }`}
+                      >
+                        <div className="font-bold text-sm">{family.family_code} — {family.head_name}</div>
+                        {family.subscription_amount ? (
+                          <div className="text-xs text-emerald-600">சந்தா: Rs. {family.subscription_amount}</div>
+                        ) : null}
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {selectedFamily && familyBalance && (
+                  <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-200 rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-bold text-emerald-900">{selectedFamily.head_name}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedFamilyId("");
+                          setFamilyBalance(null);
+                          setAmount("");
+                        }}
+                        className="text-xs text-emerald-600 hover:text-emerald-800 underline"
+                      >
+                        மாற்று
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-emerald-700">வருடாந்த சந்தா</span>
+                        <span className="font-bold text-emerald-900">Rs. {familyBalance.annualSubscription}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-emerald-700">செலுத்த வேண்டிய பாக்கி</span>
+                        <span className="font-bold text-emerald-900">Rs. {familyBalance.totalDue}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2">தொகை (Rs.)</label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    required
+                  />
+                  {commissionRate > 0 && estimatedCommission > 0 && !editingCollection && (
+                    <p className="text-xs text-purple-600 mt-2 font-bold">
+                      மதிப்பிடப்பட்ட கமிஷன் ({commissionRate}%): Rs. {estimatedCommission.toLocaleString()}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2">குறிப்பு (விரும்பினால்)</label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={2}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-2xl outline-none resize-none focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                </div>
+
+                {error && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700">{error}</div>
+                )}
+                {success && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-700 flex items-center gap-2">
+                    <Check className="w-4 h-4" />
+                    {success}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={!selectedFamilyId || !amount || submitting}
+                  className="w-full app-btn-primary py-3 disabled:opacity-50"
+                >
+                  {submitting ? "சேமிக்கிறது..." : editingCollection ? "புதுப்பி" : "பதிவு செய்"}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog */}
+      {showConfirmDialog && selectedFamily && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Check className="w-8 h-8 text-emerald-600" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">உறுதி செய்யவும்</h3>
+              <p className="text-slate-600 text-sm">இந்த கட்டணத்தை செய்ய விரும்புகிறீர்களா?</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {!editingCollection && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setIsScannerOpen(true);
-                  }}
-                  className="w-full app-btn-secondary py-3 flex items-center justify-center gap-2"
-                >
-                  <QrCode className="w-5 h-5" />
-                  QR ஸ்கேன்
-                </button>
-              )}
-
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="குடும்பம் தேடு..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/20"
-                />
+            <div className="bg-slate-50 rounded-2xl p-4 mb-6">
+              <div className="flex justify-between mb-2">
+                <span className="text-slate-600 text-sm">குடும்பம்</span>
+                <span className="font-bold text-slate-900">{selectedFamily.head_name}</span>
               </div>
-
-              <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-2xl">
-                {filteredFamilies.length === 0 ? (
-                  <p className="p-4 text-center text-xs text-slate-400">குடும்பம் இல்லை</p>
-                ) : (
-                  filteredFamilies.map((family) => (
-                    <button
-                      key={family.id}
-                      type="button"
-                      onClick={() => selectFamily(family)}
-                      className={`w-full text-left p-3 border-b border-slate-100 last:border-0 hover:bg-emerald-50 ${
-                        selectedFamilyId === family.id ? "bg-emerald-50" : ""
-                      }`}
-                    >
-                      <div className="font-bold text-sm">{family.family_code} — {family.head_name}</div>
-                      {family.subscription_amount ? (
-                        <div className="text-xs text-emerald-600">சந்தா: Rs. {family.subscription_amount}</div>
-                      ) : null}
-                    </button>
-                  ))
-                )}
+              <div className="flex justify-between">
+                <span className="text-slate-600 text-sm">தொகை</span>
+                <span className="font-bold text-emerald-600">Rs. {amount}</span>
               </div>
+            </div>
 
-              {selectedFamily && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-sm">
-                  <span className="font-bold text-emerald-800">{selectedFamily.head_name}</span>
-                  {selectedFamily.subscription_amount ? (
-                    <span className="text-emerald-600"> — சந்தா Rs. {selectedFamily.subscription_amount}</span>
-                  ) : null}
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">தொகை (Rs.)</label>
-                <input
-                  type="number"
-                  step="1"
-                  min="1"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  required
-                />
-                {commissionRate > 0 && estimatedCommission > 0 && !editingCollection && (
-                  <p className="text-xs text-purple-600 mt-2 font-bold">
-                    மதிப்பிடப்பட்ட கமிஷன் ({commissionRate}%): Rs. {estimatedCommission.toLocaleString()}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">குறிப்பு (விரும்பினால்)</label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={2}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-2xl outline-none resize-none focus:ring-2 focus:ring-emerald-500/20"
-                />
-              </div>
-
-              {error && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700">{error}</div>
-              )}
-              {success && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-700 flex items-center gap-2">
-                  <Check className="w-4 h-4" />
-                  {success}
-                </div>
-              )}
-
+            <div className="flex gap-3">
               <button
-                type="submit"
-                disabled={!selectedFamilyId || !amount || submitting}
-                className="w-full app-btn-primary py-3 disabled:opacity-50"
+                onClick={() => setShowConfirmDialog(false)}
+                className="flex-1 py-3 border-2 border-slate-200 rounded-2xl text-slate-700 font-bold hover:bg-slate-50 transition"
               >
-                {submitting ? "சேமிக்கிறது..." : editingCollection ? "புதுப்பி" : "பதிவு செய்"}
+                ரத்து செய்
               </button>
-            </form>
+              <button
+                onClick={confirmSubmit}
+                disabled={submitting}
+                className="flex-1 py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition disabled:opacity-50"
+              >
+                {submitting ? "சேமிக்கிறது..." : "உறுதி"}
+              </button>
+            </div>
           </div>
         </div>
       )}
