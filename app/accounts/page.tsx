@@ -40,6 +40,7 @@ import {
   extractDirectAccountNote,
   isDirectAccountCollection,
   sortFamiliesByCode,
+  calculateFamilyBalance,
 } from "@/lib/collection-utils";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +60,8 @@ type Family = {
   id: string;
   family_code: string;
   head_name: string;
+  subscription_amount?: number;
+  opening_balance?: number;
 };
 
 type PendingAccountCollection = {
@@ -98,6 +101,7 @@ export default function AccountsPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [lang, setLang] = useState<Language>("en");
+  const [familyBalance, setFamilyBalance] = useState<{ annualSubscription: number; totalDue: number } | null>(null);
 
   // Parse permissions and check access (no hooks here)
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
@@ -136,6 +140,34 @@ export default function AccountsPage() {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
   }, []);
+
+  // Calculate family balance when family is selected for subscription type
+  useEffect(() => {
+    const calculateBalance = async () => {
+      if (type === "subscription" && selectedFamilyId && tenantContext?.masjidId) {
+        const family = families.find((f) => f.id === selectedFamilyId);
+        if (family) {
+          try {
+            const balanceData = await calculateFamilyBalance(
+              supabase,
+              selectedFamilyId,
+              tenantContext.masjidId,
+              family
+            );
+            setFamilyBalance(balanceData);
+            // Set default amount to total due
+            setAmount(String(balanceData.totalDue));
+          } catch (error) {
+            console.error("Error calculating family balance:", error);
+            setFamilyBalance(null);
+          }
+        }
+      } else {
+        setFamilyBalance(null);
+      }
+    };
+    calculateBalance();
+  }, [selectedFamilyId, type, families, tenantContext?.masjidId]);
   
   // Page-level access control (after all hooks)
   if (authLoading) return <BrandLoadingScreen />;
@@ -225,7 +257,7 @@ export default function AccountsPage() {
           .order("date", { ascending: false }),
         supabase
           .from("families")
-          .select("id, family_code, head_name")
+          .select("id, family_code, head_name, subscription_amount, opening_balance")
           .eq("masjid_id", tenantContext.masjidId),
         supabase
           .from("subscription_collections")
@@ -1078,6 +1110,21 @@ export default function AccountsPage() {
                   <p className="text-xs text-emerald-600 mt-1">
                     குடும்பம் உடனே புதுப்பிக்கப்படும். Main account-க்கு pending batch அனுமதியில் சேரும் (கமிஷன் இல்லை).
                   </p>
+                  
+                  {familyBalance && (
+                    <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-200 rounded-2xl p-4 mt-3">
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-emerald-700">வருடாந்த சந்தா</span>
+                          <span className="font-bold text-emerald-900">Rs. {familyBalance.annualSubscription}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-emerald-700">செலுத்த வேண்டிய பாக்கி</span>
+                          <span className="font-bold text-emerald-900">Rs. {familyBalance.totalDue}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
