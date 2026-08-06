@@ -597,9 +597,31 @@ export default function AccountsPage() {
               .expense { color: #dc2626; }
               .header { text-align: center; margin-bottom: 30px; }
               .date { text-align: right; margin-bottom: 20px; }
+              .close-btn {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #047857;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: bold;
+                z-index: 1000;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+              }
+              .close-btn:hover {
+                background: #065f46;
+              }
+              @media print {
+                .close-btn { display: none; }
+              }
             </style>
           </head>
           <body>
+            <button class="close-btn" onclick="window.close()">Close</button>
             <div class="header">
               <h1>${escapePdfHtml(masjidName)}</h1>
               <h2>Account Transactions</h2>
