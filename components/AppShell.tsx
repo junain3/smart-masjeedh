@@ -98,8 +98,8 @@ export function AppShell(props: {
 
   // Nav Items
   const items: NavItem[] = useMemo(() => {
-    // Handle build-time rendering where auth context may be undefined
-    if (typeof window === 'undefined' && !role && !permissions) {
+    // Handle loading state - return minimal navigation while auth context is loading
+    if (!role && !permissions) {
       return [
         { href: "/", label: t.dashboard, icon: <Home className="w-5 h-5" /> },
       ];
