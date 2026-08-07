@@ -6,6 +6,8 @@ import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/lib/supabase";
 import { ShieldCheck, Mail } from "lucide-react";
 
+export const dynamic = 'force-dynamic';
+
 type MasjidRow = {
   id: string;
   name: string;

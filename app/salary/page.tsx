@@ -8,6 +8,8 @@ import { getTranslation, translations, Language } from "@/lib/i18n/translations"
 import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 import { AppShell } from "@/components/AppShell";
 
+export const dynamic = 'force-dynamic';
+
 type StaffMember = {
   id: string;
   email: string;

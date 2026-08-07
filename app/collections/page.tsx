@@ -14,6 +14,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { calcCommission, sortFamiliesByCode, calculateFamilyBalance } from "@/lib/collection-utils";
 import { fetchUserNames } from "@/lib/user-utils";
 
+export const dynamic = 'force-dynamic';
+
 type Family = {
   id: string;
   family_code: string;
