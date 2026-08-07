@@ -181,9 +181,9 @@ export function AppShell(props: {
         }}
       />
       {open && <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)} />}
-      <aside className={`fixed top-0 left-0 z-50 h-full w-72 bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-900 border-r border-emerald-600/30 shadow-2xl transform transition-transform duration-300 ease-in-out
+      <aside className={`fixed top-0 left-0 z-50 h-[100dvh] w-72 bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-900 border-r border-emerald-600/30 shadow-2xl transform transition-transform duration-300 ease-in-out
         ${open ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:shadow-none`}>
-        <div className="p-6 flex flex-col h-full">
+        <div className="p-6 flex flex-col h-full min-h-0 overflow-hidden">
           <div className="flex items-center justify-between mb-6">
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-emerald-200">{t.brand_name}</p>
@@ -194,7 +194,7 @@ export function AppShell(props: {
             </button>
           </div>
 
-          <nav className="flex-1 space-y-2 overflow-y-auto pb-20">
+          <nav className="flex-1 space-y-2 overflow-y-auto pb-24 min-h-0">
             {items.map((it) => (
               <Link key={it.href} href={it.href} className={linkClass(it.href)}>
                 <span className={pathname === it.href || (it.href !== "/" && pathname?.startsWith(it.href)) ? "text-emerald-200" : "text-emerald-300"}>{it.icon}</span>
@@ -203,7 +203,7 @@ export function AppShell(props: {
             ))}
           </nav>
 
-          <div className="mt-auto pt-4 border-t border-emerald-600/30">
+          <div className="mt-auto pt-4 border-t border-emerald-600/30 pb-safe-bottom-4">
             <button
               onClick={handleLogout}
               className="w-full px-4 py-3 rounded-3xl bg-red-500/20 text-red-200 font-black text-xs uppercase tracking-widest hover:bg-red-500/30 transition-all border border-red-500/30"
