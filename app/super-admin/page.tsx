@@ -1,12 +1,14 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const revalidate = 0;
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/lib/supabase";
 import { ShieldCheck, Mail } from "lucide-react";
-
-export const dynamic = 'force-dynamic';
 
 type MasjidRow = {
   id: string;

@@ -98,6 +98,13 @@ export function AppShell(props: {
 
   // Nav Items
   const items: NavItem[] = useMemo(() => {
+    // Handle build-time rendering where auth context may be undefined
+    if (typeof window === 'undefined' && !role && !permissions) {
+      return [
+        { href: "/", label: t.dashboard, icon: <Home className="w-5 h-5" /> },
+      ];
+    }
+
     const isSuper = role === "super_admin" || role === "co_admin";
     const perms = permissions || {};
     

@@ -14,6 +14,8 @@ const nextConfig = withPWA({
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Explicitly disable static export
+  output: undefined,
 });
 
 module.exports = nextConfig;

@@ -1,5 +1,9 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const revalidate = 0;
+
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { DollarSign, Wallet, Calendar, Users, TrendingUp, AlertCircle, Check, Plus, X, FileText } from "lucide-react";
@@ -7,8 +11,6 @@ import { supabase } from "@/lib/supabase";
 import { getTranslation, translations, Language } from "@/lib/i18n/translations";
 import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 import { AppShell } from "@/components/AppShell";
-
-export const dynamic = 'force-dynamic';
 
 type StaffMember = {
   id: string;

@@ -1,5 +1,9 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const revalidate = 0;
+
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Plus, QrCode, X, Check, AlertCircle, Search, FileText, Pencil, History } from "lucide-react";
@@ -13,8 +17,6 @@ import { QrScannerModal } from "@/components/QrScannerModal";
 import { EmptyState } from "@/components/EmptyState";
 import { calcCommission, sortFamiliesByCode, calculateFamilyBalance } from "@/lib/collection-utils";
 import { fetchUserNames } from "@/lib/user-utils";
-
-export const dynamic = 'force-dynamic';
 
 type Family = {
   id: string;
