@@ -194,7 +194,7 @@ export function AppShell(props: {
             </button>
           </div>
 
-          <nav className="flex-1 space-y-2">
+          <nav className="flex-1 space-y-2 overflow-y-auto pb-20">
             {items.map((it) => (
               <Link key={it.href} href={it.href} className={linkClass(it.href)}>
                 <span className={pathname === it.href || (it.href !== "/" && pathname?.startsWith(it.href)) ? "text-emerald-200" : "text-emerald-300"}>{it.icon}</span>
