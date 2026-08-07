@@ -14,6 +14,7 @@ import {
   Wallet,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { supabase } from "@/lib/supabase";
@@ -23,9 +24,10 @@ import { OnboardingModal } from "@/components/OnboardingModal";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 
 type NavItem = {
-  href: string;
+  href?: string;
   label: string;
   icon: React.ReactNode;
+  action?: () => void;
 };
 
 export function AppShell(props: {
@@ -84,6 +86,16 @@ export function AppShell(props: {
     }
   }, [requiresOnboarding, user]);
 
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      router.push('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+      router.push('/login');
+    }
+  };
+
   // Nav Items
   const items: NavItem[] = useMemo(() => {
     const isSuper = role === "super_admin" || role === "co_admin";
@@ -138,8 +150,16 @@ export function AppShell(props: {
     }
 
     base.push({ href: "/settings", label: t.settings, icon: <Settings className="w-5 h-5" /> });
+    
+    // Add logout as the last item
+    base.push({ 
+      label: t.logout, 
+      icon: <LogOut className="w-5 h-5" />,
+      action: handleLogout 
+    });
+    
     return base;
-  }, [t, role, permissions]);
+  }, [t, role, permissions, handleLogout]);
 
   const linkClass = (href: string) => {
     const active = pathname === href || (href !== "/" && pathname?.startsWith(href));
@@ -194,23 +214,30 @@ export function AppShell(props: {
             </button>
           </div>
 
-          <nav className="flex-1 space-y-2 overflow-y-auto pb-24 min-h-0">
-            {items.map((it) => (
-              <Link key={it.href} href={it.href} className={linkClass(it.href)}>
-                <span className={pathname === it.href || (it.href !== "/" && pathname?.startsWith(it.href)) ? "text-emerald-200" : "text-emerald-300"}>{it.icon}</span>
-                <span className="truncate">{it.label}</span>
-              </Link>
-            ))}
+          <nav className="flex-1 space-y-2 overflow-y-auto min-h-0">
+            {items.map((it, index) => {
+              if (it.action) {
+                // Render as button for logout
+                return (
+                  <button
+                    key={`logout-${index}`}
+                    onClick={it.action}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-3xl font-bold transition-all text-emerald-100 hover:bg-white/10"
+                  >
+                    <LogOut className="w-5 h-5 text-emerald-300" />
+                    <span className="truncate">{it.label}</span>
+                  </button>
+                );
+              }
+              // Render as link for navigation items
+              return (
+                <Link key={it.href} href={it.href} className={linkClass(it.href)}>
+                  <span className={pathname === it.href || (it.href !== "/" && pathname?.startsWith(it.href)) ? "text-emerald-200" : "text-emerald-300"}>{it.icon}</span>
+                  <span className="truncate">{it.label}</span>
+                </Link>
+              );
+            })}
           </nav>
-
-          <div className="mt-auto pt-4 border-t border-emerald-600/30 pb-safe-bottom-4">
-            <button
-              onClick={handleLogout}
-              className="w-full px-4 py-3 rounded-3xl bg-red-500/20 text-red-200 font-black text-xs uppercase tracking-widest hover:bg-red-500/30 transition-all border border-red-500/30"
-            >
-              {t.logout}
-            </button>
-          </div>
         </div>
       </aside>
 
