@@ -42,6 +42,7 @@ import {
   sortFamiliesByCode,
   calculateFamilyBalance,
 } from "@/lib/collection-utils";
+import { fetchUserNames } from "@/lib/user-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -102,10 +103,11 @@ export default function AccountsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [lang, setLang] = useState<Language>("en");
   const [familyBalance, setFamilyBalance] = useState<{ annualSubscription: number; totalDue: number } | null>(null);
+  const [userNames, setUserNames] = useState<Record<string, string>>({});
 
   // Parse permissions and check access (no hooks here)
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
-  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions, tenantContext?.role);
   const hasAccountsAccess = hasModulePermission(parsedPermissions, 'accounts');
   
   // Login redirect effect
@@ -270,10 +272,24 @@ export default function AccountsPage() {
       if (familiesResponse.error) throw familiesResponse.error;
       if (pendingCollectionsResponse.error) throw pendingCollectionsResponse.error;
 
-      setTransactions((transactionsResponse.data as Transaction[]) || []);
-      setFamilies(sortFamiliesByCode(familiesResponse.data as Family[]));
+      const transactionsList = transactionsResponse.data || [];
+      const familiesList = familiesResponse.data || [];
+      const pendingCollectionsList = pendingCollectionsResponse.data || [];
+
+      // Fetch user names for transactions
+      const userIds = Array.from(
+        new Set(transactionsList.map((t: any) => t.user_id).filter(Boolean))
+      ) as string[];
+      
+      if (userIds.length > 0) {
+        const namesMap = await fetchUserNames(supabase, userIds);
+        setUserNames(namesMap);
+      }
+
+      setTransactions(transactionsList);
+      setFamilies(familiesList);
       setPendingAccountCollections(
-        ((pendingCollectionsResponse.data as PendingAccountCollection[]) || []).filter((c) =>
+        ((pendingCollectionsList as PendingAccountCollection[]) || []).filter((c) =>
           isDirectAccountCollection(c.notes)
         )
       );
@@ -869,6 +885,9 @@ export default function AccountsPage() {
                         {tx.category && (
                           <p className="text-sm text-neutral-600">{displayCategory(tx)}</p>
                         )}
+                        {tx.user_id && userNames[tx.user_id] && (
+                          <p className="text-xs text-neutral-500">By: {userNames[tx.user_id]}</p>
+                        )}
                       </div>
 
                       {/* Amount and Actions */}
@@ -932,6 +951,9 @@ export default function AccountsPage() {
                         <p className="font-semibold text-neutral-900 mb-1">{displayDescription(tx)}</p>
                         {tx.category && (
                           <p className="text-sm text-neutral-600">{displayCategory(tx)}</p>
+                        )}
+                        {tx.user_id && userNames[tx.user_id] && (
+                          <p className="text-xs text-neutral-500">By: {userNames[tx.user_id]}</p>
                         )}
                       </div>
 

@@ -6,6 +6,7 @@ import { ArrowLeft, Check, AlertCircle, Loader2, Users2, UserCircle2, History, C
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { supabase } from "@/lib/supabase";
 import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
+import { fetchUserNames } from "@/lib/user-utils";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useAppToast } from "@/components/ToastProvider";
 import { EmptyState } from "@/components/EmptyState";
@@ -128,19 +129,10 @@ export default function SubscriptionsPendingPage() {
         new Set(collectionList.map((c: any) => c.collected_by_user_id).filter(Boolean))
       ) as string[];
 
+      // Fetch user names using the new helper function
       let profileMap: Record<string, string> = {};
       if (collectorIds.length > 0) {
-        const { data: profilesData } = await supabase
-          .from("user_profiles")
-          .select("id, full_name, email")
-          .in("id", collectorIds);
-
-        profileMap = Object.fromEntries(
-          (profilesData || []).map((profile: any) => [
-            profile.id,
-            profile.full_name || profile.email || "Collector",
-          ])
-        );
+        profileMap = await fetchUserNames(supabase, collectorIds);
       }
 
       setPendingCollections(collectionList);
@@ -187,19 +179,10 @@ export default function SubscriptionsPendingPage() {
         new Set(collectionList.map((c: any) => c.collected_by_user_id).filter(Boolean))
       ) as string[];
 
+      // Fetch user names using the new helper function
       let profileMap: Record<string, string> = {};
       if (collectorIds.length > 0) {
-        const { data: profilesData } = await supabase
-          .from("user_profiles")
-          .select("id, full_name, email")
-          .in("id", collectorIds);
-
-        profileMap = Object.fromEntries(
-          (profilesData || []).map((profile: any) => [
-            profile.id,
-            profile.full_name || profile.email || "Unknown",
-          ])
-        );
+        profileMap = await fetchUserNames(supabase, collectorIds);
       }
 
       setHistoryCollections(collectionList);

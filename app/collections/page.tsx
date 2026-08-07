@@ -12,6 +12,7 @@ import { AppShell } from "@/components/AppShell";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { EmptyState } from "@/components/EmptyState";
 import { calcCommission, sortFamiliesByCode, calculateFamilyBalance } from "@/lib/collection-utils";
+import { fetchUserNames } from "@/lib/user-utils";
 
 type Family = {
   id: string;
@@ -190,19 +191,10 @@ export default function CollectionsPage() {
         new Set(collectionList.map((c) => c.collected_by_user_id).filter(Boolean))
       ) as string[];
 
+      // Fetch user names using the new helper function
       let collectorProfileMap: Record<string, string> = {};
       if (collectorIds.length > 0) {
-        const { data: collectorProfilesData } = await supabase
-          .from("user_profiles")
-          .select("id, full_name, email")
-          .in("id", collectorIds);
-
-        collectorProfileMap = Object.fromEntries(
-          (collectorProfilesData || []).map((profile: any) => [
-            profile.id,
-            profile.full_name || profile.email || "Collector",
-          ])
-        );
+        collectorProfileMap = await fetchUserNames(supabase, collectorIds);
       }
 
       const withFamilies = collectionList.map((c) => ({

@@ -206,7 +206,10 @@ export default function AdminPage() {
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="font-semibold text-gray-900 mb-2">User Management</h3>
-              <p className="text-sm text-gray-600">Add and manage user accounts</p>
+              <p className="text-sm text-gray-600 mb-3">Add and manage user accounts</p>
+              <Link href="/admin/users" className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm">
+                Manage Users →
+              </Link>
             </div>
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="font-semibold text-gray-900 mb-2">Commission Management</h3>

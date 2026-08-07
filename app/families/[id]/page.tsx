@@ -24,6 +24,7 @@ import { translations, getTranslation, Language } from "@/lib/i18n/translations"
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { inferGenderFromRelationship } from "@/lib/member-gender";
 import { getPdfMasjidName } from "@/lib/pdf-utils";
+import { fetchUserName, fetchUserNames } from "@/lib/user-utils";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -123,6 +124,7 @@ export default function FamilyDetailsPage() {
   const [serviceRecipient, setServiceRecipient] = useState("");
   const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [isServiceSubmitting, setIsServiceSubmitting] = useState(false);
+  const [userNames, setUserNames] = useState<Record<string, string>>({});
 
   const [fullName, setFullName] = useState("");
   const [relationship, setRelationship] = useState("மகன்");
@@ -581,6 +583,16 @@ export default function FamilyDetailsPage() {
       } else {
         setPayments(paymentsData || []);
         localStorage.setItem(getPaymentsCacheKey(tenantContext.masjidId, familyId), JSON.stringify(paymentsData));
+        
+        // Fetch user names for collectors
+        const collectorIds = Array.from(
+          new Set((paymentsData || []).map((p: any) => p.collected_by_user_id).filter(Boolean))
+        ) as string[];
+        
+        if (collectorIds.length > 0) {
+          const namesMap = await fetchUserNames(supabase, collectorIds);
+          setUserNames(namesMap);
+        }
       }
 
       // Process services
@@ -1154,6 +1166,34 @@ export default function FamilyDetailsPage() {
   const currentDue = annualFee - paidThisYear;
   const finalDue = previousArrears + currentDue;
 
+  // Calculate running balance for each payment
+  const paymentsWithBalance = (() => {
+    // Sort payments by date (oldest first for running balance calculation)
+    const sortedPayments = [...payments].sort((a, b) => {
+      const dateA = new Date(getPaymentDate(a));
+      const dateB = new Date(getPaymentDate(b));
+      return dateA.getTime() - dateB.getTime();
+    });
+
+    // Calculate running balance
+    let runningBalance = openingBal + annualFee; // Start with opening balance + annual fee (total due before any payments)
+    
+    return sortedPayments.map((payment) => {
+      const previousBalance = runningBalance;
+      // Only subtract if payment is accepted or pending (credited)
+      if (payment.status === 'accepted' || payment.status === 'pending') {
+        runningBalance = Math.max(0, runningBalance - payment.amount);
+      }
+      const remainingBalance = runningBalance;
+      
+      return {
+        ...payment,
+        previousBalance,
+        remainingBalance
+      };
+    });
+  })();
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center">
@@ -1491,7 +1531,7 @@ export default function FamilyDetailsPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {payments.map((payment, index) => (
+                {paymentsWithBalance.map((payment, index) => (
                   <div key={payment.id} className="bg-white rounded-2xl p-5 border border-slate-50 shadow-sm hover:shadow-md transition-all animate-in fade-in duration-500" style={{ animationDelay: `${index * 50}ms` }}>
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4 flex-1">
@@ -1513,9 +1553,6 @@ export default function FamilyDetailsPage() {
                           </div>
                           <div className="space-y-1">
                             <p className="text-[10px] font-bold text-slate-400 uppercase">
-                              <span className="text-slate-500">Amount:</span> Rs. {payment.amount.toLocaleString()}
-                            </p>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">
                               <span className="text-slate-500">Date:</span> {payment.date || payment.collected_at || payment.created_at}
                             </p>
                             <p className="text-[10px] font-bold text-slate-400 uppercase">
@@ -1523,7 +1560,7 @@ export default function FamilyDetailsPage() {
                             </p>
                             {payment.collected_by_user_id && (
                               <p className="text-[10px] font-bold text-slate-400 uppercase">
-                                <span className="text-slate-500">Collected By:</span> {payment.collected_by_user_id.slice(0, 8)}...
+                                <span className="text-slate-500">Collected By:</span> {userNames[payment.collected_by_user_id] || payment.collected_by_user_id.slice(0, 8)}...
                               </p>
                             )}
                           </div>
@@ -1534,6 +1571,28 @@ export default function FamilyDetailsPage() {
                           payment.status === 'pending' ? 'text-yellow-500' : 'text-emerald-500'
                         }`}>
                           + Rs. {payment.amount.toLocaleString()}
+                        </p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">
+                          செலுத்திய தொகை
+                        </p>
+                      </div>
+                    </div>
+                    {/* Balance Information */}
+                    <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 gap-3">
+                      <div className="bg-slate-50 rounded-xl p-3">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
+                          முன்பு இருந்த தொகை
+                        </p>
+                        <p className="text-sm font-black text-slate-700">
+                          Rs. {payment.previousBalance.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="bg-emerald-50 rounded-xl p-3">
+                        <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">
+                          மீதித் தொகை
+                        </p>
+                        <p className="text-sm font-black text-emerald-700">
+                          Rs. {payment.remainingBalance.toLocaleString()}
                         </p>
                       </div>
                     </div>

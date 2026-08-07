@@ -100,9 +100,12 @@ export function hasModulePermission(
 }
 
 /**
- * Check if user is Super Admin (has all permissions)
+ * Check if user is Super Admin (has all permissions OR role is super_admin)
  */
-export function isSuperAdmin(permissions: ModulePermissions): boolean {
+export function isSuperAdmin(permissions: ModulePermissions, role?: string): boolean {
+  // Check role first - if explicitly super_admin, grant access
+  if (role === "super_admin") return true;
+  // Otherwise, check if all permissions are true
   return Object.values(permissions).every(permission => permission === true);
 }
 

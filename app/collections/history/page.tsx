@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { ArrowLeft, Calendar, Download, Filter, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { fetchUserNames } from "@/lib/user-utils";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useAppToast } from "@/components/ToastProvider";
 import { EmptyState } from "@/components/EmptyState";
@@ -91,19 +92,10 @@ export default function CollectionHistoryPage() {
         new Set(collectionList.map((c: any) => c.collected_by_user_id).filter(Boolean))
       ) as string[];
 
+      // Fetch user names using the new helper function
       let profileMap: Record<string, string> = {};
       if (collectorIds.length > 0) {
-        const { data: profilesData } = await supabase
-          .from("user_profiles")
-          .select("id, full_name, email")
-          .in("id", collectorIds);
-
-        profileMap = Object.fromEntries(
-          (profilesData || []).map((profile: any) => [
-            profile.id,
-            profile.full_name || profile.email || "Unknown",
-          ])
-        );
+        profileMap = await fetchUserNames(supabase, collectorIds);
       }
 
       setCollections(collectionList);

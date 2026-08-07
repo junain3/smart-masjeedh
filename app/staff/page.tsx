@@ -289,7 +289,7 @@ export default function StaffPage() {
   const [inviteFeedback, setInviteFeedback] = useState<InviteFeedback | null>(null);
 
   const parsedPermissions = parsePermissions(tenantContext?.permissions || null);
-  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions, tenantContext?.role);
   const hasStaffAccess = hasModulePermission(parsedPermissions, "staff_management");
   const canManageAccess =
     tenantContext?.role === "super_admin" || tenantContext?.role === "co_admin";

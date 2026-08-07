@@ -171,7 +171,12 @@ export default function GeneralSettingsPage() {
 
   if (!authLoading && !user) return null;
   if (authLoading) return <div>Loading...</div>;
-  if (!tenantContext?.permissions?.settings && tenantContext?.role !== 'super_admin') {
+  
+  // Super admins and co admins always have access
+  const isSuperAdmin = tenantContext?.role === 'super_admin' || tenantContext?.role === 'co_admin';
+  const hasSettingsPermission = tenantContext?.permissions?.settings === true;
+  
+  if (!isSuperAdmin && !hasSettingsPermission) {
     return <div>No access</div>;
   }
 

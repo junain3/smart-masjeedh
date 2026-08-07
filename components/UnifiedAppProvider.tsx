@@ -114,31 +114,63 @@ export function UnifiedAppProvider({
   // --- Load Tenant Context with Full Features ---
   const loadTenantContext = useCallback(async (userId: string) => {
     try {
+      console.log("[loadTenantContext] Loading for userId:", userId);
+      
       // Load ALL matching rows from user_roles for current user (multi-masjid support)
-      // Check both auth_user_id and user_id for compatibility with different table structures
       let roleData: any[] | null = null;
       let roleError: any = null;
 
-      // Try auth_user_id first
-      const { data: authData, error: authError } = await supabase
-        .from("user_roles")
-        .select("masjid_id, role, permissions")
-        .eq("auth_user_id", userId);
+      // First try the RPC function which bypasses RLS
+      try {
+        const { data: rpcData, error: rpcError } = await supabase
+          .rpc('get_current_user_roles');
+        
+        if (!rpcError && rpcData && rpcData.length > 0) {
+          console.log("[loadTenantContext] RPC query succeeded:", rpcData);
+          roleData = rpcData;
+        } else {
+          console.log("[loadTenantContext] RPC query failed or returned empty, trying direct query:", rpcError);
+        }
+      } catch (rpcError) {
+        console.log("[loadTenantContext] RPC not available or failed, using direct query:", rpcError);
+      }
 
-      if (!authError && authData && authData.length > 0) {
-        roleData = authData;
-      } else {
-        // Fall back to user_id if auth_user_id didn't find anything
-        const { data: userIdData, error: userIdError } = await supabase
+      // If RPC didn't work, try direct query with auth_user_id
+      if (!roleData) {
+        const { data: authData, error: authError } = await supabase
           .from("user_roles")
-          .select("masjid_id, role, permissions")
-          .eq("user_id", userId);
-        roleData = userIdData;
-        roleError = userIdError;
+          .select("masjid_id, role, permissions, onboarding_completed, full_name")
+          .eq("auth_user_id", userId);
+
+        console.log("[loadTenantContext] auth_user_id query result:", { 
+          data: authData, 
+          error: authError,
+          userId 
+        });
+
+        if (!authError && authData && authData.length > 0) {
+          roleData = authData;
+        } else {
+          // Fall back to user_id if auth_user_id didn't find anything (for backwards compatibility)
+          console.log("[loadTenantContext] auth_user_id query failed, trying user_id");
+          const { data: userIdData, error: userIdError } = await supabase
+            .from("user_roles")
+            .select("masjid_id, role, permissions, onboarding_completed, full_name")
+            .eq("user_id", userId);
+          
+          console.log("[loadTenantContext] user_id query result:", { 
+            data: userIdData, 
+            error: userIdError,
+            userId 
+          });
+          
+          roleData = userIdData;
+          roleError = userIdError;
+        }
       }
 
       if (roleError && roleError.code !== "PGRST116") {
-        console.error("Error loading tenant context:", roleError);
+        console.error("[loadTenantContext] Error loading tenant context:", roleError);
         return;
       }
 
@@ -157,9 +189,22 @@ export function UnifiedAppProvider({
           permissions: firstRole.permissions || {},
         };
         setTenantContext(newTenantContext);
-        setRequiresOnboarding(false);
+        
+        console.log("[UnifiedAppProvider] Tenant context loaded:", {
+          userId,
+          role: newTenantContext.role,
+          masjidId: newTenantContext.masjidId,
+          permissions: newTenantContext.permissions,
+        });
+        
+        // Check if user has completed onboarding
+        // Super admins can bypass onboarding - only require it for other roles
+        const isSuperAdmin = firstRole.role === "super_admin";
+        const hasCompletedOnboarding = firstRole.onboarding_completed === true;
+        setRequiresOnboarding(!isSuperAdmin && !hasCompletedOnboarding);
       } else {
         // No roles found
+        console.error("[UnifiedAppProvider] No user_roles found for user:", userId);
         setAvailableMasjids([]);
         setTenantContext(null);
         setRequiresOnboarding(true);

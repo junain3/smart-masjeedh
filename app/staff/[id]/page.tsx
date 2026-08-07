@@ -73,7 +73,7 @@ export default function StaffDetailPage() {
   const [viewState, setViewState] = useState<ViewState>("loading");
 
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
-  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions, tenantContext?.role);
   const canManageStaff = hasModulePermission(parsedPermissions, "staff_management");
   const canManageAccounts = hasModulePermission(parsedPermissions, "accounts");
   const canManageSalary =

@@ -267,7 +267,11 @@ export default function SmsSettingsPage() {
     </div>
   );
   
-  if (!tenantContext?.permissions?.settings && tenantContext?.role !== 'super_admin') {
+  // Super admins and co admins always have access
+  const isSuperAdmin = tenantContext?.role === 'super_admin' || tenantContext?.role === 'co_admin';
+  const hasSettingsPermission = tenantContext?.permissions?.settings === true;
+  
+  if (!isSuperAdmin && !hasSettingsPermission) {
     return <div className="min-h-screen flex items-center justify-center">No access</div>;
   }
 

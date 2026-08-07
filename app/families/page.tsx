@@ -62,7 +62,7 @@ export default function FamiliesPage() {
   
   // Parse permissions and check access
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
-  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions, tenantContext?.role);
   const hasFamiliesAccess = hasModulePermission(parsedPermissions, 'families');
   
   // Role-based super admin fallback

@@ -164,7 +164,7 @@ export default function HomePage() {
 
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
 
-  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions, tenantContext?.role);
 
 
 

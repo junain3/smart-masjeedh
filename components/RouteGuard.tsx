@@ -23,7 +23,7 @@ export default function RouteGuard({
 
   // Parse permissions
   const parsedPermissions = parsePermissions(tenantContext?.permissions || null);
-  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions, tenantContext?.role);
 
   // Show loading during auth
   if (authLoading) {
@@ -54,7 +54,7 @@ export default function RouteGuard({
 export function usePermissions() {
   const { tenantContext } = useSupabaseAuth();
   const parsedPermissions = parsePermissions(tenantContext?.permissions || null);
-  const userIsSuperAdmin = isSuperAdmin(parsedPermissions);
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions, tenantContext?.role);
 
   return {
     permissions: parsedPermissions,

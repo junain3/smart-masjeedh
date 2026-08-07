@@ -19,6 +19,8 @@ import { translations, getTranslation, Language } from "@/lib/i18n/translations"
 import { supabase } from "@/lib/supabase";
 import { getTenantContext } from "@/lib/tenant";
 import { PWAInstallButton } from "@/components/PWAInstallButton";
+import { OnboardingModal } from "@/components/OnboardingModal";
+import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 
 type NavItem = {
   href: string;
@@ -38,8 +40,10 @@ export function AppShell(props: {
   const router = useRouter();
 
   // ALL HOOKS AT TOP
+  const { requiresOnboarding, user, tenantContext } = useSupabaseAuth();
   const [lang, setLang] = useState<Language>("en");
   const [open, setOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const t = getTranslation(lang || "en");
   const [role, setRole] = useState<"super_admin" | "co_admin" | "staff" | "editor" | null>(null);
   const [permissions, setPermissions] = useState<{
@@ -55,32 +59,46 @@ export function AppShell(props: {
     if (savedLang) setLang(savedLang);
   }, []);
 
+  // Use tenantContext from auth provider instead of loading separately
   useEffect(() => {
-    (async () => {
-      try {
-        const ctx = await getTenantContext();
-        if (!ctx) return;
-        setRole(ctx.role || null);
-        setPermissions((ctx.permissions || null) as any);
-      } catch {
-        // ignore errors
-      }
-    })();
-  }, []);
+    if (tenantContext) {
+      setRole(tenantContext.role || null);
+      setPermissions((tenantContext.permissions || null) as any);
+      console.log("[AppShell] Tenant context updated:", {
+        role: tenantContext.role,
+        permissions: tenantContext.permissions,
+      });
+    } else {
+      console.log("[AppShell] No tenant context available");
+    }
+  }, [tenantContext]);
 
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
 
+  // Show onboarding modal if required
+  useEffect(() => {
+    if (requiresOnboarding && user) {
+      setShowOnboarding(true);
+    }
+  }, [requiresOnboarding, user]);
+
   // Nav Items
   const items: NavItem[] = useMemo(() => {
     const isSuper = role === "super_admin" || role === "co_admin";
     const perms = permissions || {};
-    const canAccounts = isSuper || perms.accounts !== false;
-    const canEvents = isSuper || perms.events !== false;
-    const canFamilies = isSuper || perms.families !== false;
-    const canSubCollect = isSuper || perms.subscriptions_collect === true;
-    const canSubApprove = isSuper || perms.subscriptions_approve === true;
+    
+    console.log("[AppShell] Navigation check:", { role, isSuper, permissions: perms });
+    
+    // Super admins get UNCONDITIONAL access to everything
+    const canAccounts = isSuper;
+    const canEvents = isSuper;
+    const canFamilies = isSuper;
+    const canSubCollect = isSuper;
+    const canSubApprove = isSuper;
+    const canStaff = isSuper;
+    const canAdmin = isSuper;
 
     const base: NavItem[] = [
       { href: "/", label: t.dashboard, icon: <Home className="w-5 h-5" /> },
@@ -153,6 +171,15 @@ export function AppShell(props: {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 text-neutral-900 font-sans">
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onClose={() => setShowOnboarding(false)}
+        onComplete={() => {
+          setShowOnboarding(false);
+          // Refresh tenant context to get updated onboarding status
+          window.location.reload();
+        }}
+      />
       {open && <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)} />}
       <aside className={`fixed top-0 left-0 z-50 h-full w-72 bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-900 border-r border-emerald-600/30 shadow-2xl transform transition-transform duration-300 ease-in-out
         ${open ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:shadow-none`}>

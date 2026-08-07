@@ -4,7 +4,7 @@ import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, role, permissions, commission_percent } = await request.json();
+    const { email, full_name, role, permissions, commission_percent } = await request.json();
 
     if (!email || !role) {
       return NextResponse.json(
@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
         masjid_id: masjidId,
         user_id: authData.user.id,
         email: email,
+        full_name: full_name || email.split('@')[0], // Use email prefix as fallback if no name provided
         role: role,
         permissions: permissions || {},
         commission_percent: role === "staff" ? commission_percent || 10 : null
