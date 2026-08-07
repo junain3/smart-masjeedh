@@ -179,16 +179,6 @@ export function AppShell(props: {
     } flex flex-col items-center justify-center gap-1 px-4 py-2 rounded-full transition-all`;
   };
 
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-      router.push('/login');
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 text-neutral-900 font-sans">
       <OnboardingModal
