@@ -8,6 +8,7 @@ type SalaryPaymentInput = {
   salaryMonth: string;
   paymentDate: string;
   notes: string;
+  accountId?: string | null;
 };
 
 type PaySalaryModalProps = {
@@ -16,7 +17,9 @@ type PaySalaryModalProps = {
   onSubmit: (input: SalaryPaymentInput) => Promise<void> | void;
   submitting?: boolean;
   defaultAmount?: number | null;
+  currentBalance?: number | null;
   defaultMonth?: string;
+  accounts?: Array<{ id: string; name: string; balance: number }>;
 };
 
 function getCurrentMonth() {
@@ -28,20 +31,22 @@ function getToday() {
 }
 
 export function PaySalaryModal(props: PaySalaryModalProps) {
-  const { open, onClose, onSubmit, submitting = false, defaultAmount, defaultMonth } = props;
+  const { open, onClose, onSubmit, submitting = false, defaultAmount, currentBalance, defaultMonth, accounts = [] } = props;
 
-  const [amount, setAmount] = useState(defaultAmount ? String(defaultAmount) : "");
+  const [amount, setAmount] = useState(currentBalance && currentBalance > 0 ? String(currentBalance) : (defaultAmount ? String(defaultAmount) : ""));
   const [salaryMonth, setSalaryMonth] = useState(defaultMonth || getCurrentMonth());
   const [paymentDate, setPaymentDate] = useState(getToday());
   const [notes, setNotes] = useState("");
+  const [accountId, setAccountId] = useState<string>("");
 
   useEffect(() => {
     if (!open) return;
-    setAmount(defaultAmount ? String(defaultAmount) : "");
+    setAmount(currentBalance && currentBalance > 0 ? String(currentBalance) : (defaultAmount ? String(defaultAmount) : ""));
     setSalaryMonth(defaultMonth || getCurrentMonth());
     setPaymentDate(getToday());
     setNotes("");
-  }, [defaultAmount, defaultMonth, open]);
+    setAccountId("");
+  }, [defaultAmount, currentBalance, defaultMonth, open]);
 
   if (!open) return null;
 
@@ -54,6 +59,11 @@ export function PaySalaryModal(props: PaySalaryModalProps) {
             <p className="mt-1 text-sm text-neutral-500">
               This creates both a salary payment record and a finance expense entry.
             </p>
+            {currentBalance !== undefined && currentBalance !== null && (
+              <div className={`mt-2 rounded-2xl px-3 py-1.5 text-xs font-semibold ${currentBalance > 0 ? 'bg-emerald-50 text-emerald-700' : currentBalance < 0 ? 'bg-red-50 text-red-700' : 'bg-neutral-50 text-neutral-600'}`}>
+                Current Balance: {currentBalance >= 0 ? '+' : ''}Rs. {Number(currentBalance).toLocaleString()}
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -72,6 +82,7 @@ export function PaySalaryModal(props: PaySalaryModalProps) {
               salaryMonth,
               paymentDate,
               notes: notes.trim(),
+              accountId: accountId || null,
             });
           }}
           className="space-y-4"
@@ -88,6 +99,11 @@ export function PaySalaryModal(props: PaySalaryModalProps) {
               placeholder="0.00"
               className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
             />
+            {currentBalance !== undefined && currentBalance !== null && amount !== String(currentBalance) && (
+              <p className="mt-1 text-xs text-neutral-500">
+                Default was Rs. {Number(currentBalance).toLocaleString()} - you can override this amount
+              </p>
+            )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -113,6 +129,24 @@ export function PaySalaryModal(props: PaySalaryModalProps) {
               />
             </div>
           </div>
+
+          {accounts.length > 0 && (
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-neutral-700">Disbursement Account</label>
+              <select
+                value={accountId}
+                onChange={(event) => setAccountId(event.target.value)}
+                className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              >
+                <option value="">Select account (optional)</option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name} - Rs. {Number(account.balance).toLocaleString()}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="mb-2 block text-sm font-semibold text-neutral-700">Notes</label>

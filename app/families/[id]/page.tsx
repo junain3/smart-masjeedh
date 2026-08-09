@@ -17,6 +17,7 @@ import {
   CheckCircle,
   Clock,
   X,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { QRCodeSVG } from "qrcode.react";
@@ -96,7 +97,7 @@ export default function FamilyDetailsPage() {
   const params = useParams();
   const familyId = Array.isArray(params?.id) ? params.id[0] : params?.id;
 
-  const { user: authUser, tenantContext } = useMockAuth();
+  const { user: authUser, tenantContext, resumeTick } = useMockAuth();
 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -161,6 +162,10 @@ export default function FamilyDetailsPage() {
   const [possibleDuplicates, setPossibleDuplicates] = useState<Member[]>([]);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [confirmedNoDuplicate, setConfirmedNoDuplicate] = useState(false);
+
+  // Per-operation loading states to avoid full-loading re-renders
+  const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
+  const [togglingServiceId, setTogglingServiceId] = useState<string | null>(null);
 
   const t = getTranslation(lang);
 
@@ -440,7 +445,7 @@ export default function FamilyDetailsPage() {
     };
 
     void checkAuth();
-  }, [authUser, tenantContext, familyId, router]);
+  }, [authUser, tenantContext, familyId, router, resumeTick]);
 
   useEffect(() => {
     // Recovery: Detect when app regains focus or becomes visible after idle session
@@ -467,18 +472,18 @@ export default function FamilyDetailsPage() {
     };
   }, [authUser]);
 
-  const fetchData = async (currentUser: any) => {
+  const fetchData = async (currentUser: any, options?: { silent?: boolean }) => {
     if (!supabase || !familyId || !currentUser || !tenantContext?.masjidId) {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
       return;
     }
 
-    // Don't set loading to true if we have cached data (keeps UI responsive)
+    // Don't set loading to true if we have cached data OR in silent mode (keeps UI responsive)
     const hasCachedData = !!localStorage.getItem(getFamilyCacheKey(tenantContext.masjidId, familyId));
-    if (!hasCachedData) {
+    if (!options?.silent && !hasCachedData) {
       setLoading(true);
     }
-    setErrorMessage("");
+    if (!options?.silent) setErrorMessage("");
 
     try {
       // Fetch all data in parallel using Promise.all for better performance
@@ -613,16 +618,18 @@ export default function FamilyDetailsPage() {
       }
     } catch (err: any) {
       console.error("Error fetching data:", err);
-      setErrorMessage(err?.message || "Failed to load family details.");
-      // Only clear state if we didn't have cached data
-      if (!hasCachedData) {
+      if (!options?.silent) {
+        setErrorMessage(err?.message || "Failed to load family details.");
+      }
+      // Only clear state if we didn't have cached data AND not silent
+      if (!options?.silent && !hasCachedData) {
         setFamily(null);
         setMembers([]);
         setPayments([]);
         setServices([]);
       }
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   };
 
@@ -718,6 +725,26 @@ export default function FamilyDetailsPage() {
       return;
     }
 
+    // === OPTIMISTIC SNAPSHOT ===
+    const paymentsSnapshot = [...payments];
+    // Determine optimistic status: super_admin / admin with approve permission get accepted immediately
+    const canAutoApprove = tenantContext?.role === 'super_admin'
+      || tenantContext?.role === 'co_admin'
+      || tenantContext?.permissions?.subscriptions_approve === true;
+    const tempId = `tmp_col_${Date.now()}`;
+    const optimisticPayment: Payment = {
+      id: tempId,
+      amount: amountNum,
+      status: canAutoApprove ? 'accepted' : 'pending',
+      date: collectionDate,
+      collected_by_user_id: tenantContext?.userId,
+      collected_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+
+    // === OPTIMISTIC UPDATE === Prepend payment to the local list
+    setPayments(prev => [optimisticPayment, ...prev]);
+
     setIsCollectionSubmitting(true);
     
     try {
@@ -747,6 +774,8 @@ export default function FamilyDetailsPage() {
       const result = await response.json();
 
       if (!response.ok) {
+        // === ROLLBACK ON HTTP ERROR ===
+        setPayments(paymentsSnapshot);
         console.error("Collection insert failed:", result);
         alert("Failed to add collection: " + (result.error || "Unknown error"));
       } else {
@@ -762,12 +791,15 @@ export default function FamilyDetailsPage() {
         // Close modal
         setIsCollectionModalOpen(false);
         
-        // Refresh data
-        await fetchData(user);
+        // === BACKGROUND SILENT REFRESH === Reconcile server IDs/timestamps
+        void fetchData(user, { silent: true });
         
-        alert("Collection added successfully!");
+        setSuccessMessage("Collection added successfully!");
+        setTimeout(() => setSuccessMessage(""), 3000);
       }
     } catch (error: any) {
+      // === ROLLBACK ON NETWORK/THROWN ERROR ===
+      setPayments(paymentsSnapshot);
       console.error('Collection error:', error);
       alert("Error: " + error.message);
     } finally {
@@ -791,6 +823,22 @@ export default function FamilyDetailsPage() {
       return;
     }
 
+    // === OPTIMISTIC SNAPSHOT ===
+    const servicesSnapshot = [...services];
+    const tempId = `tmp_svc_${Date.now()}`;
+    const recipientName = serviceTargetType === "whole_family"
+      ? "Whole Family"
+      : serviceRecipient.trim() || null;
+    const optimisticService: Service = {
+      id: tempId,
+      name: serviceName === "Other" ? serviceCustomName.trim() : serviceName.trim(),
+      date: serviceDate,
+      status: "Received",
+      recipient_name: recipientName,
+    };
+    // === OPTIMISTIC UPDATE === Prepend service
+    setServices(prev => [optimisticService, ...prev]);
+
     setIsServiceSubmitting(true);
 
     try {
@@ -798,7 +846,6 @@ export default function FamilyDetailsPage() {
       const INVALID_MASJID_ID = "d4a4c9e9-b48f-47fc-a9a6-6a23e0662ac1";
 
       // First, query masjids table directly to get a guaranteed valid masjid_id
-      console.log("Querying masjids table directly for first valid masjid");
       const { data: anyMasjid, error: anyMasjidError } = await supabase
         .from("masjids")
         .select("id")
@@ -809,7 +856,6 @@ export default function FamilyDetailsPage() {
         console.error("Error fetching first masjid:", anyMasjidError);
       } else if (anyMasjid?.id) {
         masjidId = anyMasjid.id;
-        console.log("Using guaranteed valid masjid_id from masjids table:", masjidId);
       }
 
       // If we couldn't get a masjid from the table, try user's session
@@ -819,7 +865,6 @@ export default function FamilyDetailsPage() {
           console.error("Error getting session:", sessionError);
         }
         if (session?.user) {
-          console.log("Fetching user_masjids for user:", session.user.id);
           const { data: userMasjidData, error: userMasjidError } = await supabase
             .from("user_masjids")
             .select("masjid_id")
@@ -830,18 +875,14 @@ export default function FamilyDetailsPage() {
           if (userMasjidError) {
             console.error("Error fetching user_masjids:", userMasjidError);
           } else if (userMasjidData?.masjid_id && userMasjidData.masjid_id !== INVALID_MASJID_ID) {
-            console.log("Validating user_masjid_id:", userMasjidData.masjid_id);
             const { data: masjidData, error: masjidError } = await supabase
               .from("masjids")
               .select("id")
               .eq("id", userMasjidData.masjid_id)
               .maybeSingle();
             
-            if (masjidError) {
-              console.error("Error validating user_masjid_id:", masjidError);
-            } else if (masjidData?.id) {
+            if (!masjidError && masjidData?.id) {
               masjidId = masjidData.id;
-              console.log("Using validated masjid_id from user_masjids:", masjidId);
             }
           }
         }
@@ -849,32 +890,20 @@ export default function FamilyDetailsPage() {
 
       // Only try tenantContext.masjidId as a last resort, and hard-filter the invalid ID
       if (!masjidId && tenantContext?.masjidId && tenantContext.masjidId !== INVALID_MASJID_ID) {
-        console.log("Attempting to validate tenantContext.masjidId:", tenantContext.masjidId);
         const { data: masjidData, error: masjidError } = await supabase
           .from("masjids")
           .select("id")
           .eq("id", tenantContext.masjidId)
           .maybeSingle();
         
-        if (masjidError) {
-          console.error("Error validating tenantContext.masjidId:", masjidError);
-        } else if (masjidData?.id) {
+        if (!masjidError && masjidData?.id) {
           masjidId = masjidData.id;
-          console.log("Using validated tenantContext.masjid_id:", masjidId);
-        } else {
-          console.log("tenantContext.masjidId does not exist in masjids table");
         }
       }
 
       if (!masjidId) {
         throw new Error("No valid masjid found in the database. Please contact administrator.");
       }
-
-      console.log("Final masjid_id to be used:", masjidId);
-
-      const recipientName = serviceTargetType === "whole_family" 
-        ? "Whole Family" 
-        : serviceRecipient.trim() || null;
 
       const { error } = await supabase
         .from("service_distributions")
@@ -891,7 +920,7 @@ export default function FamilyDetailsPage() {
         console.error("Service distribution insert error:", error);
         // Check if it's a foreign key error
         if (error.code === '23503' || error.message?.includes('foreign key')) {
-          alert(`Foreign key error: ${error.message || 'Invalid reference'}. Masjid ID: ${masjidId}, Family ID: ${familyId}`);
+          throw new Error(`Foreign key error: ${error.message || 'Invalid reference'}. Masjid ID: ${masjidId}, Family ID: ${familyId}`);
         } else {
           throw error;
         }
@@ -904,10 +933,15 @@ export default function FamilyDetailsPage() {
       setServiceRecipient("");
       setServiceDate(new Date().toISOString().split('T')[0]);
       setIsServiceModalOpen(false);
-      await fetchData(user);
+
+      // === BACKGROUND SILENT REFRESH ===
+      void fetchData(user, { silent: true });
+
       setSuccessMessage("Service added successfully!");
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (error: any) {
+      // === ROLLBACK ===
+      setServices(servicesSnapshot);
       console.error("ADD SERVICE Error:", error);
       alert(error.message || "Failed to add service");
     } finally {
@@ -934,6 +968,18 @@ export default function FamilyDetailsPage() {
     setSubmitting(true);
     setSuccessMessage("");
 
+    const educationValue = education === "Other" ? (educationOther || null) : (education || null);
+    const occupationValue = occupation === "Other" ? (occupationOther || null) : (occupation || null);
+    const healthValue = healthIssueType === "Other"
+      ? (healthIssueOther || healthDetails || null)
+      : (healthIssueType || healthDetails || null);
+    const ageValue = age ? parseInt(age, 10) : null;
+
+    // -------------- OPTIMISTIC UPDATE SNAPSHOT --------------
+    const membersSnapshot = [...members];
+    const allMembersSnapshot = [...allMasjidMembers];
+    const tempId = `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
     try {
       if (!user.id) {
         alert("User ID not found");
@@ -941,31 +987,56 @@ export default function FamilyDetailsPage() {
       }
 
       if (editingMember) {
+        // === OPTIMISTIC UPDATE (EDIT) ===
+        // Apply the change locally IMMEDIATELY so UI feels instant
+        const updatedMember: Member = {
+          ...editingMember,
+          name: fullName,
+          full_name: fullName,
+          relationship,
+          age: ageValue ?? 0,
+          gender,
+          dob,
+          nic,
+          phone,
+          civil_status: civilStatus,
+          education: educationValue ?? undefined,
+          occupation: occupationValue ?? undefined,
+          is_moulavi: isMoulavi,
+          is_new_muslim: isNewMuslim,
+          is_foreign_resident: isForeignResident,
+          foreign_country: foreignCountry || undefined,
+          foreign_contact: foreignContact || undefined,
+          has_special_needs: hasSpecialNeeds,
+          special_needs_details: specialNeedsDetails || undefined,
+          has_health_issue: hasHealthIssue,
+          health_details: healthValue ?? undefined,
+        };
+        setMembers(prev => prev.map(m => m.id === editingMember.id ? updatedMember : m));
+
         const { error } = await supabase
           .from("members")
           .update({
-            name: fullName,              // Keep for future compatibility
-            full_name: fullName,        // Add for database NOT NULL constraint
+            name: fullName,
+            full_name: fullName,
             relationship,
-            age: age ? parseInt(age, 10) : null,
+            age: ageValue,
             gender,
             dob,
             nic,
             phone,
             civil_status: civilStatus,
-            // New fields
-            education: education === "Other" ? (educationOther || null) : (education || null),
-            occupation: occupation === "Other" ? (occupationOther || null) : (occupation || null),
+            education: educationValue,
+            occupation: occupationValue,
             is_moulavi: isMoulavi,
             is_new_muslim: isNewMuslim,
-            // Person-specific fields
             is_foreign_resident: isForeignResident,
             foreign_country: foreignCountry || null,
             foreign_contact: foreignContact || null,
             has_special_needs: hasSpecialNeeds,
             special_needs_details: specialNeedsDetails || null,
             has_health_issue: hasHealthIssue,
-            health_details: healthIssueType === "Other" ? (healthIssueOther || healthDetails || null) : (healthIssueType || healthDetails || null),
+            health_details: healthValue,
           })
           .eq("id", editingMember.id)
           .eq("masjid_id", tenantContext.masjidId);
@@ -973,31 +1044,72 @@ export default function FamilyDetailsPage() {
         if (error) throw error;
         setSuccessMessage("Member details updated!");
       } else {
+        // === OPTIMISTIC UPDATE (ADD) ===
+        // Add the new member to the local list IMMEDIATELY with a temp id
+        const optimisticMember: Member = {
+          id: tempId,
+          family_id: familyId,
+          member_code: "",
+          name: fullName,
+          full_name: fullName,
+          relationship,
+          age: ageValue ?? 0,
+          gender,
+          dob,
+          nic,
+          phone,
+          civil_status: civilStatus,
+          status: "Active",
+          education: educationValue ?? undefined,
+          occupation: occupationValue ?? undefined,
+          is_moulavi: isMoulavi,
+          is_new_muslim: isNewMuslim,
+          is_foreign_resident: isForeignResident,
+          foreign_country: foreignCountry || undefined,
+          foreign_contact: foreignContact || undefined,
+          has_special_needs: hasSpecialNeeds,
+          special_needs_details: specialNeedsDetails || undefined,
+          has_health_issue: hasHealthIssue,
+          health_details: healthValue ?? undefined,
+        };
+        setMembers(prev => {
+          const next = [...prev, optimisticMember];
+          return next.sort((a, b) => getFamilyMemberSortRank(a) - getFamilyMemberSortRank(b));
+        });
+        // Also update allMasjidMembers for duplicate detection cache
+        setAllMasjidMembers(prev => [...prev, {
+          id: tempId,
+          name: fullName,
+          full_name: fullName,
+          nic,
+          phone,
+          dob,
+          masjid_id: tenantContext.masjidId,
+        } as Member]);
+
         const { error } = await supabase.from("members").insert([
           {
             family_id: familyId,
             name: fullName,
             full_name: fullName,
             relationship,
-            age: age ? parseInt(age, 10) : null,
+            age: ageValue,
             gender,
             dob,
             nic,
             phone,
             civil_status: civilStatus,
-            // New fields
-            education: education === "Other" ? (educationOther || null) : (education || null),
-            occupation: occupation === "Other" ? (occupationOther || null) : (occupation || null),
+            education: educationValue,
+            occupation: occupationValue,
             is_moulavi: isMoulavi,
             is_new_muslim: isNewMuslim,
-            // Person-specific fields
             is_foreign_resident: isForeignResident,
             foreign_country: foreignCountry || null,
             foreign_contact: foreignContact || null,
             has_special_needs: hasSpecialNeeds,
             special_needs_details: specialNeedsDetails || null,
             has_health_issue: hasHealthIssue,
-            health_details: healthIssueType === "Other" ? (healthIssueOther || healthDetails || null) : (healthIssueType || healthDetails || null),
+            health_details: healthValue,
             user_id: user.id,
             masjid_id: tenantContext.masjidId,
           },
@@ -1012,9 +1124,16 @@ export default function FamilyDetailsPage() {
       setPossibleDuplicates([]);
       setShowDuplicateWarning(false);
       setConfirmedNoDuplicate(false);
-      await fetchData(user);
+
+      // === BACKGROUND SILENT REFRESH === (reconcile server-generated ids/member_code without loading UI)
+      void fetchData(user, { silent: true });
+
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (error: any) {
+      // === ROLLBACK ON ERROR === Restore snapshot before mutation
+      setMembers(membersSnapshot);
+      setAllMasjidMembers(allMembersSnapshot);
+
       // Check for unique constraint violation
       if (error.code === '23505' || error.message?.includes('unique constraint')) {
         alert(`This NIC number is already registered for another member in this masjid.`);
@@ -1029,6 +1148,16 @@ export default function FamilyDetailsPage() {
   const deleteMember = async (memberId: string) => {
     if (!supabase || !tenantContext?.masjidId || !window.confirm(t.confirm_delete)) return;
 
+    // === OPTIMISTIC SNAPSHOT ===
+    const membersSnapshot = [...members];
+    const allMembersSnapshot = [...allMasjidMembers];
+    const targetMember = members.find(m => m.id === memberId);
+
+    // === OPTIMISTIC REMOVE === Immediate UI update
+    setMembers(prev => prev.filter(m => m.id !== memberId));
+    setAllMasjidMembers(prev => prev.filter(m => m.id !== memberId));
+    setDeletingMemberId(memberId); // Show per-row loading spinner
+
     try {
       const { error } = await supabase
         .from("members")
@@ -1037,22 +1166,39 @@ export default function FamilyDetailsPage() {
         .eq("masjid_id", tenantContext.masjidId);
 
       if (error) throw error;
-      await fetchData(user);
+
+      setSuccessMessage("Member deleted successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000);
+
+      // Background silent refresh to reconcile counts/cache
+      void fetchData(user, { silent: true });
     } catch (error: any) {
+      // === ROLLBACK === Re-insert the removed member
+      if (targetMember) {
+        setMembers(membersSnapshot);
+        setAllMasjidMembers(allMembersSnapshot);
+      }
       console.error("DELETE MEMBER Error:", error);
       alert(error.message);
+    } finally {
+      setDeletingMemberId(null);
     }
   };
 
   const toggleServiceStatus = async (serviceId: string) => {
     if (!supabase || !tenantContext?.masjidId) return;
 
+    const service = services.find((s) => s.id === serviceId);
+    if (!service) return;
+
+    const prevStatus = service.status;
+    const newStatus = prevStatus === "Received" ? "Pending" : "Received";
+
+    // === OPTIMISTIC UPDATE === Flip status immediately
+    setServices(prev => prev.map(s => s.id === serviceId ? { ...s, status: newStatus } : s));
+    setTogglingServiceId(serviceId);
+
     try {
-      const service = services.find((s) => s.id === serviceId);
-      if (!service) return;
-
-      const newStatus = service.status === "Received" ? "Pending" : "Received";
-
       const { error } = await supabase
         .from("service_distributions")
         .update({ status: newStatus })
@@ -1060,10 +1206,16 @@ export default function FamilyDetailsPage() {
         .eq("masjid_id", tenantContext.masjidId);
 
       if (error) throw error;
-      await fetchData(user);
+
+      // Silent background refresh
+      void fetchData(user, { silent: true });
     } catch (error: any) {
+      // === ROLLBACK === Restore previous status
+      setServices(prev => prev.map(s => s.id === serviceId ? { ...s, status: prevStatus } : s));
       console.error("TOGGLE SERVICE Error:", error);
       alert(error.message);
+    } finally {
+      setTogglingServiceId(null);
     }
   };
 
@@ -1479,15 +1631,22 @@ export default function FamilyDetailsPage() {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => openEditMember(member)}
-                      className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                      className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all disabled:opacity-50"
+                      disabled={deletingMemberId === member.id}
                     >
                       <Edit2 className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => deleteMember(member.id)}
-                      className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                      className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-60"
+                      disabled={deletingMemberId === member.id}
+                      title={deletingMemberId === member.id ? "Deleting..." : "Delete member"}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      {deletingMemberId === member.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -1663,12 +1822,16 @@ export default function FamilyDetailsPage() {
                       </div>
                       <button
                         onClick={() => toggleServiceStatus(service.id)}
-                        className={`px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all active:scale-95 ml-4 flex-shrink-0 ${
+                        disabled={togglingServiceId === service.id}
+                        className={`px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all active:scale-95 ml-4 flex-shrink-0 disabled:opacity-60 inline-flex items-center justify-center gap-1.5 min-w-[86px] ${
                           service.status === "Received"
                             ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
                             : "bg-amber-100 text-amber-600"
                         }`}
                       >
+                        {togglingServiceId === service.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : null}
                         {service.status === "Received" ? "Received" : "Pending"}
                       </button>
                     </div>

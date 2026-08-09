@@ -69,6 +69,7 @@ type Staff = {
   designation?: string | null;
   term_start?: string | null;
   term_end?: string | null;
+  pending_arrears?: number | null;
 };
 
 type UserRole = {
@@ -442,7 +443,7 @@ export default function StaffPage() {
 
       const { data: employeeRows, error: employeeError } = await supabase
         .from("employees")
-        .select("id, masjid_id, name, phone, role, monthly_salary, created_at, category, allowances, access_permissions, designation, term_start, term_end")
+        .select("id, masjid_id, name, phone, role, monthly_salary, created_at, category, allowances, access_permissions, designation, term_start, term_end, pending_arrears, advances_paid")
         .eq("masjid_id", ctx.masjidId)
         .order("created_at", { ascending: false });
 
@@ -464,6 +465,8 @@ export default function StaffPage() {
         designation: row.designation,
         term_start: row.term_start,
         term_end: row.term_end,
+        pending_arrears: Number(row.pending_arrears || 0),
+        advances_paid: Number(row.advances_paid || 0),
       }));
 
       setStaff(nextStaff);

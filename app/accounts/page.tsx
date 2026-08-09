@@ -24,6 +24,7 @@ import { useAppToast } from "@/components/ToastProvider";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { parsePermissions, hasModulePermission, isSuperAdmin } from "@/lib/permissions-utils";
 import { AppShell } from "@/components/AppShell";
+import { AddTransactionModal } from "@/components/accounts/AddTransactionModal";
 import RouteGuard from "@/components/RouteGuard";
 import { BrandLoadingScreen } from "@/components/BrandLoadingScreen";
 import { EmptyState } from "@/components/EmptyState";
@@ -65,6 +66,15 @@ type Family = {
   opening_balance?: number;
 };
 
+type Staff = {
+  id: string;
+  name: string;
+  role: string;
+  monthly_salary?: number | null;
+  allowances?: number | null;
+  category?: string | null;
+};
+
 type PendingAccountCollection = {
   id: string;
   family_id: string;
@@ -72,6 +82,13 @@ type PendingAccountCollection = {
   date: string;
   notes?: string | null;
   status: string;
+};
+
+type StaffBalance = {
+  pendingSalary: number;
+  totalDue: number;
+  advancesPaid?: number;
+  ledgerBalance?: number;
 };
 
 export default function AccountsPage() {
@@ -85,25 +102,28 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
   const [pendingAccountCollections, setPendingAccountCollections] = useState<PendingAccountCollection[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
   const [showReportOptions, setShowReportOptions] = useState(false);
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [type, setType] = useState<"income" | "expense" | "subscription">("income");
-  const [selectedFamilyId, setSelectedFamilyId] = useState("");
-  const [category, setCategory] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [submitting, setSubmitting] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingSalaryPayment, setPendingSalaryPayment] = useState<{
+    staffId: string;
+    staffName: string;
+    amount: number;
+    date: string;
+    category: string;
+  } | null>(null);
   const [allowed, setAllowed] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [lang, setLang] = useState<Language>("en");
-  const [familyBalance, setFamilyBalance] = useState<{ annualSubscription: number; totalDue: number } | null>(null);
   const [userNames, setUserNames] = useState<Record<string, string>>({});
+  const [selectedFamilyId, setSelectedFamilyId] = useState("");
 
   // Parse permissions and check access (no hooks here)
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
@@ -142,34 +162,6 @@ export default function AccountsPage() {
     const savedLang = localStorage.getItem("app_lang") as Language;
     if (savedLang) setLang(savedLang);
   }, []);
-
-  // Calculate family balance when family is selected for subscription type
-  useEffect(() => {
-    const calculateBalance = async () => {
-      if (type === "subscription" && selectedFamilyId && tenantContext?.masjidId) {
-        const family = families.find((f) => f.id === selectedFamilyId);
-        if (family) {
-          try {
-            const balanceData = await calculateFamilyBalance(
-              supabase,
-              selectedFamilyId,
-              tenantContext.masjidId,
-              family
-            );
-            setFamilyBalance(balanceData);
-            // Set default amount to total due
-            setAmount(String(balanceData.totalDue));
-          } catch (error) {
-            console.error("Error calculating family balance:", error);
-            setFamilyBalance(null);
-          }
-        }
-      } else {
-        setFamilyBalance(null);
-      }
-    };
-    calculateBalance();
-  }, [selectedFamilyId, type, families, tenantContext?.masjidId]);
   
   // Page-level access control (after all hooks)
   if (authLoading) return <BrandLoadingScreen />;
@@ -251,7 +243,7 @@ export default function AccountsPage() {
       }
 
       // Run queries in parallel instead of sequentially
-      const [transactionsResponse, familiesResponse, pendingCollectionsResponse] = await Promise.all([
+      const [transactionsResponse, familiesResponse, staffResponse, pendingCollectionsResponse] = await Promise.all([
         supabase
           .from("transactions")
           .select("id, type, amount, category, description, date, family_id, masjid_id, user_id, created_at")
@@ -262,6 +254,10 @@ export default function AccountsPage() {
           .select("id, family_code, head_name, subscription_amount, opening_balance")
           .eq("masjid_id", tenantContext.masjidId),
         supabase
+          .from("employees")
+          .select("id, name, role, monthly_salary, allowances, category")
+          .eq("masjid_id", tenantContext.masjidId),
+        supabase
           .from("subscription_collections")
           .select("id, family_id, amount, date, notes, status")
           .eq("masjid_id", tenantContext.masjidId)
@@ -270,10 +266,12 @@ export default function AccountsPage() {
 
       if (transactionsResponse.error) throw transactionsResponse.error;
       if (familiesResponse.error) throw familiesResponse.error;
+      if (staffResponse.error) throw staffResponse.error;
       if (pendingCollectionsResponse.error) throw pendingCollectionsResponse.error;
 
       const transactionsList = transactionsResponse.data || [];
       const familiesList = familiesResponse.data || [];
+      const staffList = staffResponse.data || [];
       const pendingCollectionsList = pendingCollectionsResponse.data || [];
 
       // Fetch user names for transactions
@@ -288,6 +286,7 @@ export default function AccountsPage() {
 
       setTransactions(transactionsList);
       setFamilies(familiesList);
+      setStaff(staffList);
       setPendingAccountCollections(
         ((pendingCollectionsList as PendingAccountCollection[]) || []).filter((c) =>
           isDirectAccountCollection(c.notes)
@@ -304,8 +303,15 @@ export default function AccountsPage() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(data: {
+    type: "income" | "expense" | "subscription";
+    amount: number;
+    description: string;
+    category: string;
+    date: string;
+    staffId?: string | null;
+    familyId?: string | null;
+  }) {
     if (!supabase || !user) return;
 
     setSubmitting(true);
@@ -328,14 +334,31 @@ export default function AccountsPage() {
       }
 
       const authUserId = session.user.id;
-      const amountNum = parseFloat(amount);
+      const amountNum = data.amount;
       if (!Number.isFinite(amountNum) || amountNum <= 0) {
         setErrorMessage("சரியான தொகை உள்ளிடவும்");
         setSubmitting(false);
         return;
       }
 
-      if (type === "subscription" && !selectedFamilyId) {
+      // Show confirmation modal for salary payments
+      if (data.type === "expense" && (data.category === "Salary" || data.category === "Advance Salary") && data.staffId) {
+        const selectedStaffMember = staff.find((s) => s.id === data.staffId);
+        if (selectedStaffMember) {
+          setPendingSalaryPayment({
+            staffId: data.staffId,
+            staffName: selectedStaffMember.name,
+            amount: amountNum,
+            date: data.date,
+            category: data.category,
+          });
+          setShowConfirmModal(true);
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      if (data.type === "subscription" && !data.familyId) {
         toast({
           kind: "error",
           title: "குடும்பம் தேவை",
@@ -345,17 +368,17 @@ export default function AccountsPage() {
         return;
       }
 
-      const selectedFamily = families.find((f) => f.id === selectedFamilyId);
-      const isSubscription = type === "subscription";
+      const selectedFamily = families.find((f) => f.id === data.familyId);
+      const isSubscription = data.type === "subscription";
 
       const finalDescription = isSubscription
         ? buildDirectSubscriptionDescription(
             selectedFamily?.family_code || "—",
             selectedFamily?.head_name || "—",
-            description
+            data.description
           )
-        : description;
-      const finalCategory = isSubscription ? "subscription" : category;
+        : data.description;
+      const finalCategory = isSubscription ? "subscription" : data.category;
 
       let addApiResult: { auto_approved?: boolean } | null = null;
 
@@ -365,10 +388,10 @@ export default function AccountsPage() {
           editingCollectionId,
           ctx.masjidId,
           {
-            familyId: selectedFamilyId,
+            familyId: data.familyId,
             amount: amountNum,
-            date,
-            notes: description.trim() || null,
+            date: data.date,
+            notes: data.description.trim() || null,
           }
         );
         if (updateError) throw updateError;
@@ -383,11 +406,11 @@ export default function AccountsPage() {
               : {}),
           },
           body: JSON.stringify({
-            family_id: selectedFamilyId,
+            family_id: data.familyId,
             collection_amount: amountNum,
-            notes: buildDirectAccountCollectionNotes(description.trim() || null),
+            notes: buildDirectAccountCollectionNotes(data.description.trim() || null),
             payment_method: "cash",
-            date,
+            date: data.date,
           }),
         });
 
@@ -407,9 +430,9 @@ export default function AccountsPage() {
           .update({
             amount: amountNum,
             description: finalDescription,
-            type: isSubscription ? "income" : type,
+            type: isSubscription ? "income" : data.type,
             category: finalCategory,
-            date,
+            date: data.date,
             masjid_id: ctx.masjidId,
             user_id: authUserId,
             family_id: null,
@@ -423,10 +446,10 @@ export default function AccountsPage() {
           const { error: syncError } = await syncCollectionForAccountTransaction(supabase, {
             masjidId: ctx.masjidId,
             userId: authUserId,
-            familyId: selectedFamilyId,
+            familyId: data.familyId,
             amount: amountNum,
-            date,
-            notes: description.trim() || null,
+            date: data.date,
+            notes: data.description.trim() || null,
             transactionId: editingTransaction.id,
           });
           if (syncError) throw syncError;
@@ -434,18 +457,58 @@ export default function AccountsPage() {
           await deleteCollectionForAccountTransaction(supabase, editingTransaction.id);
         }
       } else if (!isSubscription) {
+        // Create ledger entry for staff salary payments
+        let ledgerError = null;
+        if (data.type === "expense" && (data.category === "Salary" || data.category === "Advance Salary") && data.staffId) {
+          const { data: currentBalance } = await supabase
+            .from("staff_ledger")
+            .select("balance_after")
+            .eq("staff_id", data.staffId)
+            .eq("masjid_id", ctx.masjidId)
+            .order("transaction_date", { ascending: false })
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const previousBalance = currentBalance?.balance_after || 0;
+          const newBalance = previousBalance - amountNum;
+
+          const { error: ledgerInsertError } = await supabase
+            .from("staff_ledger")
+            .insert([
+              {
+                masjid_id: ctx.masjidId,
+                staff_id: data.staffId,
+                transaction_date: data.date,
+                transaction_type: "debit",
+                amount: amountNum,
+                description: `Payment via Accounts module`,
+                reference_type: data.category === "Advance Salary" ? "advance_payment" : "salary_payment",
+                reference_id: null,
+                balance_after: newBalance,
+                created_by: authUserId,
+              },
+            ]);
+
+          ledgerError = ledgerInsertError;
+          if (ledgerError) {
+            console.warn("Failed to create ledger entry:", ledgerError);
+          }
+        }
+
         const { error } = await supabase
           .from("transactions")
           .insert([
             {
               amount: amountNum,
               description: finalDescription,
-              type,
+              type: data.type,
               category: finalCategory,
-              date,
+              date: data.date,
               masjid_id: ctx.masjidId,
               user_id: authUserId,
               family_id: null,
+              staff_id: data.staffId || null,
             },
           ]);
 
@@ -454,7 +517,8 @@ export default function AccountsPage() {
 
       setIsModalOpen(false);
       const wasEditingPendingCollection = !!editingCollectionId;
-      resetForm();
+      setEditingTransaction(null);
+      setEditingCollectionId(null);
       await fetchData(user);
       if (isSubscription) {
         const autoApprovedNew = !editingCollectionId && addApiResult?.auto_approved === true;
@@ -480,26 +544,187 @@ export default function AccountsPage() {
     }
   }
 
-  const resetForm = () => {
-    setAmount("");
-    setDescription("");
-    setCategory("");
-    setSelectedFamilyId("");
-    setType("income");
-    setDate(new Date().toISOString().split("T")[0]);
-    setEditingTransaction(null);
-    setEditingCollectionId(null);
+  const confirmSalaryPayment = async () => {
+    if (!pendingSalaryPayment || !supabase || !user) return;
+
+    setSubmitting(true);
+    try {
+      const ctx = tenantContext || (await getTenantContext());
+      if (!ctx) throw new Error("Tenant context not available");
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error("Not authenticated");
+
+      const authUserId = session.user.id;
+      const isAdvanceSalary = pendingSalaryPayment.category === "Advance Salary";
+
+      // Record as expense in transactions
+      const { error: transactionError } = await supabase
+        .from("transactions")
+        .insert([
+          {
+            amount: pendingSalaryPayment.amount,
+            description: isAdvanceSalary 
+              ? `Advance salary for ${pendingSalaryPayment.staffName}`
+              : `Salary payment for ${pendingSalaryPayment.staffName}`,
+            type: "expense",
+            category: isAdvanceSalary ? "Advance Salary" : "Salary",
+            date: pendingSalaryPayment.date,
+            masjid_id: ctx.masjidId,
+            user_id: authUserId,
+            family_id: null,
+            staff_id: pendingSalaryPayment.staffId,
+          },
+        ]);
+
+      if (transactionError) throw transactionError;
+
+      if (isAdvanceSalary) {
+        // Use give_advance_salary RPC for advance payments
+        const { error: advanceError } = await supabase.rpc('give_advance_salary', {
+          p_masjid_id: ctx.masjidId,
+          p_staff_id: pendingSalaryPayment.staffId,
+          p_amount: pendingSalaryPayment.amount,
+          p_advance_date: pendingSalaryPayment.date,
+          p_notes: description.trim() || null,
+        });
+
+        if (advanceError) {
+          // If RPC doesn't exist, fall back to manual update
+          if (advanceError.code === '42883') {
+            const { data: currentStaff } = await supabase
+              .from("employees")
+              .select("advances_paid")
+              .eq("id", pendingSalaryPayment.staffId)
+              .eq("masjid_id", ctx.masjidId)
+              .single();
+            
+            const newAdvances = Number(currentStaff?.advances_paid || 0) + pendingSalaryPayment.amount;
+            
+            const { error: fallbackError } = await supabase
+              .from("employees")
+              .update({ advances_paid: newAdvances })
+              .eq("id", pendingSalaryPayment.staffId)
+              .eq("masjid_id", ctx.masjidId);
+            
+            if (fallbackError) throw fallbackError;
+          } else {
+            throw advanceError;
+          }
+        }
+      } else {
+        // Regular salary payment
+        // Record in salary_payments table
+        const { error: salaryError } = await supabase
+          .from("salary_payments")
+          .insert([
+            {
+              staff_id: pendingSalaryPayment.staffId,
+              masjid_id: ctx.masjidId,
+              amount: pendingSalaryPayment.amount,
+              salary_month: `${new Date(pendingSalaryPayment.date).toISOString().slice(0, 7)}-01`,
+              payment_date: pendingSalaryPayment.date,
+              notes: description.trim() || null,
+            },
+          ]);
+
+        if (salaryError) throw salaryError;
+
+        // Create ledger entry (debit for payment)
+        const { data: currentBalance } = await supabase
+          .from("staff_ledger")
+          .select("balance_after")
+          .eq("staff_id", pendingSalaryPayment.staffId)
+          .eq("masjid_id", ctx.masjidId)
+          .order("transaction_date", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const previousBalance = currentBalance?.balance_after || 0;
+        const newBalance = previousBalance - pendingSalaryPayment.amount;
+
+        const { error: ledgerError } = await supabase
+          .from("staff_ledger")
+          .insert([
+            {
+              masjid_id: ctx.masjidId,
+              staff_id: pendingSalaryPayment.staffId,
+              transaction_date: pendingSalaryPayment.date,
+              transaction_type: "debit",
+              amount: pendingSalaryPayment.amount,
+              description: `Salary payment via Accounts module`,
+              reference_type: "salary_payment",
+              reference_id: null,
+              balance_after: newBalance,
+              created_by: authUserId,
+            },
+          ]);
+
+        if (ledgerError) {
+          console.warn("Failed to create ledger entry:", ledgerError);
+        }
+
+        // Deduct from pending arrears using RPC
+        const { error: updateError } = await supabase.rpc('deduct_pending_arrears', {
+          p_staff_id: pendingSalaryPayment.staffId,
+          p_masjid_id: ctx.masjidId,
+          p_amount: pendingSalaryPayment.amount
+        });
+
+        // If RPC doesn't exist, fall back to direct update
+        if (updateError && updateError.code === '42883') {
+          const { data: currentStaff } = await supabase
+            .from("employees")
+            .select("pending_arrears")
+            .eq("id", pendingSalaryPayment.staffId)
+            .eq("masjid_id", ctx.masjidId)
+            .single();
+          
+          const newArrears = Math.max(0, Number(currentStaff?.pending_arrears || 0) - pendingSalaryPayment.amount);
+          
+          const { error: fallbackError } = await supabase
+            .from("employees")
+            .update({ pending_arrears: newArrears })
+            .eq("id", pendingSalaryPayment.staffId)
+            .eq("masjid_id", ctx.masjidId);
+          
+          if (fallbackError) throw fallbackError;
+        } else if (updateError) {
+          throw updateError;
+        }
+      }
+
+      setShowConfirmModal(false);
+      setPendingSalaryPayment(null);
+      setIsModalOpen(false);
+      setEditingTransaction(null);
+      setEditingCollectionId(null);
+      await fetchData(user);
+      
+      toast({
+        kind: "success",
+        title: isAdvanceSalary ? "Advance Salary Given" : "Salary Paid",
+        message: isAdvanceSalary
+          ? `Advance salary of Rs. ${pendingSalaryPayment.amount.toLocaleString()} recorded for ${pendingSalaryPayment.staffName}. Advances balance updated.`
+          : `Salary payment of Rs. ${pendingSalaryPayment.amount.toLocaleString()} recorded for ${pendingSalaryPayment.staffName}. Pending arrears updated.`,
+      });
+    } catch (err: any) {
+      console.error("Salary payment error:", err);
+      toast({
+        kind: "error",
+        title: "Payment Failed",
+        message: err.message || "Failed to process salary payment",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const openPendingCollectionEditor = (collection: PendingAccountCollection) => {
+    setSelectedFamilyId(collection.family_id);
     setEditingTransaction(null);
     setEditingCollectionId(collection.id);
-    setType("subscription");
-    setAmount(collection.amount.toString());
-    setDate(collection.date);
-    setSelectedFamilyId(collection.family_id);
-    setDescription(extractDirectAccountNote(collection.notes));
-    setCategory("");
     setIsModalOpen(true);
   };
 
@@ -788,7 +1013,8 @@ export default function AccountsPage() {
         <div className="flex gap-3">
           <button
             onClick={() => {
-              resetForm();
+              setEditingTransaction(null);
+              setEditingCollectionId(null);
               setIsModalOpen(true);
             }}
             className="flex-1 py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all flex items-center justify-center gap-2"
@@ -843,7 +1069,8 @@ export default function AccountsPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      resetForm();
+                      setEditingTransaction(null);
+                      setEditingCollectionId(null);
                       setIsModalOpen(true);
                     }}
                     className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-700"
@@ -1042,136 +1269,17 @@ export default function AccountsPage() {
         </div>
       </AppShell>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-black text-neutral-900">
-                {editingTransaction || editingCollectionId ? "Edit Transaction" : t.add_transaction}
-              </h2>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-2 hover:bg-neutral-50 rounded-3xl transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-2">{t.type}</label>
-                <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value as "income" | "expense" | "subscription")}
-                  className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="income">Income</option>
-                  <option value="expense">Expense</option>
-                  <option value="subscription">Subscription</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-2">{t.amount}</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-2">
-                  {t.description}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="Enter description"
-                />
-              </div>
-
-              {type === "income" || type === "expense" ? (
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-2">
-                    {t.category}
-                  </label>
-                  <input
-                    type="text"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="Enter category"
-                  />
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-2">
-                    {t.family}
-                  </label>
-                  <select
-                    value={selectedFamilyId}
-                    onChange={(e) => setSelectedFamilyId(e.target.value)}
-                    required
-                    className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="">குடும்பம் தேர்ந்தெடுக்கவும்</option>
-                    {families.map((family) => (
-                      <option key={family.id} value={family.id}>
-                        {family.family_code} - {family.head_name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-emerald-600 mt-1">
-                    குடும்பம் உடனே புதுப்பிக்கப்படும். Main account-க்கு pending batch அனுமதியில் சேரும் (கமிஷன் இல்லை).
-                  </p>
-                  
-                  {familyBalance && (
-                    <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-200 rounded-2xl p-4 mt-3">
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-emerald-700">வருடாந்த சந்தா</span>
-                          <span className="font-bold text-emerald-900">Rs. {familyBalance.annualSubscription}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-emerald-700">செலுத்த வேண்டிய பாக்கி</span>
-                          <span className="font-bold text-emerald-900">Rs. {familyBalance.totalDue}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-2">{t.date}</label>
-                <input
-                  type="date"
-                  required
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full px-4 py-3 border border-neutral-200 rounded-3xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-50 transition-all"
-              >
-                {submitting ? "Saving..." : editingTransaction || editingCollectionId ? "Update" : t.save}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      <AddTransactionModal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleSubmit}
+        submitting={submitting}
+        editingTransaction={editingTransaction}
+        editingCollectionId={editingCollectionId}
+        masjidId={tenantContext?.masjidId || ""}
+        staff={staff}
+        families={families}
+      />
 
       {isScannerOpen && (
         <QrScannerModal
@@ -1181,6 +1289,50 @@ export default function AccountsPage() {
           onClose={() => setIsScannerOpen(false)}
           onDecodedText={handleQrDecodedText}
         />
+      )}
+
+      {showConfirmModal && pendingSalaryPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <h3 className="text-xl font-black text-neutral-900 mb-4">Confirm Salary Payment</h3>
+            <div className="space-y-3 mb-6">
+              <div className="flex justify-between text-sm">
+                <span className="text-neutral-600">Staff Member:</span>
+                <span className="font-semibold text-neutral-900">{pendingSalaryPayment.staffName}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-neutral-600">Amount:</span>
+                <span className="font-bold text-emerald-700">Rs. {pendingSalaryPayment.amount.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-neutral-600">Payment Date:</span>
+                <span className="font-semibold text-neutral-900">{new Date(pendingSalaryPayment.date).toLocaleDateString()}</span>
+              </div>
+            </div>
+            <p className="text-sm text-neutral-600 mb-6">
+              This will record the salary payment as an expense in the Accounts module and update the staff's payment history.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  setPendingSalaryPayment(null);
+                }}
+                disabled={submitting}
+                className="flex-1 py-3 border-2 border-neutral-200 rounded-2xl font-bold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmSalaryPayment}
+                disabled={submitting}
+                className="flex-1 py-3 bg-emerald-600 rounded-2xl font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition-all"
+              >
+                {submitting ? "Processing..." : "Confirm Payment"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </RouteGuard>
   );

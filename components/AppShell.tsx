@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   LogOut,
+  AlertTriangle,
 } from "lucide-react";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { supabase } from "@/lib/supabase";
@@ -30,6 +31,7 @@ type NavItem = {
   action?: () => void;
 };
 
+
 export function AppShell(props: {
   title: string;
   children: React.ReactNode;
@@ -42,7 +44,7 @@ export function AppShell(props: {
   const router = useRouter();
 
   // ALL HOOKS AT TOP
-  const { requiresOnboarding, user, tenantContext } = useSupabaseAuth();
+  const { requiresOnboarding, user, tenantContext, loading } = useSupabaseAuth();
   const [lang, setLang] = useState<Language>("en");
   const [open, setOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -61,17 +63,11 @@ export function AppShell(props: {
     if (savedLang) setLang(savedLang);
   }, []);
 
-  // Use tenantContext from auth provider instead of loading separately
+  // Use tenantContext from auth provider
   useEffect(() => {
     if (tenantContext) {
-      setRole(tenantContext.role || null);
+      setRole(tenantContext.role as any);
       setPermissions((tenantContext.permissions || null) as any);
-      console.log("[AppShell] Tenant context updated:", {
-        role: tenantContext.role,
-        permissions: tenantContext.permissions,
-      });
-    } else {
-      console.log("[AppShell] No tenant context available");
     }
   }, [tenantContext]);
 
@@ -98,44 +94,26 @@ export function AppShell(props: {
 
   // Nav Items
   const items: NavItem[] = useMemo(() => {
-    // Handle loading state - return minimal navigation while auth context is loading
-    if (!role && !permissions) {
-      return [
-        { href: "/", label: t.dashboard, icon: <Home className="w-5 h-5" /> },
-      ];
-    }
-
     const isSuper = role === "super_admin" || role === "co_admin";
     const perms = permissions || {};
     
-    console.log("[AppShell] Navigation check:", { role, isSuper, permissions: perms });
-    
-    // Super admins get UNCONDITIONAL access to everything
-    const canAccounts = isSuper;
-    const canEvents = isSuper;
-    const canFamilies = isSuper;
-    const canSubCollect = isSuper;
-    const canSubApprove = isSuper;
-    const canStaff = isSuper;
-    const canAdmin = isSuper;
-
     const base: NavItem[] = [
       { href: "/", label: t.dashboard, icon: <Home className="w-5 h-5" /> },
     ];
 
-    if (canFamilies) {
+    if (isSuper || perms.families) {
       base.push({ href: "/families", label: t.families, icon: <Users className="w-5 h-5" /> });
     }
-    if (canAccounts) {
+    if (isSuper || perms.accounts) {
       base.push({ href: "/accounts", label: t.accounts, icon: <CreditCard className="w-5 h-5" /> });
     }
-    if (canEvents) {
+    if (isSuper || perms.events) {
       base.push({ href: "/events", label: t.events, icon: <Calendar className="w-5 h-5" /> });
     }
-    if (canSubCollect) {
+    if (isSuper || perms.subscriptions_collect) {
       base.push({ href: "/collections", label: t.collections, icon: <Wallet className="w-5 h-5" /> });
     }
-    if (canSubApprove) {
+    if (isSuper || perms.subscriptions_approve) {
       base.push({
         href: "/subscriptions/pending",
         label: t.pending_collections,
@@ -226,10 +204,12 @@ export function AppShell(props: {
                   </button>
                 );
               }
+
               // Render as link for navigation items
+              const href = it.href || "/";
               return (
-                <Link key={it.href} href={it.href} className={linkClass(it.href)}>
-                  <span className={pathname === it.href || (it.href !== "/" && pathname?.startsWith(it.href)) ? "text-emerald-200" : "text-emerald-300"}>{it.icon}</span>
+                <Link key={href + "-" + index} href={href} className={linkClass(href)}>
+                  <span className={pathname === href || (href !== "/" && pathname?.startsWith(href)) ? "text-emerald-200" : "text-emerald-300"}>{it.icon}</span>
                   <span className="truncate">{it.label}</span>
                 </Link>
               );
@@ -246,7 +226,10 @@ export function AppShell(props: {
                 <Menu className="w-6 h-6 text-emerald-700" />
               </button>
               {backHref && (
-                <Link href={backHref} className="hidden sm:inline-flex px-3 py-2 rounded-3xl bg-emerald-50 text-emerald-900 font-black text-xs uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-200">
+                <Link
+                  href={backHref}
+                  className="hidden sm:inline-flex px-3 py-2 rounded-3xl bg-emerald-50 text-emerald-900 font-black text-xs uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-200"
+                >
                   {t.back}
                 </Link>
               )}
@@ -265,15 +248,18 @@ export function AppShell(props: {
 
         <nav className="md:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-white/80 backdrop-blur-xl border border-emerald-200/50 shadow-2xl rounded-full px-2 py-2">
           <div className="flex items-center gap-2">
-            {items.filter((it) => it.href !== "/admin").slice(0, 5).map((it) => {
-              const active = pathname === it.href || (it.href !== "/" && pathname?.startsWith(it.href));
-              return (
-                <Link key={it.href} href={it.href} className={bottomItemClass(it.href)}>
-                  <span className={active ? "text-white" : "text-emerald-600"}>{it.icon}</span>
-                  <span className="text-[10px] font-black uppercase tracking-widest">{it.label}</span>
-                </Link>
-              );
-            })}
+            {items
+              .filter((it) => it.href && !it.action && it.href !== "/admin")
+              .slice(0, 5)
+              .map((it, i) => {
+                const href = it.href || "/";
+                return (
+                  <Link key={href + "-" + i} href={href} className={bottomItemClass(href)}>
+                    <span className={pathname === href || (href !== "/" && pathname?.startsWith(href)) ? "text-white" : "text-emerald-600"}>{it.icon}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">{it.label}</span>
+                  </Link>
+                );
+              })}
           </div>
         </nav>
       </div>

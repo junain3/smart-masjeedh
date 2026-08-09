@@ -246,30 +246,41 @@ serve(async (req: Request) => {
       
       // Check if this is textit.biz (uses GET with query params)
       if (sms_provider_url.includes('textit.biz')) {
-        // For textit.biz: format is https://textit.biz/sendmsg/?id=USER&pw=PASS&text=MESSAGE&to=PHONE
+        // For textit.biz: send both legacy and canonical parameter keys
+        // to maximise compatibility with any endpoint version.
+        // Canonical keys per user spec: phone, message, senderId
+        // Legacy keys also included: to, text, sender
         const url = new URL(sms_provider_url);
         // Split API key into id and pw (assume format "username:password")
         const [id, pw] = sms_api_key.split(':');
         
         url.searchParams.set('id', id || sms_api_key); // fallback if no colon
         url.searchParams.set('pw', pw || '');
+        // Message (both keys)
         url.searchParams.set('text', smsLog.message);
+        url.searchParams.set('message', smsLog.message);
+        // Phone (both keys)
         url.searchParams.set('to', smsLog.phone_number);
+        url.searchParams.set('phone', smsLog.phone_number);
+        // Sender ID (both keys)
         if (sms_sender_id) {
           url.searchParams.set('sender', sms_sender_id);
+          url.searchParams.set('senderId', sms_sender_id);
         }
         
-        console.log(`[send-sms] Textit.biz URL: ${url.toString()}`);
+        const redactedUrl = url.toString().replace(/(id=|pw=)[^&]*/g, '$1***');
+        console.log(`[send-sms] Textit.biz URL (redacted): ${redactedUrl}`);
         
         providerResponse = await fetch(url.toString(), {
           method: "GET"
         });
       } else {
-        // For other providers: use JSON POST
+        // For other providers: use JSON POST with canonical keys
+        // Canonical keys: phone, message, senderId (per user spec)
         const smsPayload = {
-          to: smsLog.phone_number,
+          phone: smsLog.phone_number,
           message: smsLog.message,
-          sender_id: sms_sender_id
+          senderId: sms_sender_id
         };
 
         providerResponse = await fetch(sms_provider_url, {

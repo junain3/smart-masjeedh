@@ -8,7 +8,7 @@ import Link from "next/link";
 
 import { useRouter } from "next/navigation";
 
-import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download, HomeIcon, User, Calendar, Briefcase, Settings, LogOut, MoreHorizontal, Shield, Wallet, HelpCircle, Menu, Filter, Users2, UserCheck, Heart, Globe, AlertCircle, Stethoscope } from "lucide-react";
+import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download, HomeIcon, User, Calendar, Briefcase, Settings, LogOut, MoreHorizontal, Shield, Wallet, HelpCircle, Menu, Filter, Users2, UserCheck, Heart, Globe, AlertCircle, Stethoscope, AlertTriangle } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 
@@ -150,6 +150,7 @@ const dummyFamilies: Family[] = [
 
 
 
+
 export default function HomePage() {
 
   const router = useRouter();
@@ -158,14 +159,17 @@ export default function HomePage() {
 
   const { toast } = useAppToast();
 
-
-
   // Parse permissions and check access
+  const parsedPermissions = useMemo(() => {
+    const raw = tenantContext?.permissions;
+    if (raw && typeof raw === "object" && Object.keys(raw).length > 0) {
+      return parsePermissions(JSON.stringify(raw));
+    }
+    return parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
+  }, [tenantContext?.permissions]);
 
-  const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
-
-  const userIsSuperAdmin = isSuperAdmin(parsedPermissions, tenantContext?.role);
-
+  const effectiveRole = tenantContext?.role;
+  const userIsSuperAdmin = isSuperAdmin(parsedPermissions, effectiveRole);
 
 
   // ALL HOOKS AT TOP - STRICT ORDER
@@ -192,11 +196,17 @@ export default function HomePage() {
 
   const [isLive, setIsLive] = useState(false);
 
-  const [familyCount, setFamilyCount] = useState<number | null>(null);
+  // Default counts to 0 instead of null so the dashboard always renders a number,
+  // never an empty skeleton card.
+  const [familyCount, setFamilyCount] = useState<number | null>(0);
 
-  const [memberCount, setMemberCount] = useState<number | null>(null);
+  const [memberCount, setMemberCount] = useState<number | null>(0);
 
-  const [masjid, setMasjid] = useState<{ name: string; logo_url: string; tagline: string } | null>(null);
+  const [masjid, setMasjid] = useState<{ name: string; logo_url: string; tagline: string } | null>({
+    name: "Masjid",
+    logo_url: "",
+    tagline: "Your Masjid",
+  });
 
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
@@ -462,7 +472,6 @@ export default function HomePage() {
 
 
   // ONLY ONE conditional render allowed: authLoading
-
   if (authLoading) {
     return <BrandLoadingScreen />;
   }

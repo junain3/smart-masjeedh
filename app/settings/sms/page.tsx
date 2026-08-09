@@ -202,6 +202,7 @@ export default function SmsSettingsPage() {
     
     try {
       // Step 1: Insert into sms_logs with status = "pending"
+      console.log("[handleSendSms] Step 1: inserting sms_logs (pending)");
       const { data: insertedLog, error: insertError } = await supabase
         .from('sms_logs')
         .insert({
@@ -214,30 +215,65 @@ export default function SmsSettingsPage() {
         .select('id')
         .single();
       
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error("[handleSendSms] Insert sms_logs failed:", insertError);
+        throw insertError;
+      }
+      console.log("[handleSendSms] Inserted log:", insertedLog?.id);
       
       // Step 2: Call Edge Function to process the log
+      console.log("[handleSendSms] Step 2: calling edge function");
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
       
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-sms`,
-        {
+      const functionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-sms`;
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      
+      console.log("[handleSendSms] Edge Function URL:", functionUrl);
+      console.log("[handleSendSms] Anon key present:", Boolean(anonKey));
+      console.log("[handleSendSms] Session token present:", Boolean(session.access_token));
+      
+      let response: Response;
+      try {
+        response = await fetch(functionUrl, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
+            'apikey': anonKey || '',
+            'x-client-info': 'supabase-js/2',
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             log_id: insertedLog.id
           })
-        }
-      );
+        });
+      } catch (fetchErr: any) {
+        // Network/CORS/DNS level errors (no HTTP response)
+        console.error("[handleSendSms] Network/CORS level fetch error:", fetchErr);
+        console.error("[handleSendSms] This usually means the Edge Function is not deployed, or CORS is blocked.");
+        console.error("[handleSendSms] Deploy with: npx supabase link --project-ref libwvftwbrewcxigwaol ; npx supabase functions deploy send-sms");
+        throw new Error(
+          `Network error calling Send-SMS Edge Function. ` +
+          `Please ensure the edge function is deployed. ` +
+          `Underlying: ${fetchErr?.message || String(fetchErr)}`
+        );
+      }
+      
+      console.log("[handleSendSms] Edge Function HTTP status:", response.status);
       
       if (!response.ok) {
-        const errorData = await response.json();
+        let errorData: any = {};
+        try {
+          errorData = await response.json();
+        } catch (parseErr) {
+          errorData.error = `HTTP ${response.status} - failed to parse error body`;
+        }
+        console.error("[handleSendSms] Edge Function returned error:", errorData);
         throw new Error(errorData.error || `Failed to send SMS (status: ${response.status})`);
       }
+      
+      const successData = await response.json().catch(() => ({}));
+      console.log("[handleSendSms] Edge Function success:", successData);
       
       // Success!
       setSendSuccess(true);

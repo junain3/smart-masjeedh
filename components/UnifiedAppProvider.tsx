@@ -66,16 +66,7 @@ export function UnifiedAppProvider({
   // --- Combined Loading State ---
   const loading = authLoading || tenantLoading;
 
-  // --- Timeout Wrapper Helper ---
-  const withTimeout = useCallback(async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
-      ),
-    ]);
-  }, []);
-
+  
   // --- Core Methods ---
 
   const signOut = useCallback(async () => {
@@ -116,69 +107,36 @@ export function UnifiedAppProvider({
     try {
       console.log("[loadTenantContext] Loading for userId:", userId);
       
-      // Load ALL matching rows from user_roles for current user (multi-masjid support)
-      let roleData: any[] | null = null;
-      let roleError: any = null;
-
-      // First try the RPC function which bypasses RLS
-      try {
-        const { data: rpcData, error: rpcError } = await supabase
-          .rpc('get_current_user_roles');
-        
-        if (!rpcError && rpcData && rpcData.length > 0) {
-          console.log("[loadTenantContext] RPC query succeeded:", rpcData);
-          roleData = rpcData;
-        } else {
-          console.log("[loadTenantContext] RPC query failed or returned empty, trying direct query:", rpcError);
-        }
-      } catch (rpcError) {
-        console.log("[loadTenantContext] RPC not available or failed, using direct query:", rpcError);
-      }
-
+      // Try the RPC function first which bypasses RLS
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc('get_current_user_roles');
+      
+      let roleData = rpcData;
+      
       // If RPC didn't work, try direct query with auth_user_id
-      if (!roleData) {
+      if (rpcError || !roleData || roleData.length === 0) {
+        console.log("[loadTenantContext] RPC failed, trying direct query:", rpcError);
         const { data: authData, error: authError } = await supabase
           .from("user_roles")
           .select("masjid_id, role, permissions, onboarding_completed, full_name")
           .eq("auth_user_id", userId);
 
-        console.log("[loadTenantContext] auth_user_id query result:", { 
-          data: authData, 
-          error: authError,
-          userId 
-        });
-
         if (!authError && authData && authData.length > 0) {
           roleData = authData;
         } else {
-          // Fall back to user_id if auth_user_id didn't find anything (for backwards compatibility)
-          console.log("[loadTenantContext] auth_user_id query failed, trying user_id");
-          const { data: userIdData, error: userIdError } = await supabase
+          // Fall back to user_id for backwards compatibility
+          const { data: userIdData } = await supabase
             .from("user_roles")
             .select("masjid_id, role, permissions, onboarding_completed, full_name")
             .eq("user_id", userId);
           
-          console.log("[loadTenantContext] user_id query result:", { 
-            data: userIdData, 
-            error: userIdError,
-            userId 
-          });
-          
           roleData = userIdData;
-          roleError = userIdError;
         }
       }
 
-      if (roleError && roleError.code !== "PGRST116") {
-        console.error("[loadTenantContext] Error loading tenant context:", roleError);
-        return;
-      }
-
       if (roleData && roleData.length > 0) {
-        // Set available masjids for future multi-masjid support
         setAvailableMasjids(roleData);
 
-        // Keep tenantContext set to first row for backward compatibility
         const firstRole = roleData[0];
         const { data: userData } = await supabase.auth.getUser();
         const newTenantContext: TenantContext = {
@@ -194,16 +152,12 @@ export function UnifiedAppProvider({
           userId,
           role: newTenantContext.role,
           masjidId: newTenantContext.masjidId,
-          permissions: newTenantContext.permissions,
         });
         
-        // Check if user has completed onboarding
-        // Super admins can bypass onboarding - only require it for other roles
         const isSuperAdmin = firstRole.role === "super_admin";
         const hasCompletedOnboarding = firstRole.onboarding_completed === true;
         setRequiresOnboarding(!isSuperAdmin && !hasCompletedOnboarding);
       } else {
-        // No roles found
         console.error("[UnifiedAppProvider] No user_roles found for user:", userId);
         setAvailableMasjids([]);
         setTenantContext(null);
@@ -267,20 +221,12 @@ export function UnifiedAppProvider({
     recoveryLockRef.current = true;
 
     try {
-      const { data: { session: recoveredSession } } = await withTimeout(
-        supabase.auth.getSession(),
-        15000,
-        "supabase.auth.getSession() in recoverSession"
-      );
+      const { data: { session: recoveredSession } } = await supabase.auth.getSession();
 
       if (recoveredSession?.user) {
         console.log("Recovering session...");
         setUser(recoveredSession.user);
-        await withTimeout(
-          loadTenantContext(recoveredSession.user.id),
-          15000,
-          "loadTenantContext() in recoverSession"
-        );
+        await loadTenantContext(recoveredSession.user.id);
         setAuthLoading(false);
         setResumeTick(prev => prev + 1);
       } else {
@@ -296,7 +242,7 @@ export function UnifiedAppProvider({
     } finally {
       recoveryLockRef.current = false;
     }
-  }, [loadTenantContext, withTimeout]);
+  }, [loadTenantContext]);
 
   // --- Auth Effect ---
   useEffect(() => {
@@ -309,11 +255,7 @@ export function UnifiedAppProvider({
     const initializeAuth = async () => {
       setAuthLoading(true);
       try {
-        const { data: { session: initialSession }, error } = await withTimeout(
-          supabase.auth.getSession(),
-          15000,
-          "supabase.auth.getSession()"
-        );
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
 
         if (!mounted) return;
 
@@ -329,11 +271,7 @@ export function UnifiedAppProvider({
         setUser(initialSession?.user ?? null);
 
         if (initialSession?.user) {
-          await withTimeout(
-            loadTenantContext(initialSession.user.id),
-            15000,
-            "loadTenantContext() in initializeAuth"
-          );
+          await loadTenantContext(initialSession.user.id);
         }
       } finally {
         if (mounted) {
@@ -364,11 +302,7 @@ export function UnifiedAppProvider({
         setUser(newSession.user);
         
         if (event === "SIGNED_IN") {
-          await withTimeout(
-            loadTenantContext(newSession.user.id),
-            15000,
-            "loadTenantContext() in onAuthStateChange"
-          );
+          await loadTenantContext(newSession.user.id);
         }
       }
     );
@@ -377,16 +311,18 @@ export function UnifiedAppProvider({
       mounted = false;
       authListener.subscription.unsubscribe();
     };
-  }, [loadTenantContext, withTimeout]);
+  }, [loadTenantContext]);
 
   // --- Recovery Session on Focus/Visibility ---
   useEffect(() => {
     const handleFocus = () => {
+      console.log("[UnifiedAppProvider] Window focused, recovering session...");
       void recoverSession();
     };
 
     const handleVisibility = () => {
       if (document.visibilityState !== "visible") return;
+      console.log("[UnifiedAppProvider] Document visible, recovering session...");
       void recoverSession();
     };
 
