@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -115,6 +115,31 @@ export default function FamilyDetailsPage() {
   const [collectionAmount, setCollectionAmount] = useState("");
   const [collectionDate, setCollectionDate] = useState(new Date().toISOString().split('T')[0]);
   const [collectionNote, setCollectionNote] = useState("");
+  const [isOptimisticUpdate, setIsOptimisticUpdate] = useState(false);
+
+  // === ROBUST OPTIMISTIC-UPDATE LOCK ===
+  // Use refs to avoid unnecessary re-renders and prevent race conditions
+  const optimisticUpdateCountRef = useRef(0);
+  const dataVersionRef = useRef(0);
+
+  const beginOptimisticUpdate = () => {
+    console.log("[Family] Optimistic mutation START - count:", optimisticUpdateCountRef.current + 1);
+    optimisticUpdateCountRef.current += 1;
+    dataVersionRef.current += 1;
+    setIsOptimisticUpdate(true);
+  };
+
+  const endOptimisticUpdate = () => {
+    const newCount = Math.max(0, optimisticUpdateCountRef.current - 1);
+    console.log("[Family] Optimistic mutation END - count:", newCount);
+    optimisticUpdateCountRef.current = newCount;
+    if (newCount === 0) {
+      setIsOptimisticUpdate(false);
+    }
+  };
+
+  const isOptimisticUpdateInProgress = () => optimisticUpdateCountRef.current > 0;
+
   const [isCollectionSubmitting, setIsCollectionSubmitting] = useState(false);
   const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
@@ -450,22 +475,26 @@ export default function FamilyDetailsPage() {
   useEffect(() => {
     // Recovery: Detect when app regains focus or becomes visible after idle session
     const handleFocus = async () => {
-      if (authUser) {
-        console.log("Recovering from stale session on focus");
+      if (authUser && !isOptimisticUpdateInProgress()) {
+        console.log("[Family] Focus refresh - no mutation in progress");
         await fetchData(authUser);
+      } else if (isOptimisticUpdateInProgress()) {
+        console.log("[Family] Focus refresh SKIPPED - mutation in progress");
       }
     };
 
     const handleVisibility = async () => {
-      if (document.visibilityState === "visible" && authUser) {
-        console.log("Recovering from stale session on visibility change");
+      if (document.visibilityState === "visible" && authUser && !isOptimisticUpdateInProgress()) {
+        console.log("[Family] Visibility refresh - no mutation in progress");
         await fetchData(authUser);
+      } else if (isOptimisticUpdateInProgress()) {
+        console.log("[Family] Visibility refresh SKIPPED - mutation in progress");
       }
     };
 
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVisibility);
-    
+
     return () => {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
@@ -473,6 +502,17 @@ export default function FamilyDetailsPage() {
   }, [authUser]);
 
   const fetchData = async (currentUser: any, options?: { silent?: boolean }) => {
+    // === REQUEST GENERATION MECHANISM ===
+    // Capture the data version at the start of the request
+    const requestVersion = dataVersionRef.current;
+    console.log("[Family] fetchData START - version:", requestVersion);
+
+    // Skip fetch if optimistic update is in progress to prevent overwriting state
+    if (isOptimisticUpdateInProgress()) {
+      console.log("[Family] fetchData SKIPPED - optimistic update in progress");
+      return;
+    }
+
     if (!supabase || !familyId || !currentUser || !tenantContext?.masjidId) {
       if (!options?.silent) setLoading(false);
       return;
@@ -546,6 +586,9 @@ export default function FamilyDetailsPage() {
       // Process members data
       const { data: membersData, error: membersError } = membersResult;
       if (membersError) throw membersError;
+      console.log("Initial fetch: fetched", membersData?.length || 0, "members from database");
+      console.log("Initial fetch: family.head_name", familyData?.head_name);
+      console.log("Initial fetch: raw members data", membersData?.map(m => ({ name: m.name, relationship: m.relationship, id: m.id })));
       const sortedMembers = [...(membersData || [])].sort((a, b) => {
         const rankDiff = getFamilyMemberSortRank(a) - getFamilyMemberSortRank(b);
         if (rankDiff !== 0) return rankDiff;
@@ -567,6 +610,23 @@ export default function FamilyDetailsPage() {
         // For others (rank 4), sort by name
         return (a.name || "").localeCompare(b.name || "");
       });
+      console.log("Initial fetch: sorted members count", sortedMembers.length);
+      console.log("Initial fetch: sorted members list", sortedMembers.map(m => ({ name: m.name, relationship: m.relationship, id: m.id, rank: getFamilyMemberSortRank(m) })));
+
+      // === STALE REQUEST REJECTION ===
+      // Check if a mutation happened while this request was in progress
+      if (requestVersion !== dataVersionRef.current) {
+        console.log("[Family] fetchData STALE - version changed from", requestVersion, "to", dataVersionRef.current);
+        return;
+      }
+
+      // Double-check no mutation is in progress before committing
+      if (isOptimisticUpdateInProgress()) {
+        console.log("[Family] fetchData STALE - mutation in progress at commit time");
+        return;
+      }
+
+      console.log("[Family] fetchData COMMIT - version:", requestVersion);
       setMembers(sortedMembers);
       localStorage.setItem(getMembersCacheKey(tenantContext.masjidId, familyId), JSON.stringify(sortedMembers));
 
@@ -634,6 +694,7 @@ export default function FamilyDetailsPage() {
   };
 
   const resetForm = () => {
+    console.log("[Family] resetForm called - editingMember BEFORE:", editingMember?.name || "null");
     setFullName("");
     setRelationship("மகன்");
     setDob("");
@@ -642,7 +703,7 @@ export default function FamilyDetailsPage() {
     setNic("");
     setPhone(family?.phone || "");
     setCivilStatus("");
-    
+
     // Reset new fields
     setEducation("");
     setEducationOther("");
@@ -650,7 +711,7 @@ export default function FamilyDetailsPage() {
     setOccupationOther("");
     setIsMoulavi(false);
     setIsNewMuslim(false);
-    
+
     // Reset person-specific fields
     setIsForeignResident(false);
     setForeignCountry("");
@@ -661,11 +722,16 @@ export default function FamilyDetailsPage() {
     setHealthIssueType("");
     setHealthIssueOther("");
     setHealthDetails("");
-    
+
     // Reset duplicate detection state
     setPossibleDuplicates([]);
     setShowDuplicateWarning(false);
     setConfirmedNoDuplicate(false);
+
+    // CRITICAL: Clear editingMember to ensure Add Member creates a new record instead of updating
+    setEditingMember(null);
+
+    console.log("[Family] resetForm - editingMember AFTER (should be null):", editingMember?.name || "null");
   };
 
   const openEditMember = (member: Member) => {
@@ -951,10 +1017,21 @@ export default function FamilyDetailsPage() {
 
   const addMember = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("=== addMember START ===");
+    console.log("[Family] editingMember:", editingMember ? editingMember.name : "null (adding new member)");
+    console.log("[Family] editingMember ID:", editingMember?.id || "null");
+    console.log("[Family] current members count:", members.length);
+    console.log("[Family] members BEFORE add:", members.map(m => ({ name: m.name, relationship: m.relationship, id: m.id, family_id: m.family_id })));
+    console.log("[Family] familyId:", familyId);
+    console.log("[Family] masjidId:", tenantContext?.masjidId);
 
     if (!supabase || !familyId || !user || !tenantContext?.masjidId) {
+      console.log("addMember: missing required data");
       return;
     }
+
+    // === BEGIN OPTIMISTIC MUTATION ===
+    beginOptimisticUpdate();
 
     // Check for duplicates first
     if (!confirmedNoDuplicate) {
@@ -1043,6 +1120,9 @@ export default function FamilyDetailsPage() {
 
         if (error) throw error;
         setSuccessMessage("Member details updated!");
+
+        // === END OPTIMISTIC MUTATION ===
+        endOptimisticUpdate();
       } else {
         // === OPTIMISTIC UPDATE (ADD) ===
         // Add the new member to the local list IMMEDIATELY with a temp id
@@ -1072,8 +1152,13 @@ export default function FamilyDetailsPage() {
           has_health_issue: hasHealthIssue,
           health_details: healthValue ?? undefined,
         };
+        console.log("Optimistic update: current members count before add", members.length);
+        console.log("Optimistic update: current members list before add", members.map(m => ({ name: m.name, relationship: m.relationship, id: m.id })));
+        console.log("Optimistic update: adding member", optimisticMember.name, "with relationship", optimisticMember.relationship);
         setMembers(prev => {
           const next = [...prev, optimisticMember];
+          console.log("Optimistic update: members count after add", next.length);
+          console.log("Optimistic update: members list after add", next.map(m => ({ name: m.name, relationship: m.relationship, id: m.id })));
           return next.sort((a, b) => getFamilyMemberSortRank(a) - getFamilyMemberSortRank(b));
         });
         // Also update allMasjidMembers for duplicate detection cache
@@ -1126,13 +1211,64 @@ export default function FamilyDetailsPage() {
       setConfirmedNoDuplicate(false);
 
       // === BACKGROUND SILENT REFRESH === (reconcile server-generated ids/member_code without loading UI)
-      void fetchData(user, { silent: true });
+      // Only refresh members data to avoid overwriting other state and improve performance
+      setTimeout(async () => {
+        console.log("[Family] Background refresh START - familyId:", familyId, "masjidId:", tenantContext?.masjidId);
+        try {
+          const { data: membersData, error: fetchError } = await supabase
+            .from("members")
+            .select("id, family_id, member_code, name, full_name, relationship, age, gender, dob, nic, phone, civil_status, status, education, occupation, is_moulavi, is_new_muslim, is_foreign_resident, foreign_country, foreign_contact, has_special_needs, special_needs_details, has_health_issue, health_details")
+            .eq("family_id", familyId)
+            .eq("masjid_id", tenantContext.masjidId);
+
+          if (fetchError) {
+            console.error("[Family] Background refresh ERROR:", fetchError);
+          }
+
+          if (membersData) {
+            console.log("[Family] Background refresh: fetched", membersData.length, "members from database");
+            console.log("[Family] Background refresh: member details", membersData.map(m => ({ name: m.name, relationship: m.relationship, id: m.id, family_id: m.family_id })));
+            const sortedMembers = [...membersData].sort((a, b) => {
+              const rankDiff = getFamilyMemberSortRank(a) - getFamilyMemberSortRank(b);
+              if (rankDiff !== 0) return rankDiff;
+
+              const aIsChild = getFamilyMemberSortRank(a) === 2;
+              const bIsChild = getFamilyMemberSortRank(b) === 2;
+              if (aIsChild && bIsChild) {
+                return Number(b.age || 0) - Number(a.age || 0);
+              }
+
+              const aIsDependent = getFamilyMemberSortRank(a) === 3;
+              const bIsDependent = getFamilyMemberSortRank(b) === 3;
+              if (aIsDependent && bIsDependent) {
+                return Number(a.age || 0) - Number(b.age || 0);
+              }
+
+              return (a.name || "").localeCompare(b.name || "");
+            });
+            console.log("[Family] Background refresh: sorted members count", sortedMembers.length);
+            console.log("[Family] Background refresh: setting members state with", sortedMembers.length, "members");
+            setMembers(sortedMembers);
+            localStorage.setItem(getMembersCacheKey(tenantContext.masjidId, familyId), JSON.stringify(sortedMembers));
+          } else {
+            console.log("[Family] Background refresh: NO data returned from database");
+          }
+        } catch (error) {
+          console.error("[Family] Background refresh EXCEPTION:", error);
+        } finally {
+          // === END OPTIMISTIC MUTATION ===
+          endOptimisticUpdate();
+        }
+      }, 1000);
 
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (error: any) {
       // === ROLLBACK ON ERROR === Restore snapshot before mutation
       setMembers(membersSnapshot);
       setAllMasjidMembers(allMembersSnapshot);
+
+      // === END OPTIMISTIC MUTATION ===
+      endOptimisticUpdate();
 
       // Check for unique constraint violation
       if (error.code === '23505' || error.message?.includes('unique constraint')) {
@@ -1147,6 +1283,9 @@ export default function FamilyDetailsPage() {
 
   const deleteMember = async (memberId: string) => {
     if (!supabase || !tenantContext?.masjidId || !window.confirm(t.confirm_delete)) return;
+
+    // === BEGIN OPTIMISTIC MUTATION ===
+    beginOptimisticUpdate();
 
     // === OPTIMISTIC SNAPSHOT ===
     const membersSnapshot = [...members];
@@ -1182,14 +1321,22 @@ export default function FamilyDetailsPage() {
       alert(error.message);
     } finally {
       setDeletingMemberId(null);
+      // === END OPTIMISTIC MUTATION ===
+      endOptimisticUpdate();
     }
   };
 
   const toggleServiceStatus = async (serviceId: string) => {
     if (!supabase || !tenantContext?.masjidId) return;
 
+    // === BEGIN OPTIMISTIC MUTATION ===
+    beginOptimisticUpdate();
+
     const service = services.find((s) => s.id === serviceId);
-    if (!service) return;
+    if (!service) {
+      endOptimisticUpdate();
+      return;
+    }
 
     const prevStatus = service.status;
     const newStatus = prevStatus === "Received" ? "Pending" : "Received";
@@ -1216,6 +1363,8 @@ export default function FamilyDetailsPage() {
       alert(error.message);
     } finally {
       setTogglingServiceId(null);
+      // === END OPTIMISTIC MUTATION ===
+      endOptimisticUpdate();
     }
   };
 

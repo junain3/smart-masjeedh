@@ -491,6 +491,30 @@ export default function FamiliesPage() {
       }
 
       if (editingFamily) {
+        // Optimistic update: Update local state immediately
+        const updatedFamily: Family = {
+          ...editingFamily,
+          family_code: familyCode,
+          head_name: headName,
+          address,
+          phone,
+          subscription_amount: parseFloat(subscriptionAmount) || 0,
+          opening_balance: parseFloat(openingBalance) || 0,
+          is_widow_head: isWidowHead,
+          house_type: houseType || undefined,
+          has_toilet: hasToilet,
+          special_needs_details: specialNeedsDetails || undefined,
+          foreign_members_details: foreignMembersDetails || undefined,
+          health_details: healthDetails || undefined,
+          has_car: hasCar,
+          has_three_wheeler: hasThreeWheeler,
+          has_van: hasVan,
+          has_lorry: hasLorry,
+          has_tractor: hasTractor,
+          extra_notes: extraNotes || undefined
+        };
+        setFamilies(prev => prev.map(f => f.id === editingFamily.id ? updatedFamily : f));
+
         // Update existing
         const { error } = await supabase
           .from("families")
@@ -524,7 +548,11 @@ export default function FamiliesPage() {
         // Close form and reset
         setIsOpen(false);
         resetForm();
-        fetchFamilies();
+        
+        // Background refresh to ensure data consistency (non-blocking)
+        setTimeout(() => {
+          void fetchFamilies();
+        }, 500);
       } else {
         let newFamilyId: string;
         let assignedCode: string;
@@ -634,8 +662,34 @@ export default function FamiliesPage() {
         setIsOpen(false);
         resetForm();
         
-        // Refresh the families list
-        await fetchFamilies();
+        // Optimistic update: Add new family to local state immediately
+        const newFamily: Family = {
+          id: newFamilyId,
+          family_code: assignedCode,
+          head_name: headName,
+          address,
+          phone,
+          subscription_amount: parseFloat(subscriptionAmount) || 0,
+          opening_balance: parseFloat(openingBalance) || 0,
+          is_widow_head: isWidowHead,
+          house_type: houseType || undefined,
+          has_toilet: hasToilet,
+          special_needs_details: specialNeedsDetails || undefined,
+          foreign_members_details: foreignMembersDetails || undefined,
+          health_details: healthDetails || undefined,
+          has_car: hasCar,
+          has_three_wheeler: hasThreeWheeler,
+          has_van: hasVan,
+          has_lorry: hasLorry,
+          has_tractor: hasTractor,
+          extra_notes: extraNotes || undefined
+        };
+        setFamilies(prev => sortFamiliesByCode([...prev, newFamily]) as Family[]);
+        
+        // Background refresh to ensure data consistency (non-blocking)
+        setTimeout(() => {
+          void fetchFamilies();
+        }, 500);
         
         // Then redirect
         await router.push(`/families/${newFamilyId}`);
