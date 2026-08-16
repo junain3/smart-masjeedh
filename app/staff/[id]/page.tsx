@@ -82,6 +82,7 @@ export default function StaffDetailPage() {
   const [postingCredit, setPostingCredit] = useState(false);
   const [accounts, setAccounts] = useState<Array<{ id: string; name: string; balance: number }>>([]);
   const [viewState, setViewState] = useState<ViewState>("loading");
+  const [hasDuplicatePayment, setHasDuplicatePayment] = useState(false);
 
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
   const userIsSuperAdmin = isSuperAdmin(parsedPermissions, tenantContext?.role);
@@ -308,13 +309,16 @@ export default function StaffDetailPage() {
         .eq("staff_id", staff.id)
         .eq("masjid_id", ctx.masjidId)
         .eq("salary_month", `${input.salaryMonth}-01`)
-        .single();
+        .maybeSingle();
 
-      if (existingPayment) {
+      // If duplicate exists and override is not set, show warning and return
+      if (existingPayment && !input.override) {
+        setHasDuplicatePayment(true);
+        setPayingSalary(false);
         toast({
-          kind: "error",
-          title: "Duplicate Payment",
-          message: `Salary for ${input.salaryMonth} has already been paid to ${staff.name}.`,
+          kind: "warning",
+          title: "Duplicate Payment Warning",
+          message: `Salary for ${input.salaryMonth} has already been paid. Please confirm if you want to proceed with an additional payment.`,
         });
         return;
       }
@@ -1065,12 +1069,16 @@ export default function StaffDetailPage() {
 
       <PaySalaryModal
         open={isPayModalOpen}
-        onClose={() => setIsPayModalOpen(false)}
+        onClose={() => {
+          setIsPayModalOpen(false);
+          setHasDuplicatePayment(false);
+        }}
         onSubmit={handlePaySalary}
         submitting={payingSalary}
         defaultAmount={staff.monthly_salary}
         currentBalance={ledgerEntries[0]?.balance_after || 0}
         accounts={accounts}
+        hasDuplicatePayment={hasDuplicatePayment}
       />
 
       <AdvanceSalaryModal
