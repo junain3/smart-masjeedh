@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SmartMasjeedh</string>
+    <string name="title_activity_main">SmartMasjeedh</string>
+    <string name="package_name">com.smartmasjeedh.app</string>
+    <string name="custom_url_scheme">com.smartmasjeedh.app</string>
+</resources>

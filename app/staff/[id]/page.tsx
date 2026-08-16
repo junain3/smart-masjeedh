@@ -388,7 +388,6 @@ export default function StaffDetailPage() {
             reference_type: "salary_payment",
             reference_id: salaryPaymentData.id,
             balance_after: newBalance,
-            created_by: authUserId,
           },
         ]);
 
@@ -581,7 +580,6 @@ export default function StaffDetailPage() {
             reference_type: "advance_payment",
             reference_id: null,
             balance_after: newBalance,
-            created_by: authUserId,
           },
         ]);
 
@@ -674,7 +672,6 @@ export default function StaffDetailPage() {
             reference_type: "monthly_salary_credit",
             reference_id: null,
             balance_after: newBalance,
-            created_by: authUserId,
           },
         ]);
 
@@ -773,7 +770,6 @@ export default function StaffDetailPage() {
               reference_type: "custom_credit",
               reference_id: null,
               balance_after: newBalance,
-              created_by: authUserId,
             },
           ]);
 

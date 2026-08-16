@@ -486,7 +486,6 @@ export default function AccountsPage() {
                 reference_type: data.category === "Advance Salary" ? "advance_payment" : "salary_payment",
                 reference_id: null,
                 balance_after: newBalance,
-                created_by: authUserId,
               },
             ]);
 
@@ -657,7 +656,6 @@ export default function AccountsPage() {
               reference_type: "salary_payment",
               reference_id: null,
               balance_after: newBalance,
-              created_by: authUserId,
             },
           ]);
 

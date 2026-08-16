@@ -40,6 +40,7 @@ type Member = {
   family_id: string;
   member_code: string;
   name: string;
+  full_name?: string;
   relationship: string;
   age: number;
   gender: string;
@@ -61,6 +62,17 @@ type Member = {
   special_needs_details?: string;
   has_health_issue?: boolean;
   health_details?: string;
+};
+
+// Simplified type for all masjid members (subset of Member for duplicate detection)
+type AllMasjidMember = {
+  id: string;
+  name: string;
+  full_name?: string;
+  nic: string;
+  phone: string;
+  dob: string;
+  masjid_id: string;
 };
 
 type Family = {
@@ -161,7 +173,7 @@ export default function FamilyDetailsPage() {
   const [phone, setPhone] = useState("");
   const [civilStatus, setCivilStatus] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [allMasjidMembers, setAllMasjidMembers] = useState<Member[]>([]);
+  const [allMasjidMembers, setAllMasjidMembers] = useState<AllMasjidMember[]>([]);
   
   // New fields for enhanced data collection
   const [education, setEducation] = useState("");
@@ -2580,7 +2592,7 @@ export default function FamilyDetailsPage() {
                       setServiceRecipientMemberId(e.target.value);
                       const selectedMember = members.find(m => m.id === e.target.value);
                       if (selectedMember) {
-                        setServiceRecipient(`${selectedMember.relationship} - ${selectedMember.full_name}`);
+                        setServiceRecipient(`${selectedMember.relationship} - ${selectedMember.full_name || selectedMember.name}`);
                       }
                     }}
                     className="w-full px-4 py-3 bg-white border border-amber-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
@@ -2588,7 +2600,7 @@ export default function FamilyDetailsPage() {
                     <option value="">Select a member</option>
                     {members.map((member) => (
                       <option key={member.id} value={member.id}>
-                        {member.relationship} - {member.full_name}
+                        {member.relationship} - {member.full_name || member.name}
                       </option>
                     ))}
                   </select>
