@@ -734,7 +734,7 @@ export default function StaffDetailPage() {
         p_masjid_id: ctx.masjidId,
         p_staff_id: staff.id,
         p_amount: input.amount,
-        p_credit_type: input.creditType,
+        p_credit_type: input.creditType.toLowerCase(),
         p_description: input.description,
         p_credit_date: input.creditDate,
         p_notes: input.notes || null
@@ -766,7 +766,7 @@ export default function StaffDetailPage() {
               transaction_date: input.creditDate,
               transaction_type: "credit",
               amount: input.amount,
-              description: `${input.description} (${input.creditType})`,
+              description: `${input.description} (${input.creditType.toLowerCase()})`,
               reference_type: "custom_credit",
               reference_id: null,
               balance_after: newBalance,
