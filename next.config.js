@@ -3,7 +3,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   dest: 'public',
   register: true,
   skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
+  disable: process.env.NODE_ENV === 'development' || process.env.DISABLE_PWA === 'true',
   icon: false,
 });
 
@@ -14,8 +14,8 @@ const nextConfig = withPWA({
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Explicitly disable static export
-  output: undefined,
+  // Remove static export - use server-side rendering for dynamic routes
+  // output: 'export',
 });
 
 module.exports = nextConfig;

@@ -3,14 +3,15 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.smartmasjeedh.app',
   appName: 'SmartMasjeedh',
-  webDir: 'public',
+  webDir: '.next',
   server: {
-    // For development, use Next.js dev server
-    url: 'http://localhost:3000',
-    cleartext: true
+    // Production Vercel URL
+    url: 'https://smart-masjeedh.vercel.app',
+    cleartext: false,
+    androidScheme: 'https'
   },
   android: {
-    // Android-specific configuration
+    allowMixedContent: false
   }
 };
 

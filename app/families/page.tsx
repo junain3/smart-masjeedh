@@ -95,6 +95,7 @@ export default function FamiliesPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [families, setFamilies] = useState<Family[]>([]);
   const [isFetching, setIsFetching] = useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [paymentCollections, setPaymentCollections] = useState<any[]>([]);
   const [editingFamily, setEditingFamily] = useState<Family | null>(null);
   const [isPdfOptionsOpen, setIsPdfOptionsOpen] = useState(false);
@@ -265,17 +266,25 @@ export default function FamiliesPage() {
     const cachedFamilies = localStorage.getItem(getCacheKey(tenantContext.masjidId));
     const cachedPayments = localStorage.getItem(getPaymentsCacheKey(tenantContext.masjidId));
     const cachedMembers = localStorage.getItem(getMembersCacheKey(tenantContext.masjidId));
-    
+
+    let hasCachedData = false;
+
     if (cachedFamilies) {
       const parsedFamilies = JSON.parse(cachedFamilies);
       setFamilies(parsedFamilies);
       setIsLive(true);
+      hasCachedData = true;
     }
     if (cachedPayments) {
       setPaymentCollections(JSON.parse(cachedPayments));
     }
     if (cachedMembers) {
       setAllMasjidMembers(JSON.parse(cachedMembers));
+    }
+
+    // If we have cached data, mark initial load as complete immediately
+    if (hasCachedData) {
+      setInitialLoadComplete(true);
     }
 
     // Revalidate in background
@@ -357,6 +366,7 @@ export default function FamiliesPage() {
 
       if (!tenantContext?.masjidId) {
         setIsFetching(false);
+        setInitialLoadComplete(true);
         return;
       }
 
@@ -366,6 +376,7 @@ export default function FamiliesPage() {
       if (!canMembers) {
         setFamilies([]);
         setIsLive(false);
+        setInitialLoadComplete(true);
         return;
       }
 
@@ -424,6 +435,7 @@ export default function FamiliesPage() {
       setErrorMessage("உண்மையான தரவுகளைப் பெறுவதில் சிக்கல்.");
     } finally {
       setIsFetching(false);
+      setInitialLoadComplete(true);
     }
   }
 
@@ -1322,7 +1334,21 @@ export default function FamiliesPage() {
       {/* Families List */}
       <section className="flex-1 px-4 overflow-y-auto pb-6">
         <div className="space-y-3 w-full">
-          {!isFetching && filteredFamilies.length === 0 ? (
+          {isFetching ? (
+            <div className="py-20 text-center flex flex-col items-center gap-4">
+              <div className="p-6 bg-slate-100 rounded-full text-slate-300">
+                <RefreshCw className="h-12 w-12 animate-spin" />
+              </div>
+              <p className="text-slate-500 text-sm">Loading families...</p>
+            </div>
+          ) : !initialLoadComplete ? (
+            <div className="py-20 text-center flex flex-col items-center gap-4">
+              <div className="p-6 bg-slate-100 rounded-full text-slate-300">
+                <RefreshCw className="h-12 w-12 animate-spin" />
+              </div>
+              <p className="text-slate-500 text-sm">Loading families...</p>
+            </div>
+          ) : filteredFamilies.length === 0 ? (
             <div className="py-20 text-center flex flex-col items-center gap-4">
               <div className="p-6 bg-slate-100 rounded-full text-slate-300">
                 <Users className="h-12 w-12" />

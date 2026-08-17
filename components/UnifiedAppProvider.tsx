@@ -226,7 +226,12 @@ export function UnifiedAppProvider({
       if (recoveredSession?.user) {
         console.log("Recovering session...");
         setUser(recoveredSession.user);
-        await loadTenantContext(recoveredSession.user.id);
+        try {
+          await loadTenantContext(recoveredSession.user.id);
+        } catch (tenantError) {
+          console.error("Recover session: Failed to load tenant context:", tenantError);
+          // Don't let tenant loading failure block session recovery
+        }
         setAuthLoading(false);
         setResumeTick(prev => prev + 1);
       } else {
@@ -326,12 +331,18 @@ export function UnifiedAppProvider({
       void recoverSession();
     };
 
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibility);
-    
+    // Only add these listeners if NOT in Capacitor (to avoid duplicate session recovery)
+    const isCapacitor = (window as any).Capacitor?.isNative?.();
+    if (!isCapacitor) {
+      window.addEventListener('focus', handleFocus);
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+
     return () => {
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibility);
+      if (!isCapacitor) {
+        window.removeEventListener('focus', handleFocus);
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
     };
   }, [recoverSession]);
 

@@ -202,11 +202,7 @@ export default function HomePage() {
 
   const [memberCount, setMemberCount] = useState<number | null>(0);
 
-  const [masjid, setMasjid] = useState<{ name: string; logo_url: string; tagline: string } | null>({
-    name: "Masjid",
-    logo_url: "",
-    tagline: "Your Masjid",
-  });
+  const [masjid, setMasjid] = useState<{ name: string; logo_url: string; tagline: string } | null>(null);
 
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
@@ -404,9 +400,9 @@ export default function HomePage() {
             tagline: (masjidData as any).tagline || "Your Masjid",
           };
           preferredLanguage = (masjidData as any).preferred_language || null;
-          
+
           if (preferredLanguage && ["en", "ta", "si"].includes(preferredLanguage)) {
-            setLang(preferredLanguage);
+            setLang(preferredLanguage as Language);
           }
         }
 
@@ -423,14 +419,12 @@ export default function HomePage() {
         }
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
-        // Safe fallback for any errors - only set if we don't have cached data
-        if (!cachedData) {
-          setMasjid({
-            name: "Masjid",
-            logo_url: "",
-            tagline: "Your Masjid",
-          });
-        }
+        // Set default masjid on error to prevent infinite loading
+        setMasjid({
+          name: "Masjid",
+          logo_url: "",
+          tagline: "Your Masjid",
+        });
       }
     };
 
@@ -476,10 +470,12 @@ export default function HomePage() {
     return <BrandLoadingScreen />;
   }
 
+  // Don't render dashboard if user is null (will redirect to login via useEffect)
+  if (!user) {
+    return <BrandLoadingScreen />;
+  }
 
-
-
-  // ALWAYS render component after this point (even if user is null)
+  // ALWAYS render component after this point (user is guaranteed to exist)
 
   // Redirect will happen via useEffect
 
