@@ -5,7 +5,6 @@ const config: CapacitorConfig = {
   appName: 'SmartMasjeedh',
   webDir: '.next',
   server: {
-    // Production Vercel URL
     url: 'https://smart-masjeedh.vercel.app',
     cleartext: false,
     androidScheme: 'https'

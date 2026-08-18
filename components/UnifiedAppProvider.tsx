@@ -305,7 +305,7 @@ export function UnifiedAppProvider({
 
         setSession(newSession);
         setUser(newSession.user);
-        
+
         if (event === "SIGNED_IN") {
           await loadTenantContext(newSession.user.id);
         }

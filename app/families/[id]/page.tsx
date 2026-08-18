@@ -198,6 +198,7 @@ export default function FamilyDetailsPage() {
   const [possibleDuplicates, setPossibleDuplicates] = useState<Member[]>([]);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [confirmedNoDuplicate, setConfirmedNoDuplicate] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Per-operation loading states to avoid full-loading re-renders
   const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
