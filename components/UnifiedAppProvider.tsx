@@ -331,18 +331,12 @@ export function UnifiedAppProvider({
       void recoverSession();
     };
 
-    // Only add these listeners if NOT in Capacitor (to avoid duplicate session recovery)
-    const isCapacitor = (window as any).Capacitor?.isNative?.();
-    if (!isCapacitor) {
-      window.addEventListener('focus', handleFocus);
-      document.addEventListener('visibilitychange', handleVisibility);
-    }
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      if (!isCapacitor) {
-        window.removeEventListener('focus', handleFocus);
-        document.removeEventListener('visibilitychange', handleVisibility);
-      }
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [recoverSession]);
 
