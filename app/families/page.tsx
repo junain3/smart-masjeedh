@@ -119,14 +119,6 @@ export default function FamiliesPage() {
   const printViewRef = useRef<HTMLDivElement>(null);
   const [printMasjidName, setPrintMasjidName] = useState("Masjid");
   
-  // Pagination state
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<Family[]>([]);
-  const [isServerSearch, setIsServerSearch] = useState(false);
-  const pageSize = 50;
-  
   // Family duplicate prevention state
   const [allMasjidMembers, setAllMasjidMembers] = useState<any[]>([]);
   const [possibleDuplicateFamilies, setPossibleDuplicateFamilies] = useState<Family[]>([]);
@@ -295,10 +287,8 @@ export default function FamiliesPage() {
       setInitialLoadComplete(true);
     }
 
-    // Reset pagination and fetch first page
-    setPage(1);
-    setHasMore(true);
-    fetchFamilies(1, false);
+    // Revalidate in background
+    fetchFamilies();
   }, [tenantContext?.masjidId, resumeTick]);
 
   useEffect(() => {
@@ -309,20 +299,6 @@ export default function FamiliesPage() {
     };
     fetchPrintMasjidName();
   }, [tenantContext?.masjidId]);
-
-  // Debounced server-side search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchQuery.trim()) {
-        searchFamiliesServer(searchQuery);
-      } else {
-        setIsServerSearch(false);
-        setSearchResults([]);
-      }
-    }, 300); // 300ms debounce
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
 
 
   useEffect(() => {
@@ -362,28 +338,92 @@ export default function FamiliesPage() {
     }
   };
 
-  useEffect(() => {
-    if (isOpen && families.length > 0 && isLive && !editingFamily) {
-      // Find the last family code format
-      const lastFamily = families[families.length - 1];
-      const lastCode = lastFamily.family_code;
-      
-      // Try to extract prefix and number (e.g., FM-01 -> FM, 01)
-      const match = lastCode.match(/^([A-Za-z\s-]+)(\d+)$/);
-      if (match) {
-        const prefix = match[1];
-        const num = parseInt(match[2]);
-        setFamilyCode(`${prefix}${(num + 1).toString().padStart(match[2].length, '0')}`);
-      } else {
-        // Fallback if format is different
-        setFamilyCode("");
+  // Fetch maximum family code from database for accurate ID generation
+  // Strictly filters by current masjid_id (tenant) for multi-tenant isolation
+  // Fetches ALL family codes for this masjid, parses numeric parts, finds TRUE mathematical max
+  async function fetchMaxFamilyCode() {
+    if (!supabase || !tenantContext?.masjidId) return null;
+    const currentMasjidId = tenantContext.masjidId;
+
+    try {
+      const { data, error } = await supabase
+        .from("families")
+        .select("family_code, masjid_id")
+        .eq("masjid_id", currentMasjidId);
+
+      if (error) throw error;
+      if (!data || data.length === 0) return null;
+
+      let maxNumber = 0;
+      let bestPrefix = "M";
+      let bestPadLength = 2;
+      let maxRawCode: string | null = null;
+
+      for (const row of data) {
+        // Double-check tenant isolation in JS as a safety net (defense in depth)
+        if (row.masjid_id !== currentMasjidId) {
+          console.warn("[fetchMaxFamilyCode] Skipping row with mismatched masjid_id:", row);
+          continue;
+        }
+
+        const code = row.family_code;
+        if (!code) continue;
+
+        if (!maxRawCode) maxRawCode = code;
+
+        const match = code.match(/^([A-Za-z\s-]+)(\d+)$/);
+        if (match) {
+          const prefix = match[1];
+          const num = parseInt(match[2], 10);
+
+          if (num > maxNumber) {
+            maxNumber = num;
+            bestPrefix = prefix;
+            bestPadLength = match[2].length;
+            maxRawCode = code;
+          }
+        }
       }
+
+      // If we found parseable numbers, reconstruct the maximum code as-is (no increment here)
+      if (maxNumber > 0) {
+        return `${bestPrefix}${maxNumber.toString().padStart(bestPadLength, '0')}`;
+      }
+
+      // Fallback if no parseable numeric codes: return first raw code
+      return maxRawCode;
+    } catch (err) {
+      console.error("Error fetching max family code:", err);
+      return null;
+    }
+  }
+
+  useEffect(() => {
+    if (isOpen && isLive && !editingFamily) {
+      // Fetch the actual maximum family code from database
+      fetchMaxFamilyCode().then((maxCode) => {
+        if (maxCode) {
+          // Try to extract prefix and number (e.g., FM-01 -> FM, 01)
+          const match = maxCode.match(/^([A-Za-z\s-]+)(\d+)$/);
+          if (match) {
+            const prefix = match[1];
+            const num = parseInt(match[2]);
+            setFamilyCode(`${prefix}${(num + 1).toString().padStart(match[2].length, '0')}`);
+          } else {
+            // Fallback if format is different
+            setFamilyCode("");
+          }
+        } else {
+          // No families yet, start with FM-01
+          setFamilyCode("FM-01");
+        }
+      });
     } else if (isOpen && !isLive) {
       setFamilyCode("FM-01");
     }
-  }, [isOpen, families, isLive]);
+  }, [isOpen, isLive]);
 
-  async function fetchFamilies(pageNum: number = 1, append: boolean = false) {
+  async function fetchFamilies() {
     try {
       if (!supabase) return;
       setIsFetching(true);
@@ -404,68 +444,54 @@ export default function FamiliesPage() {
         return;
       }
 
-      const from = (pageNum - 1) * pageSize;
-      const to = from + pageSize - 1;
-
-      const { data, error, count } = await supabase
+      const { data, error } = await supabase
         .from("families")
-        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id", { count: 'exact' })
+        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id")
         .eq("masjid_id", tenantContext.masjidId)
-        .order("family_code", { ascending: true })
-        .range(from, to);
+        .order("family_code", { ascending: true });
 
       if (error) throw error;
 
       if (data) {
         const sortedFamilies = sortFamiliesByCode(data) as Family[];
 
-        if (append) {
-          setFamilies(prev => sortFamiliesByCode([...prev, ...sortedFamilies]) as Family[]);
-        } else {
-          setFamilies(sortedFamilies);
-        }
-
+        setFamilies(sortedFamilies);
         setIsLive(true);
         setErrorMessage("");
-        setHasMore(count ? from + pageSize < count : false);
-
-        // Only cache first page for instant load
-        if (pageNum === 1) {
-          localStorage.setItem(getCacheKey(tenantContext.masjidId), JSON.stringify(sortedFamilies));
+        
+        // Save families to localStorage immediately for instant load next time
+        localStorage.setItem(getCacheKey(tenantContext.masjidId), JSON.stringify(sortedFamilies));
+        
+        // Fetch all masjid members for duplicate detection
+        try {
+          const { data: membersData, error: membersError } = await supabase
+            .from("members")
+            .select("*")
+            .eq("masjid_id", tenantContext.masjidId);
+            
+          if (!membersError && membersData) {
+            setAllMasjidMembers(membersData);
+            localStorage.setItem(getMembersCacheKey(tenantContext.masjidId), JSON.stringify(membersData));
+          }
+        } catch (membersErr) {
+          console.error("Members fetch error:", membersErr);
+          // Don't block families loading if members fetch fails
         }
         
-        // Fetch all masjid members for duplicate detection (only on first load)
-        if (pageNum === 1) {
-          try {
-            const { data: membersData, error: membersError } = await supabase
-              .from("members")
-              .select("*")
-              .eq("masjid_id", tenantContext.masjidId);
-              
-            if (!membersError && membersData) {
-              setAllMasjidMembers(membersData);
-              localStorage.setItem(getMembersCacheKey(tenantContext.masjidId), JSON.stringify(membersData));
-            }
-          } catch (membersErr) {
-            console.error("Members fetch error:", membersErr);
+        // Fetch payment collections separately (don't block families loading)
+        try {
+          const { data: paymentData, error: paymentError } = await supabase
+            .from("subscription_collections")
+            .select("id, family_id, date, status")
+            .eq("masjid_id", tenantContext.masjidId);
+            
+          if (!paymentError && paymentData) {
+            setPaymentCollections(paymentData);
+            localStorage.setItem(getPaymentsCacheKey(tenantContext.masjidId), JSON.stringify(paymentData));
           }
-        }
-        
-        // Fetch payment collections separately (only on first load)
-        if (pageNum === 1) {
-          try {
-            const { data: paymentData, error: paymentError } = await supabase
-              .from("subscription_collections")
-              .select("id, family_id, date, status")
-              .eq("masjid_id", tenantContext.masjidId);
-              
-            if (!paymentError && paymentData) {
-              setPaymentCollections(paymentData);
-              localStorage.setItem(getPaymentsCacheKey(tenantContext.masjidId), JSON.stringify(paymentData));
-            }
-          } catch (paymentErr) {
-            console.error("Payment collections fetch error:", paymentErr);
-          }
+        } catch (paymentErr) {
+          console.error("Payment collections fetch error:", paymentErr);
+          // Don't block families loading if payment fetch fails
         }
       }
     } catch (err: any) {
@@ -474,50 +500,6 @@ export default function FamiliesPage() {
     } finally {
       setIsFetching(false);
       setInitialLoadComplete(true);
-    }
-  }
-
-  // Server-side search function
-  async function searchFamiliesServer(query: string) {
-    if (!supabase || !tenantContext?.masjidId || !query.trim()) {
-      setIsServerSearch(false);
-      setSearchResults([]);
-      return;
-    }
-
-    try {
-      setIsSearching(true);
-      setIsServerSearch(true);
-
-      const cleanQuery = query.trim().toLowerCase();
-      
-      // Build search conditions using ilike for case-insensitive partial matching
-      const searchConditions = [
-        `head_name.ilike.%${cleanQuery}%`,
-        `family_code.ilike.%${cleanQuery}%`,
-        `address.ilike.%${cleanQuery}%`,
-        `phone.ilike.%${cleanQuery}%`
-      ];
-
-      const { data, error } = await supabase
-        .from("families")
-        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id")
-        .eq("masjid_id", tenantContext.masjidId)
-        .or(searchConditions.join(","))
-        .order("family_code", { ascending: true })
-        .limit(100); // Limit to 100 results for performance
-
-      if (error) throw error;
-
-      if (data) {
-        const sortedResults = sortFamiliesByCode(data) as Family[];
-        setSearchResults(sortedResults);
-      }
-    } catch (err: any) {
-      console.error("Search error:", err.message);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
     }
   }
 
@@ -1173,7 +1155,7 @@ export default function FamiliesPage() {
     );
   };
 
-  const filteredFamilies = isServerSearch ? searchResults : families.filter(f => {
+  const filteredFamilies = families.filter(f => {
     // Search filter with smart Sri Lankan phone number handling and pure number → only address matching
     const cleanQuery = searchQuery.trim().toLowerCase();
     const isPureNumber = /^\d+$/.test(cleanQuery);
@@ -1335,12 +1317,7 @@ export default function FamiliesPage() {
                   </button>
                   <button 
                     onClick={() => {
-                      setPage(1);
-                      setHasMore(true);
-                      setIsServerSearch(false);
-                      setSearchResults([]);
-                      setSearchQuery("");
-                      fetchFamilies(1, false);
+                      fetchFamilies();
                       setIsMoreMenuOpen(false);
                     }}
                     disabled={isFetching}
@@ -1554,35 +1531,6 @@ export default function FamiliesPage() {
                   </Link>
                 ))}
               </div>
-
-              {/* Load More Button - Only show for paginated default view */}
-              {!isServerSearch && hasMore && filteredFamilies.length > 0 && (
-                <div className="pt-4">
-                  <button
-                    onClick={() => {
-                      const nextPage = page + 1;
-                      setPage(nextPage);
-                      fetchFamilies(nextPage, true);
-                    }}
-                    disabled={isFetching}
-                    className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {isFetching ? (
-                      <>
-                        <RefreshCw className="h-5 w-5 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      <>
-                        Load More Families
-                        <span className="text-xs bg-slate-200 px-2 py-1 rounded-full">
-                          {filteredFamilies.length}+
-                        </span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
             </>
           )}
         </div>
