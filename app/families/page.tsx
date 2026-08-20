@@ -119,6 +119,14 @@ export default function FamiliesPage() {
   const printViewRef = useRef<HTMLDivElement>(null);
   const [printMasjidName, setPrintMasjidName] = useState("Masjid");
   
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<Family[]>([]);
+  const [isServerSearch, setIsServerSearch] = useState(false);
+  const pageSize = 50;
+  
   // Family duplicate prevention state
   const [allMasjidMembers, setAllMasjidMembers] = useState<any[]>([]);
   const [possibleDuplicateFamilies, setPossibleDuplicateFamilies] = useState<Family[]>([]);
@@ -287,8 +295,10 @@ export default function FamiliesPage() {
       setInitialLoadComplete(true);
     }
 
-    // Revalidate in background
-    fetchFamilies();
+    // Reset pagination and fetch first page
+    setPage(1);
+    setHasMore(true);
+    fetchFamilies(1, false);
   }, [tenantContext?.masjidId, resumeTick]);
 
   useEffect(() => {
@@ -299,6 +309,20 @@ export default function FamiliesPage() {
     };
     fetchPrintMasjidName();
   }, [tenantContext?.masjidId]);
+
+  // Debounced server-side search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        searchFamiliesServer(searchQuery);
+      } else {
+        setIsServerSearch(false);
+        setSearchResults([]);
+      }
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
 
   useEffect(() => {
@@ -359,7 +383,7 @@ export default function FamiliesPage() {
     }
   }, [isOpen, families, isLive]);
 
-  async function fetchFamilies() {
+  async function fetchFamilies(pageNum: number = 1, append: boolean = false) {
     try {
       if (!supabase) return;
       setIsFetching(true);
@@ -380,54 +404,68 @@ export default function FamiliesPage() {
         return;
       }
 
-      const { data, error } = await supabase
+      const from = (pageNum - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { data, error, count } = await supabase
         .from("families")
-        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id")
+        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id", { count: 'exact' })
         .eq("masjid_id", tenantContext.masjidId)
-        .order("family_code", { ascending: true });
+        .order("family_code", { ascending: true })
+        .range(from, to);
 
       if (error) throw error;
 
       if (data) {
         const sortedFamilies = sortFamiliesByCode(data) as Family[];
 
-        setFamilies(sortedFamilies);
+        if (append) {
+          setFamilies(prev => sortFamiliesByCode([...prev, ...sortedFamilies]) as Family[]);
+        } else {
+          setFamilies(sortedFamilies);
+        }
+
         setIsLive(true);
         setErrorMessage("");
-        
-        // Save families to localStorage immediately for instant load next time
-        localStorage.setItem(getCacheKey(tenantContext.masjidId), JSON.stringify(sortedFamilies));
-        
-        // Fetch all masjid members for duplicate detection
-        try {
-          const { data: membersData, error: membersError } = await supabase
-            .from("members")
-            .select("*")
-            .eq("masjid_id", tenantContext.masjidId);
-            
-          if (!membersError && membersData) {
-            setAllMasjidMembers(membersData);
-            localStorage.setItem(getMembersCacheKey(tenantContext.masjidId), JSON.stringify(membersData));
-          }
-        } catch (membersErr) {
-          console.error("Members fetch error:", membersErr);
-          // Don't block families loading if members fetch fails
+        setHasMore(count ? from + pageSize < count : false);
+
+        // Only cache first page for instant load
+        if (pageNum === 1) {
+          localStorage.setItem(getCacheKey(tenantContext.masjidId), JSON.stringify(sortedFamilies));
         }
         
-        // Fetch payment collections separately (don't block families loading)
-        try {
-          const { data: paymentData, error: paymentError } = await supabase
-            .from("subscription_collections")
-            .select("id, family_id, date, status")
-            .eq("masjid_id", tenantContext.masjidId);
-            
-          if (!paymentError && paymentData) {
-            setPaymentCollections(paymentData);
-            localStorage.setItem(getPaymentsCacheKey(tenantContext.masjidId), JSON.stringify(paymentData));
+        // Fetch all masjid members for duplicate detection (only on first load)
+        if (pageNum === 1) {
+          try {
+            const { data: membersData, error: membersError } = await supabase
+              .from("members")
+              .select("*")
+              .eq("masjid_id", tenantContext.masjidId);
+              
+            if (!membersError && membersData) {
+              setAllMasjidMembers(membersData);
+              localStorage.setItem(getMembersCacheKey(tenantContext.masjidId), JSON.stringify(membersData));
+            }
+          } catch (membersErr) {
+            console.error("Members fetch error:", membersErr);
           }
-        } catch (paymentErr) {
-          console.error("Payment collections fetch error:", paymentErr);
-          // Don't block families loading if payment fetch fails
+        }
+        
+        // Fetch payment collections separately (only on first load)
+        if (pageNum === 1) {
+          try {
+            const { data: paymentData, error: paymentError } = await supabase
+              .from("subscription_collections")
+              .select("id, family_id, date, status")
+              .eq("masjid_id", tenantContext.masjidId);
+              
+            if (!paymentError && paymentData) {
+              setPaymentCollections(paymentData);
+              localStorage.setItem(getPaymentsCacheKey(tenantContext.masjidId), JSON.stringify(paymentData));
+            }
+          } catch (paymentErr) {
+            console.error("Payment collections fetch error:", paymentErr);
+          }
         }
       }
     } catch (err: any) {
@@ -436,6 +474,50 @@ export default function FamiliesPage() {
     } finally {
       setIsFetching(false);
       setInitialLoadComplete(true);
+    }
+  }
+
+  // Server-side search function
+  async function searchFamiliesServer(query: string) {
+    if (!supabase || !tenantContext?.masjidId || !query.trim()) {
+      setIsServerSearch(false);
+      setSearchResults([]);
+      return;
+    }
+
+    try {
+      setIsSearching(true);
+      setIsServerSearch(true);
+
+      const cleanQuery = query.trim().toLowerCase();
+      
+      // Build search conditions using ilike for case-insensitive partial matching
+      const searchConditions = [
+        `head_name.ilike.%${cleanQuery}%`,
+        `family_code.ilike.%${cleanQuery}%`,
+        `address.ilike.%${cleanQuery}%`,
+        `phone.ilike.%${cleanQuery}%`
+      ];
+
+      const { data, error } = await supabase
+        .from("families")
+        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id")
+        .eq("masjid_id", tenantContext.masjidId)
+        .or(searchConditions.join(","))
+        .order("family_code", { ascending: true })
+        .limit(100); // Limit to 100 results for performance
+
+      if (error) throw error;
+
+      if (data) {
+        const sortedResults = sortFamiliesByCode(data) as Family[];
+        setSearchResults(sortedResults);
+      }
+    } catch (err: any) {
+      console.error("Search error:", err.message);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
     }
   }
 
@@ -1091,7 +1173,7 @@ export default function FamiliesPage() {
     );
   };
 
-  const filteredFamilies = families.filter(f => {
+  const filteredFamilies = isServerSearch ? searchResults : families.filter(f => {
     // Search filter with smart Sri Lankan phone number handling and pure number → only address matching
     const cleanQuery = searchQuery.trim().toLowerCase();
     const isPureNumber = /^\d+$/.test(cleanQuery);
@@ -1253,7 +1335,12 @@ export default function FamiliesPage() {
                   </button>
                   <button 
                     onClick={() => {
-                      fetchFamilies();
+                      setPage(1);
+                      setHasMore(true);
+                      setIsServerSearch(false);
+                      setSearchResults([]);
+                      setSearchQuery("");
+                      fetchFamilies(1, false);
                       setIsMoreMenuOpen(false);
                     }}
                     disabled={isFetching}
@@ -1467,6 +1554,35 @@ export default function FamiliesPage() {
                   </Link>
                 ))}
               </div>
+
+              {/* Load More Button - Only show for paginated default view */}
+              {!isServerSearch && hasMore && filteredFamilies.length > 0 && (
+                <div className="pt-4">
+                  <button
+                    onClick={() => {
+                      const nextPage = page + 1;
+                      setPage(nextPage);
+                      fetchFamilies(nextPage, true);
+                    }}
+                    disabled={isFetching}
+                    className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isFetching ? (
+                      <>
+                        <RefreshCw className="h-5 w-5 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        Load More Families
+                        <span className="text-xs bg-slate-200 px-2 py-1 rounded-full">
+                          {filteredFamilies.length}+
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
