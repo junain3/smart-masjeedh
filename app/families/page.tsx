@@ -118,6 +118,10 @@ export default function FamiliesPage() {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const printViewRef = useRef<HTMLDivElement>(null);
   const [printMasjidName, setPrintMasjidName] = useState("Masjid");
+
+  const fetchLockRef = useRef<boolean>(false);
+  const lastSilentFetchAtRef = useRef<number>(0);
+  const [isSilentSyncing, setIsSilentSyncing] = useState(false);
   
   // Family duplicate prevention state
   const [allMasjidMembers, setAllMasjidMembers] = useState<any[]>([]);
@@ -253,6 +257,43 @@ export default function FamiliesPage() {
   const getCacheKey = (masjidId: string) => `families_cache_${masjidId}`;
   const getPaymentsCacheKey = (masjidId: string) => `family_payments_cache_${masjidId}`;
   const getMembersCacheKey = (masjidId: string) => `family_members_cache_${masjidId}`;
+  const CACHE_VERSION = "v1";
+
+  const safeCacheWrite = <T,>(key: string, data: T): void => {
+    if (typeof window === "undefined") return;
+    try {
+      const payload = { v: CACHE_VERSION, ts: Date.now(), d: data };
+      localStorage.setItem(key, JSON.stringify(payload));
+    } catch (err) {
+      console.warn("[Families Cache] Write failed for", key, err);
+      try {
+        localStorage.removeItem(key);
+      } catch (_) { /* noop */ }
+    }
+  };
+
+  const safeCacheRead = <T,>(key: string): { data: T | null; timestamp: number } => {
+    if (typeof window === "undefined") return { data: null, timestamp: 0 };
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return { data: null, timestamp: 0 };
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && "d" in parsed && "v" in parsed) {
+        if (parsed.v !== CACHE_VERSION) {
+          localStorage.removeItem(key);
+          return { data: null, timestamp: 0 };
+        }
+        return { data: parsed.d as T, timestamp: parsed.ts || 0 };
+      }
+      const legacy = JSON.parse(raw) as T;
+      safeCacheWrite(key, legacy);
+      return { data: legacy, timestamp: Date.now() };
+    } catch (err) {
+      console.warn("[Families Cache] Read failed for", key, err);
+      try { localStorage.removeItem(key); } catch (_) { /* noop */ }
+      return { data: null, timestamp: 0 };
+    }
+  };
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -262,34 +303,59 @@ export default function FamiliesPage() {
   useEffect(() => {
     if (!tenantContext?.masjidId) return;
 
-    // Load stale data from localStorage first for instant UI load
-    const cachedFamilies = localStorage.getItem(getCacheKey(tenantContext.masjidId));
-    const cachedPayments = localStorage.getItem(getPaymentsCacheKey(tenantContext.masjidId));
-    const cachedMembers = localStorage.getItem(getMembersCacheKey(tenantContext.masjidId));
+    const masjidId = tenantContext.masjidId;
+    const { data: cachedFamilies } = safeCacheRead<Family[]>(getCacheKey(masjidId));
+    const { data: cachedPayments } = safeCacheRead<any[]>(getPaymentsCacheKey(masjidId));
+    const { data: cachedMembers } = safeCacheRead<any[]>(getMembersCacheKey(masjidId));
 
     let hasCachedData = false;
 
-    if (cachedFamilies) {
-      const parsedFamilies = JSON.parse(cachedFamilies);
-      setFamilies(parsedFamilies);
+    if (cachedFamilies && Array.isArray(cachedFamilies) && cachedFamilies.length > 0) {
+      setFamilies(cachedFamilies);
       setIsLive(true);
       hasCachedData = true;
     }
-    if (cachedPayments) {
-      setPaymentCollections(JSON.parse(cachedPayments));
+    if (cachedPayments && Array.isArray(cachedPayments)) {
+      setPaymentCollections(cachedPayments);
+      hasCachedData = true;
     }
-    if (cachedMembers) {
-      setAllMasjidMembers(JSON.parse(cachedMembers));
+    if (cachedMembers && Array.isArray(cachedMembers)) {
+      setAllMasjidMembers(cachedMembers);
     }
 
-    // If we have cached data, mark initial load as complete immediately
     if (hasCachedData) {
       setInitialLoadComplete(true);
     }
 
-    // Revalidate in background
-    fetchFamilies();
+    void fetchFamilies(hasCachedData);
   }, [tenantContext?.masjidId, resumeTick]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+
+    const triggerSilentRefresh = () => {
+      if (!tenantContext?.masjidId) return;
+      void fetchFamilies(true);
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        triggerSilentRefresh();
+      }
+    };
+
+    const handleFocus = () => {
+      triggerSilentRefresh();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [tenantContext?.masjidId]);
 
   useEffect(() => {
     const fetchPrintMasjidName = async () => {
@@ -423,13 +489,31 @@ export default function FamiliesPage() {
     }
   }, [isOpen, isLive]);
 
-  async function fetchFamilies() {
+  async function fetchFamilies(silent: boolean = false) {
+    if (fetchLockRef.current) {
+      return;
+    }
+
+    const now = Date.now();
+    if (silent) {
+      const MIN_SILENT_INTERVAL_MS = 2000;
+      if (now - lastSilentFetchAtRef.current < MIN_SILENT_INTERVAL_MS) {
+        return;
+      }
+      lastSilentFetchAtRef.current = now;
+      setIsSilentSyncing(true);
+    } else {
+      setIsFetching(true);
+    }
+
+    fetchLockRef.current = true;
+
     try {
       if (!supabase) return;
-      setIsFetching(true);
 
       if (!tenantContext?.masjidId) {
         setIsFetching(false);
+        setIsSilentSyncing(false);
         setInitialLoadComplete(true);
         return;
       }
@@ -444,10 +528,12 @@ export default function FamiliesPage() {
         return;
       }
 
+      const masjidId = tenantContext.masjidId;
+
       const { data, error } = await supabase
         .from("families")
-        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id")
-        .eq("masjid_id", tenantContext.masjidId)
+        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id, house_type, has_toilet, special_needs_details, foreign_members_details, health_details, has_car, has_three_wheeler, has_van, has_lorry, has_tractor, extra_notes")
+        .eq("masjid_id", masjidId)
         .order("family_code", { ascending: true });
 
       if (error) throw error;
@@ -457,48 +543,45 @@ export default function FamiliesPage() {
 
         setFamilies(sortedFamilies);
         setIsLive(true);
-        setErrorMessage("");
-        
-        // Save families to localStorage immediately for instant load next time
-        localStorage.setItem(getCacheKey(tenantContext.masjidId), JSON.stringify(sortedFamilies));
-        
-        // Fetch all masjid members for duplicate detection
+        if (!silent) setErrorMessage("");
+
+        safeCacheWrite(getCacheKey(masjidId), sortedFamilies);
+
         try {
           const { data: membersData, error: membersError } = await supabase
             .from("members")
             .select("*")
-            .eq("masjid_id", tenantContext.masjidId);
-            
+            .eq("masjid_id", masjidId);
+
           if (!membersError && membersData) {
             setAllMasjidMembers(membersData);
-            localStorage.setItem(getMembersCacheKey(tenantContext.masjidId), JSON.stringify(membersData));
+            safeCacheWrite(getMembersCacheKey(masjidId), membersData);
           }
         } catch (membersErr) {
           console.error("Members fetch error:", membersErr);
-          // Don't block families loading if members fetch fails
         }
-        
-        // Fetch payment collections separately (don't block families loading)
+
         try {
           const { data: paymentData, error: paymentError } = await supabase
             .from("subscription_collections")
             .select("id, family_id, date, status")
-            .eq("masjid_id", tenantContext.masjidId);
-            
+            .eq("masjid_id", masjidId);
+
           if (!paymentError && paymentData) {
             setPaymentCollections(paymentData);
-            localStorage.setItem(getPaymentsCacheKey(tenantContext.masjidId), JSON.stringify(paymentData));
+            safeCacheWrite(getPaymentsCacheKey(masjidId), paymentData);
           }
         } catch (paymentErr) {
           console.error("Payment collections fetch error:", paymentErr);
-          // Don't block families loading if payment fetch fails
         }
       }
     } catch (err: any) {
       console.error("Fetch error:", err.message);
-      setErrorMessage("உண்மையான தரவுகளைப் பெறுவதில் சிக்கல்.");
+      if (!silent) setErrorMessage("உண்மையான தரவுகளைப் பெறுவதில் சிக்கல்.");
     } finally {
+      fetchLockRef.current = false;
       setIsFetching(false);
+      setIsSilentSyncing(false);
       setInitialLoadComplete(true);
     }
   }
@@ -589,7 +672,11 @@ export default function FamiliesPage() {
           has_tractor: hasTractor,
           extra_notes: extraNotes || undefined
         };
-        setFamilies(prev => prev.map(f => f.id === editingFamily.id ? updatedFamily : f));
+        const nextFamiliesEdit = sortFamiliesByCode(
+          families.map(f => f.id === editingFamily.id ? updatedFamily : f)
+        ) as Family[];
+        setFamilies(nextFamiliesEdit);
+        if (tenantContext?.masjidId) safeCacheWrite(getCacheKey(tenantContext.masjidId), nextFamiliesEdit);
 
         // Update existing
         const { error } = await supabase
@@ -627,7 +714,7 @@ export default function FamiliesPage() {
         
         // Background refresh to ensure data consistency (non-blocking)
         setTimeout(() => {
-          void fetchFamilies();
+          void fetchFamilies(true);
         }, 500);
       } else {
         let newFamilyId: string;
@@ -760,11 +847,13 @@ export default function FamiliesPage() {
           has_tractor: hasTractor,
           extra_notes: extraNotes || undefined
         };
-        setFamilies(prev => sortFamiliesByCode([...prev, newFamily]) as Family[]);
+        const nextFamiliesCreate = sortFamiliesByCode([...families, newFamily]) as Family[];
+        setFamilies(nextFamiliesCreate);
+        if (tenantContext?.masjidId) safeCacheWrite(getCacheKey(tenantContext.masjidId), nextFamiliesCreate);
         
         // Background refresh to ensure data consistency (non-blocking)
         setTimeout(() => {
-          void fetchFamilies();
+          void fetchFamilies(true);
         }, 500);
         
         // Then redirect
@@ -828,15 +917,25 @@ export default function FamiliesPage() {
         return;
       }
 
+      const masjidId = tenantContext.masjidId;
+      const originalFamilies = families;
+      const nextFamiliesDelete = originalFamilies.filter(f => f.id !== id);
+      setFamilies(nextFamiliesDelete);
+      safeCacheWrite(getCacheKey(masjidId), nextFamiliesDelete);
+
       const { error } = await supabase
         .from("families")
         .delete()
         .eq("id", id)
-        .eq("masjid_id", tenantContext.masjidId);
+        .eq("masjid_id", masjidId);
       
-      if (error) throw error;
+      if (error) {
+        setFamilies(originalFamilies);
+        safeCacheWrite(getCacheKey(masjidId), originalFamilies);
+        throw error;
+      }
       
-      fetchFamilies();
+      setTimeout(() => void fetchFamilies(true), 300);
     } catch (err: any) {
       alert(err.message);
     }
@@ -1249,6 +1348,12 @@ export default function FamiliesPage() {
               <h1 className="text-lg font-black leading-none truncate">{t.families}</h1>
               <div className="flex flex-wrap items-center gap-2 mt-1">
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider shrink-0">{isLive ? t.live_data : t.demo_mode}</p>
+                {isSilentSyncing && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 flex items-center gap-1">
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    Syncing
+                  </span>
+                )}
                 <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider shrink-0">{t.year}</label>
                 <select value={year} onChange={e=>setYear(parseInt(e.target.value))} className="text-xs font-bold bg-white border border-slate-200 rounded-lg px-2 py-1 shrink-0">
                   {Array.from({length:6}).map((_,i)=> {
@@ -1398,14 +1503,7 @@ export default function FamiliesPage() {
       {/* Families List */}
       <section className="flex-1 px-4 overflow-y-auto pb-6">
         <div className="space-y-3 w-full">
-          {isFetching ? (
-            <div className="py-20 text-center flex flex-col items-center gap-4">
-              <div className="p-6 bg-slate-100 rounded-full text-slate-300">
-                <RefreshCw className="h-12 w-12 animate-spin" />
-              </div>
-              <p className="text-slate-500 text-sm">Loading families...</p>
-            </div>
-          ) : !initialLoadComplete ? (
+          {!initialLoadComplete && families.length === 0 ? (
             <div className="py-20 text-center flex flex-col items-center gap-4">
               <div className="p-6 bg-slate-100 rounded-full text-slate-300">
                 <RefreshCw className="h-12 w-12 animate-spin" />
