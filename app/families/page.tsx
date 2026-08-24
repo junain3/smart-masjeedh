@@ -15,6 +15,18 @@ import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 import SearchResultsPrintView from "@/components/SearchResultsPrintView";
 import { getPrintEngine, getPrintButtonLabel, type PrintReportType } from "@/lib/print-engine";
 import { sortFamiliesByCode } from "@/lib/collection-utils";
+import {
+  ACTIVE_RECORD_STATUS,
+  ACTIVE_RECORD_STATUS_FILTER,
+  HARD_DELETE_CONFIRM_TEXT,
+  SOFT_DELETE_STATUS_OPTIONS,
+  type SoftDeleteStatus,
+  buildSoftDeletePayload,
+  normalizeNicValue,
+  FAMILY_SOFT_DELETE_STATUS_OPTIONS,
+  type FamilySoftDeleteStatus,
+  FAMILY_STATUS_HELPER_TEXT,
+} from "@/lib/family-record-lifecycle";
 
 type Family = {
   id: string;
@@ -37,6 +49,20 @@ type Family = {
   has_lorry?: boolean;
   has_tractor?: boolean;
   extra_notes?: string;
+  status?: string;
+  status_reason?: string;
+};
+
+type NicTransferCandidate = {
+  id: string;
+  family_id: string;
+  name?: string;
+  nic?: string;
+};
+
+type OtherMasjidNotice = {
+  id: string;
+  masjid_name: string;
 };
 
 const dummyFamilies: Family[] = [
@@ -134,6 +160,19 @@ export default function FamiliesPage() {
   // Restore deleted family code state
   const [isRestoreMode, setIsRestoreMode] = useState(false);
   const [manualFamilyCode, setManualFamilyCode] = useState("");
+  const [headNic, setHeadNic] = useState("");
+  const [headNicTransferCandidate, setHeadNicTransferCandidate] = useState<NicTransferCandidate | null>(null);
+  const [showHeadNicTransferModal, setShowHeadNicTransferModal] = useState(false);
+  const [headNicTransferReason, setHeadNicTransferReason] = useState("");
+  const [confirmedHeadNicTransferId, setConfirmedHeadNicTransferId] = useState<string | null>(null);
+  const [headNicOtherMasjids, setHeadNicOtherMasjids] = useState<OtherMasjidNotice[]>([]);
+  const [isCheckingHeadNic, setIsCheckingHeadNic] = useState(false);
+  const [familyDeleteTarget, setFamilyDeleteTarget] = useState<Family | null>(null);
+  const [familyDeleteMode, setFamilyDeleteMode] = useState<"soft" | "hard">("soft");
+  const [familyDeleteStatus, setFamilyDeleteStatus] = useState<FamilySoftDeleteStatus>("Moved Out");
+  const [familyDeleteReason, setFamilyDeleteReason] = useState("");
+  const [familyDeleteConfirmText, setFamilyDeleteConfirmText] = useState("");
+  const [isFamilyDeleteSubmitting, setIsFamilyDeleteSubmitting] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -532,8 +571,9 @@ export default function FamiliesPage() {
 
       const { data, error } = await supabase
         .from("families")
-        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id, house_type, has_toilet, special_needs_details, foreign_members_details, health_details, has_car, has_three_wheeler, has_van, has_lorry, has_tractor, extra_notes")
+        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id, house_type, has_toilet, special_needs_details, foreign_members_details, health_details, has_car, has_three_wheeler, has_van, has_lorry, has_tractor, extra_notes, status")
         .eq("masjid_id", masjidId)
+        .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")')
         .order("family_code", { ascending: true });
 
       if (error) throw error;
@@ -820,6 +860,43 @@ export default function FamiliesPage() {
         }
 
         setSuccessMessage(`குடும்பம் வெற்றிகரமாகச் சேமிக்கப்பட்டது. குறியீடு: ${assignedCode}`);
+
+        // Handle NIC transfer if confirmed
+        if (confirmedHeadNicTransferId && headNicTransferCandidate) {
+          try {
+            // Soft delete the old member from their previous family
+            const transferPayload = buildSoftDeletePayload(
+              "Moved Out",
+              `Transferred to new family (${assignedCode}) - Reason: ${headNicTransferReason}`,
+              authUserId
+            );
+            
+            await supabase
+              .from("members")
+              .update(transferPayload)
+              .eq("id", confirmedHeadNicTransferId)
+              .eq("masjid_id", tenantContext.masjidId);
+            
+            // Create new family head member with the same NIC in the new family
+            await supabase.from("members").insert([{
+              family_id: newFamilyId,
+              name: headNicTransferCandidate.name,
+              full_name: headNicTransferCandidate.name,
+              nic: headNicTransferCandidate.nic,
+              relationship: "Family Head",
+              civil_status: "",
+              user_id: authUserId,
+              masjid_id: tenantContext.masjidId
+            }]);
+            
+            // Reset transfer state
+            setConfirmedHeadNicTransferId(null);
+            setHeadNicTransferCandidate(null);
+          } catch (transferError) {
+            console.error("NIC transfer error:", transferError);
+            // Don't fail the whole operation if transfer fails
+          }
+        }
         
         // Close form and reset first
         setIsOpen(false);
@@ -903,41 +980,105 @@ export default function FamiliesPage() {
     // Reset restore mode state
     setIsRestoreMode(false);
     setManualFamilyCode("");
+    
+    // Reset NIC transfer state
+    setHeadNic("");
+    setHeadNicTransferCandidate(null);
+    setShowHeadNicTransferModal(false);
+    setHeadNicTransferReason("");
+    setConfirmedHeadNicTransferId(null);
+    setHeadNicOtherMasjids([]);
+    setIsCheckingHeadNic(false);
   };
 
   async function deleteFamily(id: string) {
-    if (!supabase || !confirm(t.confirm_delete)) return;
+    // Open delete confirmation modal instead of immediate deletion
+    const familyToDelete = families.find(f => f.id === id);
+    if (!familyToDelete) return;
+    
+    setFamilyDeleteTarget(familyToDelete);
+    setFamilyDeleteMode("soft");
+    setFamilyDeleteStatus("Moved Out");
+    setFamilyDeleteReason("");
+    setFamilyDeleteConfirmText("");
+  }
+
+  async function executeFamilyDelete() {
+    if (!familyDeleteTarget || !supabase) return;
+    
     try {
-      if (!tenantContext?.masjidId) return;
+      setIsFamilyDeleteSubmitting(true);
+      
+      if (!tenantContext?.masjidId) {
+        throw new Error("No masjid context");
+      }
 
       const isAdmin = tenantContext.role === "super_admin" || tenantContext.role === "co_admin";
       const canMembers = isAdmin || tenantContext.permissions?.members !== false;
       if (!canMembers) {
-        alert("Access denied");
-        return;
+        throw new Error("Access denied");
       }
 
       const masjidId = tenantContext.masjidId;
-      const originalFamilies = families;
-      const nextFamiliesDelete = originalFamilies.filter(f => f.id !== id);
-      setFamilies(nextFamiliesDelete);
-      safeCacheWrite(getCacheKey(masjidId), nextFamiliesDelete);
+      const familyId = familyDeleteTarget.id;
 
-      const { error } = await supabase
-        .from("families")
-        .delete()
-        .eq("id", id)
-        .eq("masjid_id", masjidId);
-      
-      if (error) {
-        setFamilies(originalFamilies);
-        safeCacheWrite(getCacheKey(masjidId), originalFamilies);
-        throw error;
+      if (familyDeleteMode === "hard") {
+        // Hard delete - permanent deletion with confirmation
+        if (familyDeleteConfirmText !== "DELETE") {
+          throw new Error("Please type DELETE to confirm permanent deletion");
+        }
+
+        const originalFamilies = families;
+        const nextFamiliesDelete = originalFamilies.filter(f => f.id !== familyId);
+        setFamilies(nextFamiliesDelete);
+        safeCacheWrite(getCacheKey(masjidId), nextFamiliesDelete);
+
+        const { error } = await supabase
+          .from("families")
+          .delete()
+          .eq("id", familyId)
+          .eq("masjid_id", masjidId);
+        
+        if (error) {
+          setFamilies(originalFamilies);
+          safeCacheWrite(getCacheKey(masjidId), originalFamilies);
+          throw error;
+        }
+      } else {
+        // Soft delete - update status
+        const payload = buildSoftDeletePayload(
+          familyDeleteStatus,
+          familyDeleteReason,
+          user?.id
+        );
+
+        const { error } = await supabase
+          .from("families")
+          .update(payload)
+          .eq("id", familyId)
+          .eq("masjid_id", masjidId);
+
+        if (error) throw error;
+
+        // Remove from local state
+        const originalFamilies = families;
+        const nextFamiliesDelete = originalFamilies.filter(f => f.id !== familyId);
+        setFamilies(nextFamiliesDelete);
+        safeCacheWrite(getCacheKey(masjidId), nextFamiliesDelete);
       }
       
       setTimeout(() => void fetchFamilies(true), 300);
+      
+      // Reset modal state
+      setFamilyDeleteTarget(null);
+      setFamilyDeleteMode("soft");
+      setFamilyDeleteStatus("Moved Out");
+      setFamilyDeleteReason("");
+      setFamilyDeleteConfirmText("");
     } catch (err: any) {
       alert(err.message);
+    } finally {
+      setIsFamilyDeleteSubmitting(false);
     }
   }
 
@@ -1765,6 +1906,164 @@ export default function FamiliesPage() {
         </div>
       )}
 
+      {/* Family Delete Confirmation Modal */}
+      {familyDeleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black text-slate-900">
+                {familyDeleteMode === "hard" ? "Permanently Delete Family" : "Remove Family"}
+              </h2>
+              <button
+                onClick={() => {
+                  setFamilyDeleteTarget(null);
+                  setFamilyDeleteMode("soft");
+                  setFamilyDeleteStatus("Moved Out");
+                  setFamilyDeleteReason("");
+                  setFamilyDeleteConfirmText("");
+                }}
+                className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl p-4 mb-6">
+              <p className="text-sm font-bold text-slate-900">{familyDeleteTarget.head_name}</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {familyDeleteTarget.family_code}
+                {familyDeleteTarget.address && ` • ${familyDeleteTarget.address}`}
+              </p>
+            </div>
+
+            {/* Delete Mode Toggle */}
+            <div className="flex gap-2 mb-6">
+              <button
+                onClick={() => {
+                  setFamilyDeleteMode("soft");
+                  setFamilyDeleteConfirmText("");
+                }}
+                className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${
+                  familyDeleteMode === "soft"
+                    ? "bg-emerald-100 text-emerald-700 border-2 border-emerald-500"
+                    : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                Soft Delete
+              </button>
+              <button
+                onClick={() => {
+                  setFamilyDeleteMode("hard");
+                  setFamilyDeleteConfirmText("");
+                }}
+                className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${
+                  familyDeleteMode === "hard"
+                    ? "bg-red-100 text-red-700 border-2 border-red-500"
+                    : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                Hard Delete
+              </button>
+            </div>
+
+            {familyDeleteMode === "soft" ? (
+              <>
+                <div className="space-y-4 mb-6">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                      Status
+                    </label>
+                    <select
+                      value={familyDeleteStatus}
+                      onChange={(e) => setFamilyDeleteStatus(e.target.value as FamilySoftDeleteStatus)}
+                      className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                    >
+                      {FAMILY_SOFT_DELETE_STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                    {familyDeleteStatus && (
+                      <p className="text-[10px] text-slate-500 mt-1 ml-1">
+                        {FAMILY_STATUS_HELPER_TEXT[familyDeleteStatus]}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                      Reason (optional)
+                    </label>
+                    <textarea
+                      value={familyDeleteReason}
+                      onChange={(e) => setFamilyDeleteReason(e.target.value)}
+                      className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                      placeholder="Provide reason for removal..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl mb-6">
+                  <p className="text-xs font-bold text-blue-900">
+                    This will preserve the family record with a status change. Historical data will remain intact.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-red-50 border border-red-100 p-4 rounded-xl mb-6">
+                  <p className="text-xs font-bold text-red-900 mb-2">
+                    ⚠️ WARNING: This will permanently delete the family and all associated data. This action cannot be undone.
+                  </p>
+                </div>
+
+                <div className="space-y-2 mb-6">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    Type "DELETE" to confirm
+                  </label>
+                  <input
+                    type="text"
+                    value={familyDeleteConfirmText}
+                    onChange={(e) => setFamilyDeleteConfirmText(e.target.value)}
+                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-red-500/10 outline-none transition-all font-bold"
+                    placeholder="DELETE"
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => {
+                  setFamilyDeleteTarget(null);
+                  setFamilyDeleteMode("soft");
+                  setFamilyDeleteStatus("Moved Out");
+                  setFamilyDeleteReason("");
+                  setFamilyDeleteConfirmText("");
+                }}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeFamilyDelete}
+                disabled={
+                  isFamilyDeleteSubmitting ||
+                  (familyDeleteMode === "hard" && familyDeleteConfirmText !== "DELETE")
+                }
+                className={`flex-1 py-4 rounded-2xl text-sm font-bold text-white disabled:opacity-50 ${
+                  familyDeleteMode === "hard" ? "bg-red-600" : "bg-emerald-600"
+                }`}
+              >
+                {isFamilyDeleteSubmitting ? "Processing..." : familyDeleteMode === "hard" ? "Delete Permanently" : "Remove Family"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex items-center justify-around py-4 px-6 shadow-2xl z-50">
         <Link href="/dashboard" className="flex flex-col items-center gap-1 group">
@@ -1886,6 +2185,101 @@ export default function FamiliesPage() {
                     <p className="text-red-500 text-xs mt-1">Required</p>
                   )}
                 </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Head NIC (Optional)</label>
+                  <input
+                    type="text"
+                    value={headNic}
+                    onChange={async (event) => {
+                      const nicValue = normalizeNicValue(event.target.value);
+                      setHeadNic(nicValue);
+                      
+                      // Check for NIC in same masjid (intra-masjid transfer)
+                      if (nicValue && supabase && tenantContext?.masjidId) {
+                        setIsCheckingHeadNic(true);
+                        try {
+                          const normalizedNic = normalizeNicValue(nicValue);
+                          
+                          // Check within current masjid
+                          const { data: existingMember } = await supabase
+                            .from("members")
+                            .select("id, family_id, name, nic")
+                            .eq("masjid_id", tenantContext.masjidId)
+                            .eq("nic", normalizedNic)
+                            .or("status.is.null,status.eq.Active")
+                            .limit(1)
+                            .single();
+                          
+                          if (existingMember && existingMember.family_id) {
+                            // Get family details
+                            const { data: familyData } = await supabase
+                              .from("families")
+                              .select("id, head_name, family_code")
+                              .eq("id", existingMember.family_id)
+                              .single();
+                            
+                            if (familyData && (!editingFamily || editingFamily.id !== familyData.id)) {
+                              setHeadNicTransferCandidate({
+                                id: existingMember.id,
+                                family_id: existingMember.family_id,
+                                name: existingMember.name,
+                                nic: existingMember.nic
+                              });
+                              setShowHeadNicTransferModal(true);
+                            }
+                          } else {
+                            setHeadNicTransferCandidate(null);
+                          }
+                          
+                          // Check across other masjids (informational notice)
+                          const { data: otherMasjidMembers } = await supabase
+                            .from("members")
+                            .select("id, masjid_id")
+                            .eq("nic", normalizedNic)
+                            .neq("masjid_id", tenantContext.masjidId)
+                            .limit(5);
+                          
+                          if (otherMasjidMembers && otherMasjidMembers.length > 0) {
+                            const masjidIds = [...new Set(otherMasjidMembers.map(m => m.masjid_id))];
+                            const { data: masjidData } = await supabase
+                              .from("masjids")
+                              .select("id, name")
+                              .in("id", masjidIds);
+                            
+                            setHeadNicOtherMasjids(masjidData?.map(m => ({
+                              id: m.id,
+                              masjid_name: m.name
+                            })) || []);
+                          } else {
+                            setHeadNicOtherMasjids([]);
+                          }
+                        } catch (err) {
+                          console.error("NIC check error:", err);
+                        } finally {
+                          setIsCheckingHeadNic(false);
+                        }
+                      } else {
+                        setHeadNicTransferCandidate(null);
+                        setHeadNicOtherMasjids([]);
+                      }
+                    }}
+                    className={`w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold ${isCheckingHeadNic ? 'opacity-60' : ''}`}
+                    placeholder="National Identity Card Number"
+                  />
+                  {isCheckingHeadNic && (
+                    <p className="text-xs text-slate-400 mt-1">Checking NIC...</p>
+                  )}
+                </div>
+
+                {/* Cross-masjid informational notice */}
+                {headNicOtherMasjids.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl">
+                    <p className="text-[10px] font-bold text-amber-900">
+                      Note: This person is also registered in {headNicOtherMasjids.map(m => m.masjid_name).join(", ")}
+                    </p>
+                  </div>
+                )}
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -2170,6 +2564,63 @@ export default function FamiliesPage() {
               </div>
             )}
           </form>
+          </div>
+        </div>
+      )}
+
+      {/* Head NIC Transfer Confirmation Modal */}
+      {showHeadNicTransferModal && headNicTransferCandidate && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <h2 className="text-2xl font-bold mb-4 text-center text-slate-900">Transfer Family Head</h2>
+            <p className="text-sm text-slate-600 mb-6 text-center">
+              This NIC is already registered for <span className="font-bold text-slate-900">{headNicTransferCandidate.name}</span> in another family within this masjid. Do you want to transfer them to this new family?
+            </p>
+            
+            <div className="space-y-2 mb-6">
+              <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                Transfer Reason (required)
+              </label>
+              <select
+                value={headNicTransferReason}
+                onChange={(e) => setHeadNicTransferReason(e.target.value)}
+                className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+              >
+                <option value="">Select reason</option>
+                <option value="Marriage">Marriage</option>
+                <option value="Migration">Migration</option>
+                <option value="Family Split">Family Split</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            
+            <div className="flex gap-4">
+              <button
+                onClick={() => {
+                  setShowHeadNicTransferModal(false);
+                  setHeadNicTransferCandidate(null);
+                  setHeadNicTransferReason("");
+                }}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (headNicTransferReason) {
+                    setConfirmedHeadNicTransferId(headNicTransferCandidate.id);
+                    setShowHeadNicTransferModal(false);
+                    setHeadNicTransferReason("");
+                  } else {
+                    alert("Please select a transfer reason");
+                  }
+                }}
+                disabled={!headNicTransferReason}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold bg-emerald-500 text-white disabled:opacity-50"
+              >
+                Confirm Transfer
+              </button>
+            </div>
           </div>
         </div>
       )}

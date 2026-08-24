@@ -18,6 +18,10 @@ import {
   Clock,
   X,
   Loader2,
+  History,
+  ChevronDown,
+  RotateCcw,
+  RefreshCw,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { QRCodeSVG } from "qrcode.react";
@@ -26,6 +30,15 @@ import { useMockAuth } from "@/components/MockAuthProvider";
 import { inferGenderFromRelationship } from "@/lib/member-gender";
 import { getPdfMasjidName } from "@/lib/pdf-utils";
 import { fetchUserName, fetchUserNames } from "@/lib/user-utils";
+import {
+  ACTIVE_RECORD_STATUS,
+  ACTIVE_RECORD_STATUS_FILTER,
+  HARD_DELETE_CONFIRM_TEXT,
+  MEMBER_SOFT_DELETE_STATUS_OPTIONS,
+  type MemberSoftDeleteStatus,
+  MEMBER_STATUS_HELPER_TEXT,
+  buildSoftDeletePayload,
+} from "@/lib/family-record-lifecycle";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -127,6 +140,8 @@ export default function FamilyDetailsPage() {
   const [collectionDate, setCollectionDate] = useState(new Date().toISOString().split('T')[0]);
   const [collectionNote, setCollectionNote] = useState("");
   const [isOptimisticUpdate, setIsOptimisticUpdate] = useState(false);
+  const [softDeletedMembers, setSoftDeletedMembers] = useState<Member[]>([]);
+  const [showFamilyHistory, setShowFamilyHistory] = useState(false);
 
   // === ROBUST OPTIMISTIC-UPDATE LOCK ===
   // Use refs to avoid unnecessary re-renders and prevent race conditions
@@ -173,6 +188,14 @@ export default function FamilyDetailsPage() {
   const [civilStatus, setCivilStatus] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [allMasjidMembers, setAllMasjidMembers] = useState<AllMasjidMember[]>([]);
+
+  // NIC transfer state for members
+  const [nicTransferCandidate, setNicTransferCandidate] = useState<{ id: string; family_id: string; name?: string; nic?: string } | null>(null);
+  const [showNicTransferModal, setShowNicTransferModal] = useState(false);
+  const [nicTransferReason, setNicTransferReason] = useState("");
+  const [confirmedNicTransferId, setConfirmedNicTransferId] = useState<string | null>(null);
+  const [nicOtherMasjids, setNicOtherMasjids] = useState<{ id: string; masjid_name: string }[]>([]);
+  const [isCheckingNic, setIsCheckingNic] = useState(false);
   
   // New fields for enhanced data collection
   const [education, setEducation] = useState("");
@@ -203,6 +226,20 @@ export default function FamilyDetailsPage() {
   // Per-operation loading states to avoid full-loading re-renders
   const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
   const [togglingServiceId, setTogglingServiceId] = useState<string | null>(null);
+
+  // Member delete modal state
+  const [memberDeleteTarget, setMemberDeleteTarget] = useState<Member | null>(null);
+  const [memberDeleteMode, setMemberDeleteMode] = useState<"soft" | "hard">("soft");
+  const [memberDeleteStatus, setMemberDeleteStatus] = useState<MemberSoftDeleteStatus>("Deceased");
+  const [memberDeleteReason, setMemberDeleteReason] = useState("");
+  const [memberDeleteConfirmText, setMemberDeleteConfirmText] = useState("");
+  const [isMemberDeleteSubmitting, setIsMemberDeleteSubmitting] = useState(false);
+
+  // Previous Members management state
+  const [restoringMemberId, setRestoringMemberId] = useState<string | null>(null);
+  const [hardDeletingMemberId, setHardDeletingMemberId] = useState<string | null>(null);
+  const [hardDeleteConfirmText, setHardDeleteConfirmText] = useState("");
+  const [showHardDeleteConfirm, setShowHardDeleteConfirm] = useState(false);
 
   const t = getTranslation(lang);
 
@@ -236,97 +273,52 @@ export default function FamilyDetailsPage() {
     return str.trim().toUpperCase();
   };
 
-  // Helper function for simple fuzzy name matching
-  const areNamesSimilar = (name1: string, name2: string): boolean => {
-    const n1 = name1.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const n2 = name2.toLowerCase().replace(/[^a-z0-9]/g, '');
-    
-    // Check if one is a substring of the other
-    if (n1.includes(n2) || n2.includes(n1)) return true;
-    
-    // Simple edit distance check (up to 2 differences)
-    let diffs = 0;
-    const minLen = Math.min(n1.length, n2.length);
-    const maxLen = Math.max(n1.length, n2.length);
-    
-    if (maxLen - minLen > 3) return false;
-    
-    for (let i = 0; i < minLen; i++) {
-      if (n1[i] !== n2[i]) diffs++;
-      if (diffs > 2) return false;
-    }
-    
-    diffs += (maxLen - minLen);
-    return diffs <= 2;
-  };
-
   // Find possible duplicates
+  // SCOPE: SAME FAMILY ONLY.
+  // WARNING CONDITION:
+  //   - Another member in this family has the same name AND the same date of birth.
   const checkForDuplicates = () => {
     console.log("=== checkForDuplicates START ===");
-    console.log("- tenantContext?.masjidId:", tenantContext?.masjidId);
-    console.log("- allMasjidMembers count:", allMasjidMembers?.length || 0);
-    
-    if (!tenantContext?.masjidId || !allMasjidMembers) {
-      console.log("- Exiting: missing masjidId or allMasjidMembers");
+    console.log("- current familyId:", familyId);
+    console.log("- current family members count:", members.length);
+
+    if (!familyId) {
+      console.log("- Exiting: missing familyId");
       return false;
     }
 
     const duplicates: Member[] = [];
-    const trimmedNic = nic?.trim();
-    const trimmedPhone = phone?.trim();
     const trimmedDob = dob?.trim();
     const trimmedFullName = fullName?.trim();
+    const normalizedDob = trimmedDob || "";
+    const normalizedFullName = (trimmedFullName || "").replace(/\s+/g, " ").toLowerCase();
 
     console.log("- Input values:");
-    console.log("  - nic:", trimmedNic);
-    console.log("  - phone:", trimmedPhone);
     console.log("  - dob:", trimmedDob);
     console.log("  - fullName:", trimmedFullName);
 
-    for (const member of allMasjidMembers) {
+    if (!normalizedFullName || !normalizedDob) {
+      console.log("- Exiting: name or DOB missing, cannot be a strict duplicate");
+      setPossibleDuplicates([]);
+      return false;
+    }
+
+    for (const member of members) {
       // Skip self if editing
       if (editingMember && member.id === editingMember.id) {
         console.log("- Skipping self:", member.id);
         continue;
       }
 
-      let isDuplicate = false;
-      let reason = "";
-
-      // Strict check: same NIC - this will be blocked by database constraint anyway
-      if (trimmedNic && member.nic?.trim() === trimmedNic) {
-        isDuplicate = true;
-        reason = "Same NIC";
-      }
-      // Smart checks (only if NIC is empty)
-      else if (!trimmedNic) {
-        // Same phone - only warn if from different family
-        // Same family members can share phone numbers (common for families)
-        if (trimmedPhone && member.phone?.trim() === trimmedPhone) {
-          if (member.family_id !== familyId) {
-            isDuplicate = true;
-            reason = "Same phone number (different family)";
-          } else {
-            console.log("- Skipping same-family phone duplicate:", member.id);
-          }
-        }
-        // Same date of birth
-        else if (trimmedDob && member.dob?.trim() === trimmedDob) {
-          isDuplicate = true;
-          reason = "Same date of birth";
-        }
-        // Similar names
-        else if (trimmedFullName && member.name && areNamesSimilar(trimmedFullName, member.name)) {
-          isDuplicate = true;
-          reason = "Similar names";
-        }
-      }
+      const memberDob = member.dob?.trim() || "";
+      const memberName = (member.name || member.full_name || "").trim().replace(/\s+/g, " ").toLowerCase();
+      const isDuplicate = memberDob === normalizedDob && memberName === normalizedFullName;
 
       if (isDuplicate) {
         console.log("- Found duplicate:", {
           memberId: member.id,
           name: member.name,
-          reason: reason
+          reason: "Same name and same date of birth (within same family)"
         });
         duplicates.push(member);
       }
@@ -334,7 +326,7 @@ export default function FamilyDetailsPage() {
 
     console.log("- Total duplicates found:", duplicates.length);
     setPossibleDuplicates(duplicates);
-    
+
     const hasDuplicates = duplicates.length > 0;
     console.log("- checkForDuplicates END - hasDuplicates:", hasDuplicates);
     return hasDuplicates;
@@ -542,6 +534,7 @@ export default function FamilyDetailsPage() {
       const [
         familyResult,
         membersResult,
+        softDeletedMembersResult,
         allMembersResult,
         paymentsResult,
         servicesResult
@@ -554,14 +547,22 @@ export default function FamilyDetailsPage() {
           .eq("masjid_id", tenantContext.masjidId)
           .single(),
           
-        // Family members
+        // Family members (fetch all, filter in JS for safety)
         supabase
           .from("members")
           .select("id, family_id, member_code, name, full_name, relationship, age, gender, dob, nic, phone, civil_status, status, education, occupation, is_moulavi, is_new_muslim, is_foreign_resident, foreign_country, foreign_contact, has_special_needs, special_needs_details, has_health_issue, health_details")
           .eq("family_id", familyId)
           .eq("masjid_id", tenantContext.masjidId)
           .order("name"),
-          
+
+        // Soft-deleted members for family history (fetch all, filter in JS for safety)
+        supabase
+          .from("members")
+          .select("id, family_id, member_code, name, full_name, relationship, age, gender, dob, nic, phone, civil_status, status, status_reason, status_changed_at, status_changed_by, education, occupation, is_moulavi, is_new_muslim, is_foreign_resident, foreign_country, foreign_contact, has_special_needs, special_needs_details, has_health_issue, health_details")
+          .eq("family_id", familyId)
+          .eq("masjid_id", tenantContext.masjidId)
+          .order("status_changed_at", { ascending: false, nullsFirst: false }),
+
         // All masjid members for duplicate detection
         supabase
           .from("members")
@@ -598,10 +599,20 @@ export default function FamilyDetailsPage() {
       // Process members data
       const { data: membersData, error: membersError } = membersResult;
       if (membersError) throw membersError;
-      console.log("Initial fetch: fetched", membersData?.length || 0, "members from database");
-      console.log("Initial fetch: family.head_name", familyData?.head_name);
-      console.log("Initial fetch: raw members data", membersData?.map(m => ({ name: m.name, relationship: m.relationship, id: m.id })));
-      const sortedMembers = [...(membersData || [])].sort((a, b) => {
+      console.log("[Active Members] Fetched", membersData?.length || 0, "members from database");
+      console.log("[Active Members] Raw members data with status:", membersData?.map(m => ({ name: m.name, relationship: m.relationship, id: m.id, status: m.status })));
+      console.log("[Active Members] Status values in result:", membersData?.map(m => m.status));
+
+      // Filter out soft-deleted members in JavaScript for safety
+      const softDeleteStatuses = ["Moved Out", "Left", "Deceased", "Inactive", "Transferred"];
+      const activeMembersData = (membersData || []).filter(member => {
+        const status = member.status;
+        // Treat as active if status is NULL, Active, or not in soft-delete list
+        return !status || status === "Active" || !softDeleteStatuses.includes(status);
+      });
+      console.log("[Active Members] After JS filtering:", activeMembersData.length, "active members");
+
+      const sortedMembers = [...activeMembersData].sort((a, b) => {
         const rankDiff = getFamilyMemberSortRank(a) - getFamilyMemberSortRank(b);
         if (rankDiff !== 0) return rankDiff;
 
@@ -641,6 +652,25 @@ export default function FamilyDetailsPage() {
       console.log("[Family] fetchData COMMIT - version:", requestVersion);
       setMembers(sortedMembers);
       localStorage.setItem(getMembersCacheKey(tenantContext.masjidId, familyId), JSON.stringify(sortedMembers));
+
+      // Process soft-deleted members for family history
+      const { data: softDeletedData, error: softDeletedError } = softDeletedMembersResult;
+      if (softDeletedError) {
+        console.error("Soft-deleted members fetch error:", softDeletedError);
+      } else {
+        console.log("[Previous Members] Fetched raw members:", softDeletedData?.length || 0);
+        console.log("[Previous Members] Raw members data:", softDeletedData?.map(m => ({ name: m.name, status: m.status, status_changed_at: m.status_changed_at })));
+
+        // Filter to only include soft-deleted members
+        const softDeleteStatuses = ["Moved Out", "Left", "Deceased", "Inactive", "Transferred"];
+        const filteredSoftDeleted = (softDeletedData || []).filter(member => {
+          const status = member.status;
+          return status && softDeleteStatuses.includes(status);
+        });
+
+        console.log("[Previous Members] After filtering:", filteredSoftDeleted.length, "soft-deleted members");
+        setSoftDeletedMembers(filteredSoftDeleted);
+      }
 
       // Process all masjid members
       const { data: allMembersData, error: allMembersError } = allMembersResult;
@@ -739,6 +769,14 @@ export default function FamilyDetailsPage() {
     setPossibleDuplicates([]);
     setShowDuplicateWarning(false);
     setConfirmedNoDuplicate(false);
+
+    // Reset NIC transfer state
+    setNicTransferCandidate(null);
+    setShowNicTransferModal(false);
+    setNicTransferReason("");
+    setConfirmedNicTransferId(null);
+    setNicOtherMasjids([]);
+    setIsCheckingNic(false);
 
     // CRITICAL: Clear editingMember to ensure Add Member creates a new record instead of updating
     setEditingMember(null);
@@ -1214,6 +1252,31 @@ export default function FamilyDetailsPage() {
 
         if (error) throw error;
         setSuccessMessage("New member added successfully!");
+
+        // Handle NIC transfer if confirmed
+        if (confirmedNicTransferId && nicTransferCandidate) {
+          try {
+            // Soft delete the old member from their previous family
+            const transferPayload = buildSoftDeletePayload(
+              "Moved Out",
+              `Transferred to family ${familyId} - Reason: ${nicTransferReason}`,
+              user?.id
+            );
+            
+            await supabase
+              .from("members")
+              .update(transferPayload)
+              .eq("id", confirmedNicTransferId)
+              .eq("masjid_id", tenantContext.masjidId);
+            
+            // Reset transfer state
+            setConfirmedNicTransferId(null);
+            setNicTransferCandidate(null);
+          } catch (transferError) {
+            console.error("NIC transfer error:", transferError);
+            // Don't fail the whole operation if transfer fails
+          }
+        }
       }
 
       setIsModalOpen(false);
@@ -1221,6 +1284,11 @@ export default function FamilyDetailsPage() {
       setPossibleDuplicates([]);
       setShowDuplicateWarning(false);
       setConfirmedNoDuplicate(false);
+      setNicTransferCandidate(null);
+      setShowNicTransferModal(false);
+      setNicTransferReason("");
+      setConfirmedNicTransferId(null);
+      setNicOtherMasjids([]);
 
       // === BACKGROUND SILENT REFRESH === (reconcile server-generated ids/member_code without loading UI)
       // Only refresh members data to avoid overwriting other state and improve performance
@@ -1240,7 +1308,16 @@ export default function FamilyDetailsPage() {
           if (membersData) {
             console.log("[Family] Background refresh: fetched", membersData.length, "members from database");
             console.log("[Family] Background refresh: member details", membersData.map(m => ({ name: m.name, relationship: m.relationship, id: m.id, family_id: m.family_id })));
-            const sortedMembers = [...membersData].sort((a, b) => {
+
+            // Filter out soft-deleted members to prevent flickering
+            const softDeleteStatuses = ["Moved Out", "Left", "Deceased", "Inactive", "Transferred"];
+            const activeMembersData = membersData.filter(member => {
+              const status = member.status;
+              return !status || status === "Active" || !softDeleteStatuses.includes(status);
+            });
+            console.log("[Family] Background refresh: after filtering", activeMembersData.length, "active members");
+
+            const sortedMembers = [...activeMembersData].sort((a, b) => {
               const rankDiff = getFamilyMemberSortRank(a) - getFamilyMemberSortRank(b);
               if (rankDiff !== 0) return rankDiff;
 
@@ -1294,47 +1371,244 @@ export default function FamilyDetailsPage() {
   };
 
   const deleteMember = async (memberId: string) => {
-    if (!supabase || !tenantContext?.masjidId || !window.confirm(t.confirm_delete)) return;
+    // Open delete confirmation modal instead of immediate deletion
+    const memberToDelete = members.find(m => m.id === memberId);
+    if (!memberToDelete) return;
 
-    // === BEGIN OPTIMISTIC MUTATION ===
-    beginOptimisticUpdate();
+    setMemberDeleteTarget(memberToDelete);
+    setMemberDeleteMode("soft");
+    setMemberDeleteStatus("Deceased");
+    setMemberDeleteReason("");
+    setMemberDeleteConfirmText("");
+  };
 
-    // === OPTIMISTIC SNAPSHOT ===
-    const membersSnapshot = [...members];
-    const allMembersSnapshot = [...allMasjidMembers];
-    const targetMember = members.find(m => m.id === memberId);
+  const executeMemberDelete = async () => {
+    if (!memberDeleteTarget || !supabase) return;
+    
+    try {
+      setIsMemberDeleteSubmitting(true);
+      
+      if (!tenantContext?.masjidId) {
+        throw new Error("No masjid context");
+      }
 
-    // === OPTIMISTIC REMOVE === Immediate UI update
-    setMembers(prev => prev.filter(m => m.id !== memberId));
-    setAllMasjidMembers(prev => prev.filter(m => m.id !== memberId));
-    setDeletingMemberId(memberId); // Show per-row loading spinner
+      const isAdmin = tenantContext.role === "super_admin" || tenantContext.role === "co_admin";
+      const canMembers = isAdmin || tenantContext.permissions?.members !== false;
+      if (!canMembers) {
+        throw new Error("Access denied");
+      }
+
+      const masjidId = tenantContext.masjidId;
+      const memberId = memberDeleteTarget.id;
+
+      // === BEGIN OPTIMISTIC MUTATION ===
+      beginOptimisticUpdate();
+
+      // === OPTIMISTIC SNAPSHOT ===
+      const membersSnapshot = [...members];
+      const allMembersSnapshot = [...allMasjidMembers];
+
+      // === OPTIMISTIC REMOVE === Immediate UI update
+      setMembers(prev => prev.filter(m => m.id !== memberId));
+      setAllMasjidMembers(prev => prev.filter(m => m.id !== memberId));
+      setDeletingMemberId(memberId);
+
+      if (memberDeleteMode === "hard") {
+        // Hard delete - permanent deletion with confirmation
+        if (memberDeleteConfirmText !== "DELETE") {
+          throw new Error("Please type DELETE to confirm permanent deletion");
+        }
+
+        const { error } = await supabase
+          .from("members")
+          .delete()
+          .eq("id", memberId)
+          .eq("masjid_id", masjidId);
+
+        if (error) throw error;
+      } else {
+        // Soft delete - update status
+        const payload = buildSoftDeletePayload(
+          memberDeleteStatus,
+          memberDeleteReason,
+          user?.id
+        );
+
+        console.log("[Soft Delete] Payload being sent to Supabase:", payload);
+        console.log("[Soft Delete] Member ID:", memberId);
+        console.log("[Soft Delete] Masjid ID:", masjidId);
+
+        const { error, data } = await supabase
+          .from("members")
+          .update(payload)
+          .eq("id", memberId)
+          .eq("masjid_id", masjidId)
+          .select()
+          .single();
+
+        if (error) {
+          console.error("[Soft Delete] Supabase error:", error);
+          console.error("[Soft Delete] Error details:", JSON.stringify(error, null, 2));
+          throw error;
+        }
+
+        console.log("[Soft Delete] Update successful. Returned data:", data);
+
+        // Verify the update was persisted by fetching the member again
+        const { data: verifyData, error: verifyError } = await supabase
+          .from("members")
+          .select("id, name, status, status_reason, status_changed_at, status_changed_by")
+          .eq("id", memberId)
+          .eq("masjid_id", masjidId)
+          .single();
+
+        if (verifyError) {
+          console.error("[Soft Delete] Verification query error:", verifyError);
+        } else {
+          console.log("[Soft Delete] Verification - Current DB state:", verifyData);
+          console.log("[Soft Delete] Verification - Status in DB:", verifyData?.status);
+        }
+
+        // Immediately add to soft-deleted members state for UI sync
+        if (data) {
+          setSoftDeletedMembers(prev => [data, ...prev]);
+        }
+      }
+
+      setSuccessMessage("Member removed successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000);
+      void fetchData(user, { silent: true });
+      setMemberDeleteTarget(null);
+      setMemberDeleteMode("soft");
+      setMemberDeleteStatus("Deceased");
+      setMemberDeleteReason("");
+      setMemberDeleteConfirmText("");
+    } catch (error) {
+      setMembers(membersSnapshot);
+      setAllMasjidMembers(allMembersSnapshot);
+      alert(error.message);
+    } finally {
+      setDeletingMemberId(null);
+      setIsMemberDeleteSubmitting(false);
+      endOptimisticUpdate();
+    }
+  };
+
+  // Restore a soft-deleted member back to active status
+  const restoreMember = async (memberId: string) => {
+    if (!supabase) return;
 
     try {
+      setRestoringMemberId(memberId);
+
+      if (!tenantContext?.masjidId) {
+        throw new Error("No masjid context");
+      }
+
+      const isAdmin = tenantContext.role === "super_admin" || tenantContext.role === "co_admin";
+      const canMembers = isAdmin || tenantContext.permissions?.members !== false;
+      if (!canMembers) {
+        throw new Error("Access denied");
+      }
+
+      const masjidId = tenantContext.masjidId;
+
+      console.log("[Restore Member] Restoring member:", memberId);
+
+      // Update status back to Active and clear soft-delete metadata
+      const { error, data } = await supabase
+        .from("members")
+        .update({
+          status: "Active",
+          status_reason: null,
+          status_changed_at: null,
+          status_changed_by: null
+        })
+        .eq("id", memberId)
+        .eq("masjid_id", masjidId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("[Restore Member] Supabase error:", error);
+        throw error;
+      }
+
+      console.log("[Restore Member] Restore successful. Returned data:", data);
+
+      // Remove from soft-deleted members state
+      setSoftDeletedMembers(prev => prev.filter(m => m.id !== memberId));
+
+      // Add back to active members state
+      if (data) {
+        setMembers(prev => [...prev, data]);
+      }
+
+      setSuccessMessage("Member restored successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000);
+
+      // Refresh data to ensure consistency
+      void fetchData(user, { silent: true });
+    } catch (error: any) {
+      console.error("[Restore Member] Error:", error);
+      alert(error.message || "Failed to restore member");
+    } finally {
+      setRestoringMemberId(null);
+    }
+  };
+
+  // Hard delete a soft-deleted member permanently
+  const executeHardDeleteForPreviousMember = async (memberId: string) => {
+    if (!supabase) return;
+
+    try {
+      setHardDeletingMemberId(memberId);
+
+      if (!tenantContext?.masjidId) {
+        throw new Error("No masjid context");
+      }
+
+      const isAdmin = tenantContext.role === "super_admin" || tenantContext.role === "co_admin";
+      const canMembers = isAdmin || tenantContext.permissions?.members !== false;
+      if (!canMembers) {
+        throw new Error("Access denied");
+      }
+
+      const masjidId = tenantContext.masjidId;
+
+      console.log("[Hard Delete Previous] Permanently deleting member:", memberId);
+
       const { error } = await supabase
         .from("members")
         .delete()
         .eq("id", memberId)
-        .eq("masjid_id", tenantContext.masjidId);
+        .eq("masjid_id", masjidId);
 
-      if (error) throw error;
+      if (error) {
+        console.error("[Hard Delete Previous] Supabase error:", error);
+        throw error;
+      }
 
-      setSuccessMessage("Member deleted successfully!");
+      console.log("[Hard Delete Previous] Delete successful");
+
+      // Remove from soft-deleted members state
+      setSoftDeletedMembers(prev => prev.filter(m => m.id !== memberId));
+
+      setSuccessMessage("Member permanently deleted!");
       setTimeout(() => setSuccessMessage(""), 3000);
 
-      // Background silent refresh to reconcile counts/cache
+      // Close confirmation dialog
+      setShowHardDeleteConfirm(false);
+      setHardDeleteConfirmText("");
+      setHardDeletingMemberId(null);
+
+      // Refresh data to ensure consistency
       void fetchData(user, { silent: true });
     } catch (error: any) {
-      // === ROLLBACK === Re-insert the removed member
-      if (targetMember) {
-        setMembers(membersSnapshot);
-        setAllMasjidMembers(allMembersSnapshot);
-      }
-      console.error("DELETE MEMBER Error:", error);
-      alert(error.message);
+      console.error("[Hard Delete Previous] Error:", error);
+      alert(error.message || "Failed to delete member");
     } finally {
-      setDeletingMemberId(null);
-      // === END OPTIMISTIC MUTATION ===
-      endOptimisticUpdate();
+      setHardDeletingMemberId(null);
     }
   };
 
@@ -1813,6 +2087,95 @@ export default function FamilyDetailsPage() {
                 </div>
               ))
             )}
+
+            {/* Previous Members Section */}
+            {(() => {
+              console.log("[Previous Members] Render check - softDeletedMembers.length:", softDeletedMembers.length);
+              console.log("[Previous Members] Render check - softDeletedMembers:", softDeletedMembers);
+              return softDeletedMembers.length > 0;
+            })() && (
+              <div className="mt-6 border-t border-slate-200 pt-6">
+                <button
+                  onClick={() => setShowFamilyHistory(!showFamilyHistory)}
+                  className="w-full flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-2xl hover:bg-amber-100 transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <History className="h-5 w-5 text-amber-600" />
+                    <span className="text-sm font-black text-amber-900 uppercase tracking-widest">
+                      Previous Members ({softDeletedMembers.length})
+                    </span>
+                  </div>
+                  <ChevronDown className={`h-5 w-5 text-amber-600 transition-transform ${showFamilyHistory ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showFamilyHistory && (
+                  <div className="mt-4 space-y-3 animate-in fade-in duration-300">
+                    {softDeletedMembers.map((member) => (
+                      <div key={member.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h4 className="text-sm font-black text-slate-900">{member.name}</h4>
+                              <span className={`px-2 py-1 text-[10px] font-bold rounded-full ${
+                                member.status === 'Deceased' ? 'bg-red-100 text-red-700' :
+                                member.status === 'Transferred' ? 'bg-blue-100 text-blue-700' :
+                                member.status === 'Moved Out' ? 'bg-amber-100 text-amber-700' :
+                                'bg-slate-100 text-slate-700'
+                              }`}>
+                                {member.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mb-1">
+                              {normalizeRelationship(member.relationship)}{member.age ? ` • ${member.age} YEARS` : ""}
+                            </p>
+                            {member.status_reason && (
+                              <p className="text-xs text-slate-600 mt-2 italic">
+                                Reason: {member.status_reason}
+                              </p>
+                            )}
+                            {member.status_changed_at && (
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                {new Date(member.status_changed_at).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex gap-2 ml-4">
+                            <button
+                              onClick={() => restoreMember(member.id)}
+                              disabled={restoringMemberId === member.id}
+                              className="p-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Restore member"
+                            >
+                              {restoringMemberId === member.id ? (
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-4 w-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setHardDeletingMemberId(member.id);
+                                setShowHardDeleteConfirm(true);
+                                setHardDeleteConfirmText("");
+                              }}
+                              disabled={hardDeletingMemberId === member.id}
+                              className="p-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Delete permanently"
+                            >
+                              {hardDeletingMemberId === member.id ? (
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : activeTab === "payments" ? (
           <div className="space-y-4 w-full">
@@ -2127,14 +2490,87 @@ export default function FamilyDetailsPage() {
                   <label className="text-[11px] text-slate-400 uppercase font-bold ml-1">NIC</label>
                   <input
                     value={nic}
-                    onChange={(e) => setNic(e.target.value)}
+                    onChange={async (e) => {
+                      const nicValue = formatNic(e.target.value);
+                      setNic(nicValue);
+                      
+                      // Check for NIC in same masjid (intra-masjid transfer)
+                      if (nicValue && supabase && tenantContext?.masjidId) {
+                        setIsCheckingNic(true);
+                        try {
+                          // Check within current masjid
+                          const { data: existingMember } = await supabase
+                            .from("members")
+                            .select("id, family_id, name, nic")
+                            .eq("masjid_id", tenantContext.masjidId)
+                            .eq("nic", nicValue)
+                            .or("status.is.null,status.eq.Active")
+                            .limit(1)
+                            .single();
+                          
+                          if (existingMember && existingMember.family_id && existingMember.family_id !== familyId) {
+                            setNicTransferCandidate({
+                              id: existingMember.id,
+                              family_id: existingMember.family_id,
+                              name: existingMember.name,
+                              nic: existingMember.nic
+                            });
+                            setShowNicTransferModal(true);
+                          } else {
+                            setNicTransferCandidate(null);
+                          }
+                          
+                          // Check across other masjids (informational notice)
+                          const { data: otherMasjidMembers } = await supabase
+                            .from("members")
+                            .select("id, masjid_id")
+                            .eq("nic", nicValue)
+                            .neq("masjid_id", tenantContext.masjidId)
+                            .limit(5);
+                          
+                          if (otherMasjidMembers && otherMasjidMembers.length > 0) {
+                            const masjidIds = [...new Set(otherMasjidMembers.map(m => m.masjid_id))];
+                            const { data: masjidData } = await supabase
+                              .from("masjids")
+                              .select("id, name")
+                              .in("id", masjidIds);
+                            
+                            setNicOtherMasjids(masjidData?.map(m => ({
+                              id: m.id,
+                              masjid_name: m.name
+                            })) || []);
+                          } else {
+                            setNicOtherMasjids([]);
+                          }
+                        } catch (err) {
+                          console.error("NIC check error:", err);
+                        } finally {
+                          setIsCheckingNic(false);
+                        }
+                      } else {
+                        setNicTransferCandidate(null);
+                        setNicOtherMasjids([]);
+                      }
+                    }}
                     onBlur={(e) => {
                       setNic(formatNic(e.target.value));
                     }}
-                    className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20"
+                    className={`w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 ring-emerald-500/20 ${isCheckingNic ? 'opacity-60' : ''}`}
                     placeholder="12345V"
                   />
+                  {isCheckingNic && (
+                    <p className="text-xs text-slate-400 mt-1">Checking NIC...</p>
+                  )}
                 </div>
+
+                {/* Cross-masjid informational notice */}
+                {nicOtherMasjids.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl col-span-2">
+                    <p className="text-[10px] font-bold text-amber-900">
+                      Note: This person is also registered in {nicOtherMasjids.map(m => m.masjid_name).join(", ")}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -2698,6 +3134,349 @@ export default function FamilyDetailsPage() {
                   {isCollectionSubmitting ? "Adding..." : "Add Subscription"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Collection Modal */}
+      {isCollectionModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-[2rem] p-6 w-full max-w-md space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-blue-600">
+                <Wallet className="w-4 h-4" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Add Subscription</span>
+              </div>
+              <button
+                onClick={() => setIsCollectionModalOpen(false)}
+                className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount</label>
+                <input
+                  type="number"
+                  value={collectionAmount}
+                  onChange={(e) => setCollectionAmount(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="Enter amount"
+                  step="0.01"
+                />
+              </div>
+              
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</label>
+                <input
+                  type="date"
+                  value={collectionDate}
+                  onChange={(e) => setCollectionDate(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Note (Optional)</label>
+                <textarea
+                  value={collectionNote}
+                  onChange={(e) => setCollectionNote(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="Add any notes..."
+                  rows={2}
+                />
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsCollectionModalOpen(false)}
+                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addCollection}
+                  disabled={isCollectionSubmitting}
+                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {isCollectionSubmitting ? "Adding..." : "Add Subscription"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Member Delete Confirmation Modal */}
+      {memberDeleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+6rem)]">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black text-slate-900">
+                {memberDeleteMode === "hard" ? "Permanently Delete Member" : "Remove Member"}
+              </h2>
+              <button
+                onClick={() => {
+                  setMemberDeleteTarget(null);
+                  setMemberDeleteMode("soft");
+                  setMemberDeleteStatus("Moved Out");
+                  setMemberDeleteReason("");
+                  setMemberDeleteConfirmText("");
+                }}
+                className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl p-4 mb-6">
+              <p className="text-sm font-bold text-slate-900">{memberDeleteTarget.name}</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {normalizeRelationship(memberDeleteTarget.relationship)}
+                {memberDeleteTarget.nic && ` • NIC: ${memberDeleteTarget.nic}`}
+              </p>
+            </div>
+
+            {/* Delete Mode Toggle */}
+            <div className="flex gap-2 mb-6">
+              <button
+                onClick={() => {
+                  setMemberDeleteMode("soft");
+                  setMemberDeleteConfirmText("");
+                }}
+                className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${
+                  memberDeleteMode === "soft"
+                    ? "bg-emerald-100 text-emerald-700 border-2 border-emerald-500"
+                    : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                Soft Delete
+              </button>
+              <button
+                onClick={() => {
+                  setMemberDeleteMode("hard");
+                  setMemberDeleteConfirmText("");
+                }}
+                className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${
+                  memberDeleteMode === "hard"
+                    ? "bg-red-100 text-red-700 border-2 border-red-500"
+                    : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                Hard Delete
+              </button>
+            </div>
+
+            {memberDeleteMode === "soft" ? (
+              <>
+                <div className="space-y-4 mb-6">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                      Status
+                    </label>
+                    <select
+                      value={memberDeleteStatus}
+                      onChange={(e) => setMemberDeleteStatus(e.target.value as MemberSoftDeleteStatus)}
+                      className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                    >
+                      {MEMBER_SOFT_DELETE_STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                    {memberDeleteStatus && (
+                      <p className="text-[10px] text-slate-500 mt-1 ml-1">
+                        {MEMBER_STATUS_HELPER_TEXT[memberDeleteStatus]}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                      Reason (optional)
+                    </label>
+                    <textarea
+                      value={memberDeleteReason}
+                      onChange={(e) => setMemberDeleteReason(e.target.value)}
+                      className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+                      placeholder="Provide reason for removal..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl mb-6">
+                  <p className="text-xs font-bold text-blue-900">
+                    This will preserve the member record with a status change. Historical data will remain intact.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-red-50 border border-red-100 p-4 rounded-xl mb-6">
+                  <p className="text-xs font-bold text-red-900 mb-2">
+                    ⚠️ WARNING: This will permanently delete the member and all associated data. This action cannot be undone.
+                  </p>
+                </div>
+
+                <div className="space-y-2 mb-6">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    Type "DELETE" to confirm
+                  </label>
+                  <input
+                    type="text"
+                    value={memberDeleteConfirmText}
+                    onChange={(e) => setMemberDeleteConfirmText(e.target.value)}
+                    className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-red-500/10 outline-none transition-all font-bold"
+                    placeholder="DELETE"
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => {
+                  setMemberDeleteTarget(null);
+                  setMemberDeleteMode("soft");
+                  setMemberDeleteStatus("Moved Out");
+                  setMemberDeleteReason("");
+                  setMemberDeleteConfirmText("");
+                }}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeMemberDelete}
+                disabled={
+                  isMemberDeleteSubmitting ||
+                  (memberDeleteMode === "hard" && memberDeleteConfirmText !== "DELETE")
+                }
+                className={`flex-1 py-4 rounded-2xl text-sm font-bold text-white disabled:opacity-50 ${
+                  memberDeleteMode === "hard" ? "bg-red-600" : "bg-emerald-600"
+                }`}
+              >
+                {isMemberDeleteSubmitting ? "Processing..." : memberDeleteMode === "hard" ? "Delete Permanently" : "Remove Member"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hard Delete Confirmation Modal for Previous Members */}
+      {showHardDeleteConfirm && hardDeletingMemberId && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-red-600">Delete Permanently</h2>
+              <button
+                onClick={() => {
+                  setShowHardDeleteConfirm(false);
+                  setHardDeleteConfirmText("");
+                  setHardDeletingMemberId(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-full transition-all"
+              >
+                <X className="h-6 w-6 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-sm text-slate-600 mb-4">
+                This action <span className="font-bold text-red-600">cannot be undone</span>. The member will be permanently deleted from the database and will not appear in any reports or statistics.
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+                <p className="text-xs font-bold text-red-900 mb-2">Type DELETE to confirm</p>
+                <input
+                  type="text"
+                  value={hardDeleteConfirmText}
+                  onChange={(e) => setHardDeleteConfirmText(e.target.value)}
+                  placeholder="DELETE"
+                  className="w-full rounded-xl bg-white border-2 border-red-200 px-4 py-3 text-sm text-slate-900 focus:ring-4 focus:ring-red-500/10 focus:border-red-500 outline-none transition-all font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => {
+                  setShowHardDeleteConfirm(false);
+                  setHardDeleteConfirmText("");
+                  setHardDeletingMemberId(null);
+                }}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => executeHardDeleteForPreviousMember(hardDeletingMemberId)}
+                disabled={hardDeleteConfirmText !== "DELETE"}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                Delete Permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NIC Transfer Confirmation Modal */}
+      {showNicTransferModal && nicTransferCandidate && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <h2 className="text-2xl font-bold mb-4 text-center text-slate-900">Transfer Member</h2>
+            <p className="text-sm text-slate-600 mb-6 text-center">
+              This NIC is already registered for <span className="font-bold text-slate-900">{nicTransferCandidate.name}</span> in another family within this masjid. Do you want to transfer them to this family?
+            </p>
+            
+            <div className="space-y-2 mb-6">
+              <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                Transfer Reason (required)
+              </label>
+              <select
+                value={nicTransferReason}
+                onChange={(e) => setNicTransferReason(e.target.value)}
+                className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
+              >
+                <option value="">Select reason</option>
+                <option value="Marriage">Marriage</option>
+                <option value="Migration">Migration</option>
+                <option value="Family Split">Family Split</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            
+            <div className="flex gap-4">
+              <button
+                onClick={() => {
+                  setShowNicTransferModal(false);
+                  setNicTransferCandidate(null);
+                  setNicTransferReason("");
+                }}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold bg-slate-100 text-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (nicTransferReason) {
+                    setConfirmedNicTransferId(nicTransferCandidate.id);
+                    setShowNicTransferModal(false);
+                    setNicTransferReason("");
+                  } else {
+                    alert("Please select a transfer reason");
+                  }
+                }}
+                disabled={!nicTransferReason}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold bg-emerald-500 text-white disabled:opacity-50"
+              >
+                Confirm Transfer
+              </button>
             </div>
           </div>
         </div>

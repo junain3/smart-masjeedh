@@ -361,11 +361,12 @@ export default function HomePage() {
             .select("id", { count: "exact", head: true })
             .eq("masjid_id", tenantContext.masjidId),
           
-          // Member count for both live status and display
+          // Member count for both live status and display (exclude soft-deleted)
           supabase
             .from("members")
             .select("id", { count: "exact", head: true })
-            .eq("masjid_id", tenantContext.masjidId),
+            .eq("masjid_id", tenantContext.masjidId)
+            .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")'),
           
           // Masjid data
           supabase
@@ -683,6 +684,8 @@ export default function HomePage() {
 
           .eq("masjid_id", ctx.masjidId)
 
+          .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")')
+
           .gte("age", p.minAge);
 
         if (p.gender) q = q.eq("gender", p.gender);
@@ -710,6 +713,8 @@ export default function HomePage() {
           .select("id,family_id,full_name,age,gender")
 
           .eq("masjid_id", ctx.masjidId)
+
+          .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")')
 
           .lte("age", p.maxAge);
 
@@ -739,6 +744,8 @@ export default function HomePage() {
 
           .eq("masjid_id", ctx.masjidId)
 
+          .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")')
+
           .eq("age", p.age);
 
         if (p.gender) q = q.eq("gender", p.gender);
@@ -766,6 +773,8 @@ export default function HomePage() {
           .select("id,family_id,full_name,age,gender")
 
           .eq("masjid_id", ctx.masjidId)
+
+          .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")')
 
           .gte("age", p.minAge)
 
@@ -816,6 +825,8 @@ export default function HomePage() {
             .select("id,family_id,full_name,age,gender")
 
             .eq("masjid_id", ctx.masjidId)
+
+            .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")')
 
             .or(
 

@@ -198,7 +198,8 @@ const masjidId = roleData.masjid_id;
           masjid_id
         )
       `, { count: 'exact' })
-      .eq('masjid_id', masjidId);
+      .eq('masjid_id', masjidId)
+      .not('status', 'in', '("Moved Out","Left","Deceased","Inactive","Transferred")');
 
     // Apply filters dynamically
     if (filters.gender && filters.gender.length > 0) {
