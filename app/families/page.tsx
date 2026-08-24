@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download } from "lucide-react";
+import { Plus, Search, Users, RefreshCw, QrCode, X, ArrowLeft, CreditCard, Edit, Trash2, FileText, Download, RotateCcw, History, ChevronDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { translations, getTranslation, Language } from "@/lib/i18n/translations";
 import { QrScannerModal } from "@/components/QrScannerModal";
@@ -173,6 +173,14 @@ export default function FamiliesPage() {
   const [familyDeleteReason, setFamilyDeleteReason] = useState("");
   const [familyDeleteConfirmText, setFamilyDeleteConfirmText] = useState("");
   const [isFamilyDeleteSubmitting, setIsFamilyDeleteSubmitting] = useState(false);
+
+  // Previous Families management state
+  const [softDeletedFamilies, setSoftDeletedFamilies] = useState<Family[]>([]);
+  const [showPreviousFamilies, setShowPreviousFamilies] = useState(false);
+  const [restoringFamilyId, setRestoringFamilyId] = useState<string | null>(null);
+  const [hardDeletingFamilyId, setHardDeletingFamilyId] = useState<string | null>(null);
+  const [hardDeleteFamilyConfirmText, setHardDeleteFamilyConfirmText] = useState("");
+  const [showHardDeleteFamilyConfirm, setShowHardDeleteFamilyConfirm] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -571,7 +579,7 @@ export default function FamiliesPage() {
 
       const { data, error } = await supabase
         .from("families")
-        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id, house_type, has_toilet, special_needs_details, foreign_members_details, health_details, has_car, has_three_wheeler, has_van, has_lorry, has_tractor, extra_notes, status")
+        .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id, house_type, has_toilet, special_needs_details, foreign_members_details, health_details, has_car, has_three_wheeler, has_van, has_lorry, has_tractor, extra_notes, status, status_reason, status_changed_at")
         .eq("masjid_id", masjidId)
         .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")')
         .order("family_code", { ascending: true });
@@ -584,6 +592,26 @@ export default function FamiliesPage() {
         setFamilies(sortedFamilies);
         setIsLive(true);
         if (!silent) setErrorMessage("");
+
+        // Fetch soft-deleted families for Previous Families section
+        try {
+          const { data: softDeletedData, error: softDeletedError } = await supabase
+            .from("families")
+            .select("id, family_code, head_name, phone, address, is_widow_head, subscription_amount, opening_balance, created_at, masjid_id, house_type, has_toilet, special_needs_details, foreign_members_details, health_details, has_car, has_three_wheeler, has_van, has_lorry, has_tractor, extra_notes, status, status_reason, status_changed_at")
+            .eq("masjid_id", masjidId)
+            .order("status_changed_at", { ascending: false, nullsFirst: false });
+
+          if (!softDeletedError && softDeletedData) {
+            const softDeleteStatuses = ["Moved Out", "Left", "Deceased", "Inactive", "Transferred"];
+            const filteredSoftDeleted = softDeletedData.filter(family => {
+              const status = family.status;
+              return status && softDeleteStatuses.includes(status);
+            });
+            setSoftDeletedFamilies(filteredSoftDeleted);
+          }
+        } catch (softDeletedErr) {
+          console.error("Soft-deleted families fetch error:", softDeletedErr);
+        }
 
         safeCacheWrite(getCacheKey(masjidId), sortedFamilies);
 
@@ -991,11 +1019,11 @@ export default function FamiliesPage() {
     setIsCheckingHeadNic(false);
   };
 
-  async function deleteFamily(id: string) {
+  function deleteFamily(id: string) {
     // Open delete confirmation modal instead of immediate deletion
     const familyToDelete = families.find(f => f.id === id);
     if (!familyToDelete) return;
-    
+
     setFamilyDeleteTarget(familyToDelete);
     setFamilyDeleteMode("soft");
     setFamilyDeleteStatus("Moved Out");
@@ -1068,8 +1096,8 @@ export default function FamiliesPage() {
       }
       
       setTimeout(() => void fetchFamilies(true), 300);
-      
-      // Reset modal state
+
+      // Reset modal state on success
       setFamilyDeleteTarget(null);
       setFamilyDeleteMode("soft");
       setFamilyDeleteStatus("Moved Out");
@@ -1077,10 +1105,138 @@ export default function FamiliesPage() {
       setFamilyDeleteConfirmText("");
     } catch (err: any) {
       alert(err.message);
+      // Reset modal state on error to prevent stuck state
+      setFamilyDeleteTarget(null);
+      setFamilyDeleteMode("soft");
+      setFamilyDeleteStatus("Moved Out");
+      setFamilyDeleteReason("");
+      setFamilyDeleteConfirmText("");
     } finally {
       setIsFamilyDeleteSubmitting(false);
     }
   }
+
+  // Restore a soft-deleted family back to active status
+  const restoreFamily = async (familyId: string) => {
+    if (!supabase) return;
+
+    try {
+      setRestoringFamilyId(familyId);
+
+      if (!tenantContext?.masjidId) {
+        throw new Error("No masjid context");
+      }
+
+      const isAdmin = tenantContext.role === "super_admin" || tenantContext.role === "co_admin";
+      const canMembers = isAdmin || tenantContext.permissions?.members !== false;
+      if (!canMembers) {
+        throw new Error("Access denied");
+      }
+
+      const masjidId = tenantContext.masjidId;
+
+      console.log("[Restore Family] Restoring family:", familyId);
+
+      // Update status back to Active and clear soft-delete metadata
+      const { error, data } = await supabase
+        .from("families")
+        .update({
+          status: "Active",
+          status_reason: null,
+          status_changed_at: null
+        })
+        .eq("id", familyId)
+        .eq("masjid_id", masjidId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("[Restore Family] Supabase error:", error);
+        throw error;
+      }
+
+      console.log("[Restore Family] Restore successful. Returned data:", data);
+
+      // Remove from soft-deleted families state
+      setSoftDeletedFamilies(prev => prev.filter(f => f.id !== familyId));
+
+      // Add back to active families state
+      if (data) {
+        setFamilies(prev => sortFamiliesByCode([...prev, data]) as Family[]);
+        if (tenantContext?.masjidId) safeCacheWrite(getCacheKey(tenantContext.masjidId), sortFamiliesByCode([...families, data]) as Family[]);
+      }
+
+      setSuccessMessage("Family restored successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000);
+
+      // Refresh data to ensure consistency
+      setTimeout(() => void fetchFamilies(true), 300);
+    } catch (error: any) {
+      console.error("[Restore Family] Error:", error);
+      alert(error.message || "Failed to restore family");
+    } finally {
+      setRestoringFamilyId(null);
+    }
+  };
+
+  // Hard delete a soft-deleted family permanently
+  const executeHardDeleteForPreviousFamily = async (familyId: string) => {
+    if (!supabase) return;
+
+    try {
+      setHardDeletingFamilyId(familyId);
+
+      if (!tenantContext?.masjidId) {
+        throw new Error("No masjid context");
+      }
+
+      const isAdmin = tenantContext.role === "super_admin" || tenantContext.role === "co_admin";
+      const canMembers = isAdmin || tenantContext.permissions?.members !== false;
+      if (!canMembers) {
+        throw new Error("Access denied");
+      }
+
+      const masjidId = tenantContext.masjidId;
+
+      console.log("[Hard Delete Previous Family] Permanently deleting family:", familyId);
+
+      const { error } = await supabase
+        .from("families")
+        .delete()
+        .eq("id", familyId)
+        .eq("masjid_id", masjidId);
+
+      if (error) {
+        console.error("[Hard Delete Previous Family] Supabase error:", error);
+        throw error;
+      }
+
+      console.log("[Hard Delete Previous Family] Delete successful");
+
+      // Remove from soft-deleted families state
+      setSoftDeletedFamilies(prev => prev.filter(f => f.id !== familyId));
+
+      setSuccessMessage("Family permanently deleted!");
+      setTimeout(() => setSuccessMessage(""), 3000);
+
+      // Close confirmation dialog
+      setShowHardDeleteFamilyConfirm(false);
+      setHardDeleteFamilyConfirmText("");
+      setHardDeletingFamilyId(null);
+
+      // Refresh data to ensure consistency
+      setTimeout(() => void fetchFamilies(true), 300);
+    } catch (error: any) {
+      console.error("[Hard Delete Previous Family] Error:", error);
+      alert(error.message || "Failed to delete family");
+      // Reset state on error to prevent stuck modal
+      setShowHardDeleteFamilyConfirm(false);
+      setHardDeleteFamilyConfirmText("");
+      setHardDeletingFamilyId(null);
+    } finally {
+      setHardDeletingFamilyId(null);
+    }
+  };
 
   // Helper function to parse QR selection input
   const parseQrSelection = (input: string): number[] => {
@@ -1692,18 +1848,22 @@ export default function FamiliesPage() {
                     
                     {/* Action Buttons */}
                     <div className="flex gap-2 pt-2">
-                      <button 
+                      <button
+                        type="button"
                         onClick={(e) => {
                           e.preventDefault();
+                          e.stopPropagation();
                           setEditingFamily(family);
                         }}
                         className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button 
+                      <button
+                        type="button"
                         onClick={(e) => {
                           e.preventDefault();
+                          e.stopPropagation();
                           deleteFamily(family.id);
                         }}
                         className="p-2 bg-rose-500 hover:bg-rose-600 text-white rounded-lg transition-colors"
@@ -1718,13 +1878,15 @@ export default function FamiliesPage() {
               {/* Desktop Table Layout */}
               <div className="hidden sm:block space-y-3 w-full">
                 {filteredFamilies.map((family) => (
-                  <Link
+                  <div
                     key={family.id}
-                    href={`/families/${family.id}`}
-                    className="block bg-white professional-card rounded-[1.5rem] p-5 active:scale-[0.98] transition-all group"
+                    className="bg-white professional-card rounded-[1.5rem] p-5 active:scale-[0.98] transition-all group"
                   >
                     <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0 flex-1 space-y-1">
+                      <Link
+                        href={`/families/${family.id}`}
+                        className="min-w-0 flex-1 space-y-1"
+                      >
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-black bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-md uppercase tracking-tighter">
                             {family.family_code}
@@ -1740,10 +1902,11 @@ export default function FamiliesPage() {
                           </svg>
                           {family.address}
                         </p>
-                      </div>
+                      </Link>
                       <div className="flex flex-col items-end gap-2">
                         <div className="flex items-center gap-1">
-                          <button 
+                          <button
+                            type="button"
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
@@ -1753,7 +1916,8 @@ export default function FamiliesPage() {
                           >
                             <Edit className="w-4 h-4" />
                           </button>
-                          <button 
+                          <button
+                            type="button"
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
@@ -1767,13 +1931,98 @@ export default function FamiliesPage() {
                         <p className="text-[10px] font-bold text-slate-400">{family.phone}</p>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             </>
           )}
         </div>
       </section>
+
+      {/* Previous Families Section */}
+      {softDeletedFamilies.length > 0 && (
+        <div className="mt-6 border-t border-slate-200 pt-6">
+          <button
+            onClick={() => setShowPreviousFamilies(!showPreviousFamilies)}
+            className="w-full flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-2xl hover:bg-amber-100 transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <History className="h-5 w-5 text-amber-600" />
+              <span className="text-sm font-black text-amber-900 uppercase tracking-widest">
+                Previous Families ({softDeletedFamilies.length})
+              </span>
+            </div>
+            <ChevronDown className={`h-5 w-5 text-amber-600 transition-transform ${showPreviousFamilies ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showPreviousFamilies && (
+            <div className="mt-4 space-y-3 animate-in fade-in duration-300">
+              {softDeletedFamilies.map((family) => (
+                <div key={family.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h4 className="text-sm font-black text-slate-900">{family.family_code}</h4>
+                        <span className={`px-2 py-1 text-[10px] font-bold rounded-full ${
+                          family.status === 'Deceased' ? 'bg-red-100 text-red-700' :
+                          family.status === 'Transferred' ? 'bg-blue-100 text-blue-700' :
+                          family.status === 'Moved Out' ? 'bg-amber-100 text-amber-700' :
+                          'bg-slate-100 text-slate-700'
+                        }`}>
+                          {family.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mb-1">
+                        {family.head_name} • {family.phone}
+                      </p>
+                      {family.status_reason && (
+                        <p className="text-xs text-slate-600 mt-2 italic">
+                          Reason: {family.status_reason}
+                        </p>
+                      )}
+                      {family.status_changed_at && (
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          {new Date(family.status_changed_at).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-2 ml-4">
+                      <button
+                        onClick={() => restoreFamily(family.id)}
+                        disabled={restoringFamilyId === family.id}
+                        className="p-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Restore family"
+                      >
+                        {restoringFamilyId === family.id ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-4 w-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setHardDeletingFamilyId(family.id);
+                          setShowHardDeleteFamilyConfirm(true);
+                          setHardDeleteFamilyConfirmText("");
+                        }}
+                        disabled={hardDeletingFamilyId === family.id}
+                        className="p-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Delete permanently"
+                      >
+                        {hardDeletingFamilyId === family.id ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {isPdfOptionsOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2058,6 +2307,63 @@ export default function FamiliesPage() {
                 }`}
               >
                 {isFamilyDeleteSubmitting ? "Processing..." : familyDeleteMode === "hard" ? "Delete Permanently" : "Remove Family"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hard Delete Confirmation Modal for Previous Families */}
+      {showHardDeleteFamilyConfirm && hardDeletingFamilyId && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-red-600">Delete Permanently</h2>
+              <button
+                onClick={() => {
+                  setShowHardDeleteFamilyConfirm(false);
+                  setHardDeleteFamilyConfirmText("");
+                  setHardDeletingFamilyId(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-full transition-all"
+              >
+                <X className="h-6 w-6 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-sm text-slate-600 mb-4">
+                This action <span className="font-bold text-red-600">cannot be undone</span>. The family will be permanently deleted from the database and will not appear in any reports or statistics.
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+                <p className="text-xs font-bold text-red-900 mb-2">Type DELETE to confirm</p>
+                <input
+                  type="text"
+                  value={hardDeleteFamilyConfirmText}
+                  onChange={(e) => setHardDeleteFamilyConfirmText(e.target.value)}
+                  placeholder="DELETE"
+                  className="w-full rounded-xl bg-white border-2 border-red-200 px-4 py-3 text-sm text-slate-900 focus:ring-4 focus:ring-red-500/10 focus:border-red-500 outline-none transition-all font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => {
+                  setShowHardDeleteFamilyConfirm(false);
+                  setHardDeleteFamilyConfirmText("");
+                  setHardDeletingFamilyId(null);
+                }}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => executeHardDeleteForPreviousFamily(hardDeletingFamilyId)}
+                disabled={hardDeleteFamilyConfirmText !== "DELETE"}
+                className="flex-1 py-4 rounded-2xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                Delete Permanently
               </button>
             </div>
           </div>

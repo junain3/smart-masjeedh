@@ -355,11 +355,12 @@ export default function HomePage() {
           membersCountResult,
           masjidDataResult
         ] = await Promise.all([
-          // Family count for both live status and display
+          // Family count for both live status and display (exclude soft-deleted)
           supabase
             .from("families")
             .select("id", { count: "exact", head: true })
-            .eq("masjid_id", tenantContext.masjidId),
+            .eq("masjid_id", tenantContext.masjidId)
+            .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")'),
           
           // Member count for both live status and display (exclude soft-deleted)
           supabase
@@ -658,6 +659,8 @@ export default function HomePage() {
 
           .eq("masjid_id", ctx.masjidId)
 
+          .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")')
+
           .eq("family_code", p.code)
 
           .order("family_code", { ascending: true });
@@ -809,6 +812,8 @@ export default function HomePage() {
             .select("id,family_code,head_name,is_widow_head")
 
             .eq("masjid_id", ctx.masjidId)
+
+            .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")')
 
             .or(
 
@@ -1462,7 +1467,7 @@ setReportCount(result.data?.count || 0)
 
 
 
-      // 1. Fetch all families for this masjid
+      // 1. Fetch all families for this masjid (exclude soft-deleted)
 
       const { data: families } = await supabase
 
@@ -1470,7 +1475,9 @@ setReportCount(result.data?.count || 0)
 
         .select("id")
 
-        .eq("masjid_id", ctx.masjidId);
+        .eq("masjid_id", ctx.masjidId)
+
+        .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")');
 
       
 
