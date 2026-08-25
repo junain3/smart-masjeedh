@@ -350,41 +350,41 @@ export default function HomePage() {
       }
 
       try {
-        const [
-          familiesCountResult,
-          membersCountResult,
-          masjidDataResult
-        ] = await Promise.all([
-          // Family count for both live status and display (exclude soft-deleted)
-          supabase
-            .from("families")
-            .select("id", { count: "exact", head: true })
-            .eq("masjid_id", tenantContext.masjidId)
-            .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")'),
-          
-          // Member count for both live status and display (exclude soft-deleted)
-          supabase
-            .from("members")
-            .select("id", { count: "exact", head: true })
-            .eq("masjid_id", tenantContext.masjidId)
-            .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")'),
-          
-          // Masjid data
-          supabase
-            .from("masjids")
-            .select("masjid_name, logo_url, tagline, preferred_language")
-            .eq("id", tenantContext.masjidId)
-            .single()
-        ]);
+          const [
+            familiesCountResult,
+            membersCountResult,
+            masjidDataResult
+          ] = await Promise.all([
+            // Family count
+            supabase
+              .from("families")
+              .select("id", { count: "exact", head: true })
+              .eq("masjid_id", tenantContext.masjidId)
+              .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")'),
+
+            // Member count - count active members only
+            supabase
+              .from("members")
+              .select("id", { count: "exact", head: true })
+              .eq("masjid_id", tenantContext.masjidId)
+              .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")'),
+
+            // Masjid data
+            supabase
+              .from("masjids")
+              .select("masjid_name, logo_url, tagline, preferred_language")
+              .eq("id", tenantContext.masjidId)
+              .single()
+          ]);
 
         // Update counts
         const familiesCount = familiesCountResult.count || 0;
-        const membersCount = membersCountResult.count || 0;
+        const totalMembersCount = membersCountResult.count || 0;
         setFamilyCount(familiesCount);
-        setMemberCount(membersCount);
-        
+        setMemberCount(totalMembersCount);
+
         // Update live status
-        setIsLive(familiesCount > 0 || membersCount > 0);
+        setIsLive(familiesCount > 0 || totalMembersCount > 0);
         
         // Update masjid data
         let masjidObj = {
@@ -397,11 +397,11 @@ export default function HomePage() {
         const { data: masjidData, error: masjidError } = masjidDataResult;
         if (!masjidError && masjidData) {
           masjidObj = {
-            name: (masjidData as any).masjid_name || "Masjid",
-            logo_url: (masjidData as any).logo_url || "",
-            tagline: (masjidData as any).tagline || "Your Masjid",
+            name: masjidData.masjid_name || "Masjid",
+            logo_url: masjidData.logo_url || "",
+            tagline: masjidData.tagline || "Your Masjid",
           };
-          preferredLanguage = (masjidData as any).preferred_language || null;
+          preferredLanguage = masjidData.preferred_language || null;
 
           if (preferredLanguage && ["en", "ta", "si"].includes(preferredLanguage)) {
             setLang(preferredLanguage as Language);
@@ -414,7 +414,7 @@ export default function HomePage() {
         if (typeof window !== "undefined") {
           localStorage.setItem(cacheKey, JSON.stringify({
             familyCount: familiesCount,
-            memberCount: membersCount,
+            memberCount: memberCount,
             masjid: masjidObj,
             preferredLanguage: preferredLanguage,
           }));
