@@ -363,6 +363,7 @@ export default function HomePage() {
               .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")'),
 
             // Member count - count active members only
+            // Note: Soft-delete cascade ensures members of soft-deleted families are also soft-deleted
             supabase
               .from("members")
               .select("id", { count: "exact", head: true })
