@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
@@ -131,6 +131,17 @@ export default function AccountsPage() {
   const [pdfToDate, setPdfToDate] = useState("");
   const [pdfTypeFilter, setPdfTypeFilter] = useState<"all" | "income" | "expense">("all");
 
+  // Ref to track component mount state for preventing state updates on unmounted component
+  const isMountedRef = useRef(true);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Parse permissions and check access (no hooks here)
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
   const userIsSuperAdmin = isSuperAdmin(parsedPermissions, tenantContext?.role);
@@ -233,18 +244,22 @@ export default function AccountsPage() {
 
   async function fetchData(currentUser: any) {
     if (!supabase || !currentUser) {
-      setLoading(false);
+      if (isMountedRef.current) setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setErrorMessage("");
+    if (isMountedRef.current) {
+      setLoading(true);
+      setErrorMessage("");
+    }
 
     try {
       if (!tenantContext?.masjidId) {
-        setTransactions([]);
-        setFamilies([]);
-        setPendingAccountCollections([]);
+        if (isMountedRef.current) {
+          setTransactions([]);
+          setFamilies([]);
+          setPendingAccountCollections([]);
+        }
         return;
       }
 
@@ -270,7 +285,9 @@ export default function AccountsPage() {
           }
         });
       }
-      setOpeningBalance(calculatedOpeningBalance);
+      if (isMountedRef.current) {
+        setOpeningBalance(calculatedOpeningBalance);
+      }
 
       // Run queries in parallel instead of sequentially
       const [transactionsResponse, familiesResponse, staffResponse, pendingCollectionsResponse] = await Promise.all([
@@ -313,25 +330,35 @@ export default function AccountsPage() {
       
       if (userIds.length > 0) {
         const namesMap = await fetchUserNames(supabase, userIds);
-        setUserNames(namesMap);
+        if (isMountedRef.current) {
+          setUserNames(namesMap);
+        }
       }
 
-      setTransactions(transactionsList);
-      setFamilies(familiesList);
-      setStaff(staffList);
-      setPendingAccountCollections(
-        ((pendingCollectionsList as PendingAccountCollection[]) || []).filter((c) =>
-          isDirectAccountCollection(c.notes)
-        )
-      );
-      setErrorMessage("");
+      if (isMountedRef.current) {
+        setTransactions(transactionsList);
+        setFamilies(familiesList);
+        setStaff(staffList);
+        setPendingAccountCollections(
+          ((pendingCollectionsList as PendingAccountCollection[]) || []).filter((c) =>
+            isDirectAccountCollection(c.notes)
+          )
+        );
+        setErrorMessage("");
+      }
     } catch (err: any) {
       console.error("Fetch error:", err);
-      setErrorMessage(err.message || "Failed to load data.");
-      setTransactions([]);
-      setFamilies([]);
+      if (isMountedRef.current) {
+        setErrorMessage(err.message || "Failed to load data.");
+        setTransactions([]);
+        setFamilies([]);
+        setStaff([]);
+        setPendingAccountCollections([]);
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }
 
@@ -346,30 +373,38 @@ export default function AccountsPage() {
   }) {
     if (!supabase || !user) return;
 
-    setSubmitting(true);
+    if (isMountedRef.current) {
+      setSubmitting(true);
+    }
 
     try {
       // Use tenantContext from useMockAuth instead of getTenantContext
       const ctx = tenantContext || await getTenantContext();
       if (!ctx) {
-        setErrorMessage("Tenant context not found");
-        setSubmitting(false);
+        if (isMountedRef.current) {
+          setErrorMessage("Tenant context not found");
+          setSubmitting(false);
+        }
         return;
       }
 
       // Get the authenticated user ID from auth, not from state
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
-        setErrorMessage("Not authenticated");
-        setSubmitting(false);
+        if (isMountedRef.current) {
+          setErrorMessage("Not authenticated");
+          setSubmitting(false);
+        }
         return;
       }
 
       const authUserId = session.user.id;
       const amountNum = data.amount;
       if (!Number.isFinite(amountNum) || amountNum <= 0) {
-        setErrorMessage("சரியான தொகை உள்ளிடவும்");
-        setSubmitting(false);
+        if (isMountedRef.current) {
+          setErrorMessage("சரியான தொகை உள்ளிடவும்");
+          setSubmitting(false);
+        }
         return;
       }
 
@@ -377,15 +412,17 @@ export default function AccountsPage() {
       if (data.type === "expense" && (data.category === "Salary" || data.category === "Advance Salary") && data.staffId) {
         const selectedStaffMember = staff.find((s) => s.id === data.staffId);
         if (selectedStaffMember) {
-          setPendingSalaryPayment({
-            staffId: data.staffId,
-            staffName: selectedStaffMember.name,
-            amount: amountNum,
-            date: data.date,
-            category: data.category,
-          });
-          setShowConfirmModal(true);
-          setSubmitting(false);
+          if (isMountedRef.current) {
+            setPendingSalaryPayment({
+              staffId: data.staffId,
+              staffName: selectedStaffMember.name,
+              amount: amountNum,
+              date: data.date,
+              category: data.category,
+            });
+            setShowConfirmModal(true);
+            setSubmitting(false);
+          }
           return;
         }
       }
@@ -396,7 +433,9 @@ export default function AccountsPage() {
           title: "குடும்பம் தேவை",
           message: "சந்தா வரவுக்கு குடும்பத்தைத் தேர்ந்தெடுக்கவும்",
         });
-        setSubmitting(false);
+        if (isMountedRef.current) {
+          setSubmitting(false);
+        }
         return;
       }
 
@@ -546,12 +585,14 @@ export default function AccountsPage() {
         if (error) throw error;
       }
 
-      setIsModalOpen(false);
-      const wasEditingPendingCollection = !!editingCollectionId;
-      setEditingTransaction(null);
-      setEditingCollectionId(null);
+      if (isMountedRef.current) {
+        setIsModalOpen(false);
+        const wasEditingPendingCollection = !!editingCollectionId;
+        setEditingTransaction(null);
+        setEditingCollectionId(null);
+      }
       await fetchData(user);
-      if (isSubscription) {
+      if (isMountedRef.current && isSubscription) {
         const autoApprovedNew = !editingCollectionId && addApiResult?.auto_approved === true;
         toast({
           kind: "success",
@@ -571,14 +612,18 @@ export default function AccountsPage() {
         message: err.message || "Failed",
       });
     } finally {
-      setSubmitting(false);
+      if (isMountedRef.current) {
+        setSubmitting(false);
+      }
     }
   }
 
   const confirmSalaryPayment = async () => {
     if (!pendingSalaryPayment || !supabase || !user) return;
 
-    setSubmitting(true);
+    if (isMountedRef.current) {
+      setSubmitting(true);
+    }
     try {
       const ctx = tenantContext || (await getTenantContext());
       if (!ctx) throw new Error("Tenant context not available");
@@ -725,20 +770,24 @@ export default function AccountsPage() {
         }
       }
 
-      setShowConfirmModal(false);
-      setPendingSalaryPayment(null);
-      setIsModalOpen(false);
-      setEditingTransaction(null);
-      setEditingCollectionId(null);
+      if (isMountedRef.current) {
+        setShowConfirmModal(false);
+        setPendingSalaryPayment(null);
+        setIsModalOpen(false);
+        setEditingTransaction(null);
+        setEditingCollectionId(null);
+      }
       await fetchData(user);
       
-      toast({
-        kind: "success",
-        title: isAdvanceSalary ? "Advance Salary Given" : "Salary Paid",
-        message: isAdvanceSalary
-          ? `Advance salary of Rs. ${pendingSalaryPayment.amount.toLocaleString()} recorded for ${pendingSalaryPayment.staffName}. Advances balance updated.`
-          : `Salary payment of Rs. ${pendingSalaryPayment.amount.toLocaleString()} recorded for ${pendingSalaryPayment.staffName}. Pending arrears updated.`,
-      });
+      if (isMountedRef.current) {
+        toast({
+          kind: "success",
+          title: isAdvanceSalary ? "Advance Salary Given" : "Salary Paid",
+          message: isAdvanceSalary
+            ? `Advance salary of Rs. ${pendingSalaryPayment.amount.toLocaleString()} recorded for ${pendingSalaryPayment.staffName}. Advances balance updated.`
+            : `Salary payment of Rs. ${pendingSalaryPayment.amount.toLocaleString()} recorded for ${pendingSalaryPayment.staffName}. Pending arrears updated.`,
+        });
+      }
     } catch (err: any) {
       console.error("Salary payment error:", err);
       toast({
@@ -747,7 +796,9 @@ export default function AccountsPage() {
         message: err.message || "Failed to process salary payment",
       });
     } finally {
-      setSubmitting(false);
+      if (isMountedRef.current) {
+        setSubmitting(false);
+      }
     }
   };
 
