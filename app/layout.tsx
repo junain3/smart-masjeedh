@@ -1,6 +1,7 @@
 import "./globals.css";
 import { ToastProvider } from "@/components/ToastProvider";
 import { UnifiedAppProvider } from "@/components/UnifiedAppProvider";
+import { AutoReconnect } from "@/components/AutoReconnect";
 import { Inter } from "next/font/google";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -41,6 +42,7 @@ export default function RootLayout(props: { children: React.ReactNode }) {
       </head>
       <body className={`${inter.className} min-h-screen bg-neutral-50 text-neutral-900`}>
         <UnifiedAppProvider>
+          <AutoReconnect />
           <ToastProvider>{props.children}</ToastProvider>
         </UnifiedAppProvider>
       </body>
