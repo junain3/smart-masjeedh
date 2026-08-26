@@ -1,11 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
 import { App } from "@capacitor/app";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 // Recovery lock to prevent multiple simultaneous recovery attempts
 let recoveryLock = false;
@@ -37,21 +34,41 @@ export function AutoReconnect() {
       console.log(`[AutoReconnect] Starting recovery from ${source}`);
 
       try {
-        const supabase = createClient(supabaseUrl, supabaseAnonKey);
+        // Force immediate session check using shared client
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        // Check current session first
-        const { data: { session } } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.error(`[AutoReconnect] Session check failed from ${source}:`, sessionError);
+        }
         
         if (session) {
-          // Session exists, try to refresh it
-          const { error } = await supabase.auth.refreshSession();
-          if (error) {
-            console.error(`[AutoReconnect] Session refresh failed from ${source}:`, error);
+          console.log(`[AutoReconnect] Session found for user:`, session.user.email);
+          
+          // Refresh the session to ensure it's valid
+          const { error: refreshError } = await supabase.auth.refreshSession();
+          if (refreshError) {
+            console.error(`[AutoReconnect] Session refresh failed from ${source}:`, refreshError);
           } else {
             console.log(`[AutoReconnect] Session refreshed successfully from ${source}`);
           }
+          
+          // Force re-establish realtime connection
+          try {
+            // Close existing channels to prevent duplicates
+            const channels = supabase.getChannels();
+            channels.forEach(channel => {
+              console.log(`[AutoReconnect] Closing channel:`, channel.topic);
+              supabase.removeChannel(channel);
+            });
+            
+            // Reconnect realtime
+            console.log(`[AutoReconnect] Reconnecting realtime from ${source}`);
+            // The realtime connection will be automatically re-established when channels are subscribed
+          } catch (realtimeError) {
+            console.error(`[AutoReconnect] Realtime reconnection failed from ${source}:`, realtimeError);
+          }
         } else {
-          console.log(`[AutoReconnect] No active session from ${source}`);
+          console.log(`[AutoReconnect] No active session from ${source} - user may need to login`);
         }
       } catch (error) {
         console.error(`[AutoReconnect] Recovery failed from ${source}:`, error);
