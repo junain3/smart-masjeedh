@@ -124,6 +124,12 @@ export default function AccountsPage() {
   const [lang, setLang] = useState<Language>("en");
   const [userNames, setUserNames] = useState<Record<string, string>>({});
   const [selectedFamilyId, setSelectedFamilyId] = useState("");
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [openingBalance, setOpeningBalance] = useState<number>(0);
+  const [showPdfOptions, setShowPdfOptions] = useState(false);
+  const [pdfFromDate, setPdfFromDate] = useState("");
+  const [pdfToDate, setPdfToDate] = useState("");
+  const [pdfTypeFilter, setPdfTypeFilter] = useState<"all" | "income" | "expense">("all");
 
   // Parse permissions and check access (no hooks here)
   const parsedPermissions = parsePermissions(JSON.stringify(tenantContext?.permissions || {}));
@@ -156,7 +162,7 @@ export default function AccountsPage() {
     };
 
     checkAuth();
-  }, [authUser, tenantContext?.masjidId, resumeTick, authLoading]);
+  }, [authUser, tenantContext?.masjidId, resumeTick, authLoading, selectedYear]);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("app_lang") as Language;
@@ -242,12 +248,38 @@ export default function AccountsPage() {
         return;
       }
 
+      // Calculate date range for selected year
+      const yearStart = new Date(selectedYear, 0, 1).toISOString().split('T')[0];
+      const yearEnd = new Date(selectedYear, 11, 31).toISOString().split('T')[0];
+      const previousYearEnd = new Date(selectedYear - 1, 11, 31).toISOString().split('T')[0];
+
+      // Calculate opening balance from previous year's closing balance
+      const { data: previousYearTransactions } = await supabase
+        .from("transactions")
+        .select("type, amount")
+        .eq("masjid_id", tenantContext.masjidId)
+        .lte("date", previousYearEnd);
+
+      let calculatedOpeningBalance = 0;
+      if (previousYearTransactions) {
+        previousYearTransactions.forEach((tx: any) => {
+          if (tx.type === "income") {
+            calculatedOpeningBalance += tx.amount;
+          } else if (tx.type === "expense") {
+            calculatedOpeningBalance -= tx.amount;
+          }
+        });
+      }
+      setOpeningBalance(calculatedOpeningBalance);
+
       // Run queries in parallel instead of sequentially
       const [transactionsResponse, familiesResponse, staffResponse, pendingCollectionsResponse] = await Promise.all([
         supabase
           .from("transactions")
           .select("id, type, amount, category, description, date, family_id, masjid_id, user_id, created_at")
           .eq("masjid_id", tenantContext.masjidId)
+          .gte("date", yearStart)
+          .lte("date", yearEnd)
           .order("date", { ascending: false }),
         supabase
           .from("families")
@@ -844,6 +876,17 @@ export default function AccountsPage() {
   }
 
   const handlePrintPDF = async () => {
+    // Set default date range to selected year
+    if (!pdfFromDate || !pdfToDate) {
+      const yearStart = new Date(selectedYear, 0, 1).toISOString().split('T')[0];
+      const yearEnd = new Date(selectedYear, 11, 31).toISOString().split('T')[0];
+      setPdfFromDate(yearStart);
+      setPdfToDate(yearEnd);
+    }
+    setShowPdfOptions(true);
+  };
+
+  const generatePDF = async () => {
     try {
       const printWindow = window.open("", "_blank", "width=800,height=600");
       if (!printWindow) {
@@ -853,6 +896,149 @@ export default function AccountsPage() {
 
       const masjidName = await getPdfMasjidName(supabase, tenantContext?.masjidId);
 
+      // Filter transactions by date range and type
+      const filteredTransactions = transactions.filter((tx) => {
+        const txDate = new Date(tx.date).toISOString().split('T')[0];
+        const inDateRange = txDate >= pdfFromDate && txDate <= pdfToDate;
+        const matchesType = pdfTypeFilter === "all" || 
+          (pdfTypeFilter === "income" && getFinancialKind(tx) === "income") ||
+          (pdfTypeFilter === "expense" && getFinancialKind(tx) === "expense");
+        return inDateRange && matchesType && isFinancialTransaction(tx) && isNonZeroAmount(tx.amount);
+      });
+
+      const incomeTransactions = filteredTransactions.filter((tx) => getFinancialKind(tx) === "income");
+      const expenseTransactions = filteredTransactions.filter((tx) => getFinancialKind(tx) === "expense");
+      const totalIncome = incomeTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+      const totalExpense = expenseTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+      const finalTotal = totalIncome - totalExpense;
+
+      let tableHtml = "";
+      let summaryHtml = "";
+
+      if (pdfTypeFilter === "all") {
+        // Dual-column layout for All type
+        const maxRows = Math.max(incomeTransactions.length, expenseTransactions.length);
+        const incomeRows = incomeTransactions.map((tx) => `
+          <tr>
+            <td>${new Date(tx.date).toLocaleDateString()}</td>
+            <td>${escapePdfHtml(formatTransactionDescription(tx.description, tx.category, tx.family_id))}</td>
+            <td class="income">Rs. ${tx.amount.toLocaleString()}</td>
+          </tr>
+        `).join("");
+        const expenseRows = expenseTransactions.map((tx) => `
+          <tr>
+            <td>${new Date(tx.date).toLocaleDateString()}</td>
+            <td>${escapePdfHtml(formatTransactionDescription(tx.description, tx.category, tx.family_id))}</td>
+            <td class="expense">Rs. ${tx.amount.toLocaleString()}</td>
+          </tr>
+        `).join("");
+
+        tableHtml = `
+          <div style="display: flex; gap: 20px; margin-top: 20px;">
+            <div style="flex: 1;">
+              <h3 style="color: #059669; margin-bottom: 10px;">Income</h3>
+              <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr>
+                    <th style="background-color: #059669; color: white; padding: 8px; border: 1px solid #ddd;">Date</th>
+                    <th style="background-color: #059669; color: white; padding: 8px; border: 1px solid #ddd;">Description</th>
+                    <th style="background-color: #059669; color: white; padding: 8px; border: 1px solid #ddd; text-align: right;">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${incomeRows}
+                  <tr style="font-weight: bold; background-color: #f0fdf4;">
+                    <td colspan="2" style="padding: 8px; border: 1px solid #ddd;">Total Income</td>
+                    <td class="income" style="padding: 8px; border: 1px solid #ddd; text-align: right;">Rs. ${totalIncome.toLocaleString()}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="flex: 1;">
+              <h3 style="color: #dc2626; margin-bottom: 10px;">Expense</h3>
+              <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr>
+                    <th style="background-color: #dc2626; color: white; padding: 8px; border: 1px solid #ddd;">Date</th>
+                    <th style="background-color: #dc2626; color: white; padding: 8px; border: 1px solid #ddd;">Description</th>
+                    <th style="background-color: #dc2626; color: white; padding: 8px; border: 1px solid #ddd; text-align: right;">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${expenseRows}
+                  <tr style="font-weight: bold; background-color: #fef2f2;">
+                    <td colspan="2" style="padding: 8px; border: 1px solid #ddd;">Total Expense</td>
+                    <td class="expense" style="padding: 8px; border: 1px solid #ddd; text-align: right;">Rs. ${totalExpense.toLocaleString()}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+
+        summaryHtml = `
+          <div style="margin-top: 30px; padding: 20px; background-color: #f9fafb; border-radius: 8px;">
+            <div style="display: flex; justify-content: space-around; text-align: center;">
+              <div>
+                <p style="font-size: 14px; color: #6b7280; margin: 0;">Total Income</p>
+                <p style="font-size: 24px; font-weight: bold; color: #059669; margin: 5px 0;">Rs. ${totalIncome.toLocaleString()}</p>
+              </div>
+              <div>
+                <p style="font-size: 14px; color: #6b7280; margin: 0;">Total Expense</p>
+                <p style="font-size: 24px; font-weight: bold; color: #dc2626; margin: 5px 0;">Rs. ${totalExpense.toLocaleString()}</p>
+              </div>
+              <div>
+                <p style="font-size: 14px; color: #6b7280; margin: 0;">Final Total</p>
+                <p style="font-size: 24px; font-weight: bold; color: ${finalTotal >= 0 ? '#059669' : '#dc2626'}; margin: 5px 0;">Rs. ${finalTotal.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        // Single-column layout for Income or Expense
+        const displayType = pdfTypeFilter === "income" ? "Income" : "Expense";
+        const colorClass = pdfTypeFilter === "income" ? "income" : "expense";
+        const bgColor = pdfTypeFilter === "income" ? "#059669" : "#dc2626";
+        const filteredList = pdfTypeFilter === "income" ? incomeTransactions : expenseTransactions;
+        const total = pdfTypeFilter === "income" ? totalIncome : totalExpense;
+
+        const rows = filteredList.map((tx) => `
+          <tr>
+            <td>${new Date(tx.date).toLocaleDateString()}</td>
+            <td>${escapePdfHtml(formatTransactionDescription(tx.description, tx.category, tx.family_id))}</td>
+            <td>${escapePdfHtml(tx.category ? formatTransactionCategory(tx.category) : "-")}</td>
+            <td class="${colorClass}">Rs. ${tx.amount.toLocaleString()}</td>
+          </tr>
+        `).join("");
+
+        tableHtml = `
+          <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+            <thead>
+              <tr>
+                <th style="background-color: ${bgColor}; color: white; padding: 8px; border: 1px solid #ddd;">Date</th>
+                <th style="background-color: ${bgColor}; color: white; padding: 8px; border: 1px solid #ddd;">Description</th>
+                <th style="background-color: ${bgColor}; color: white; padding: 8px; border: 1px solid #ddd;">Category</th>
+                <th style="background-color: ${bgColor}; color: white; padding: 8px; border: 1px solid #ddd; text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+              <tr style="font-weight: bold; background-color: ${pdfTypeFilter === "income" ? "#f0fdf4" : "#fef2f2"};">
+                <td colspan="3" style="padding: 8px; border: 1px solid #ddd;">Total ${displayType}</td>
+                <td class="${colorClass}" style="padding: 8px; border: 1px solid #ddd; text-align: right;">Rs. ${total.toLocaleString()}</td>
+              </tr>
+            </tbody>
+          </table>
+        `;
+
+        summaryHtml = `
+          <div style="margin-top: 30px; padding: 20px; background-color: #f9fafb; border-radius: 8px; text-align: center;">
+            <p style="font-size: 14px; color: #6b7280; margin: 0;">Total ${displayType}</p>
+            <p style="font-size: 28px; font-weight: bold; color: ${bgColor}; margin: 5px 0;">Rs. ${total.toLocaleString()}</p>
+          </div>
+        `;
+      }
+
       const html = `
         <html>
           <head>
@@ -860,14 +1046,11 @@ export default function AccountsPage() {
             <style>
               body { font-family: Arial, sans-serif; margin: 20px; }
               h1 { color: #064e3b; text-align: center; margin-bottom: 6px; }
-              h2 { text-align: center; margin-top: 0; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-              th { background-color: #047857; color: white; }
+              h2 { text-align: center; margin-top: 0; color: #374151; }
               .income { color: #059669; }
               .expense { color: #dc2626; }
               .header { text-align: center; margin-bottom: 30px; }
-              .date { text-align: right; margin-bottom: 20px; }
+              .date-range { text-align: center; margin-bottom: 20px; color: #6b7280; font-size: 14px; }
               .close-btn {
                 position: fixed;
                 top: 20px;
@@ -895,35 +1078,13 @@ export default function AccountsPage() {
             <button class="close-btn" onclick="window.close()">Close</button>
             <div class="header">
               <h1>${escapePdfHtml(masjidName)}</h1>
-              <h2>Account Transactions</h2>
+              <h2>Account Transactions Report</h2>
             </div>
-            <div class="date">Generated: ${new Date().toLocaleDateString()}</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Description</th>
-                  <th>Category</th>
-                  <th>Type</th>
-                  <th>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${transactions
-                  .map(
-                    (tx) => `
-                  <tr>
-                    <td>${new Date(tx.date).toLocaleDateString()}</td>
-                    <td>${escapePdfHtml(formatTransactionDescription(tx.description, tx.category, tx.family_id))}</td>
-                    <td>${escapePdfHtml(tx.category ? formatTransactionCategory(tx.category) : "-")}</td>
-                    <td>${escapePdfHtml(tx.type)}</td>
-                    <td>${tx.type === "expense" ? "-" : "+"}Rs. ${tx.amount}</td>
-                  </tr>
-                `
-                  )
-                  .join("")}
-              </tbody>
-            </table>
+            <div class="date-range">
+              Period: ${new Date(pdfFromDate).toLocaleDateString()} - ${new Date(pdfToDate).toLocaleDateString()}
+            </div>
+            ${tableHtml}
+            ${summaryHtml}
           </body>
         </html>
       `;
@@ -931,6 +1092,7 @@ export default function AccountsPage() {
       printWindow.document.write(html);
       printWindow.document.close();
       printWindow.print();
+      setShowPdfOptions(false);
     } catch (error) {
       console.error("Accounts: PDF generation error:", error);
       alert("PDF generation failed: " + (error as Error).message);
@@ -971,6 +1133,12 @@ export default function AccountsPage() {
             <Wallet className="w-24 h-24" />
           </div>
           <div className="relative z-10 space-y-4">
+            <div className="text-center mb-2">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">Opening Balance (Jan 1, {selectedYear})</p>
+              <h3 className="text-xl font-black text-blue-400">
+                Rs. {openingBalance.toLocaleString()}
+              </h3>
+            </div>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div className="space-y-1">
                 <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">Total Income</p>
@@ -996,12 +1164,13 @@ export default function AccountsPage() {
                 <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">{t.balance}</p>
                 <h2 className="text-2xl font-black">
                   Rs.{" "}
-                  {financialTransactions
-                    .reduce(
-                      (sum, tx) => sum + (getFinancialKind(tx) === "income" ? tx.amount : -tx.amount),
-                      0
-                    )
-                    .toLocaleString()}
+                  {(openingBalance +
+                    financialTransactions
+                      .reduce(
+                        (sum, tx) => sum + (getFinancialKind(tx) === "income" ? tx.amount : -tx.amount),
+                        0
+                      )
+                    ).toLocaleString()}
                 </h2>
               </div>
             </div>
@@ -1009,6 +1178,21 @@ export default function AccountsPage() {
         </div>
 
         <div className="flex gap-3">
+          <div className="flex-1 relative">
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="w-full py-4 px-4 bg-emerald-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all appearance-none cursor-pointer"
+            >
+              {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map((year) => (
+                <option key={year} value={year} className="text-neutral-900">
+                  {year}
+                </option>
+              ))}
+            </select>
+            <Calendar className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 pointer-events-none" />
+          </div>
+
           <button
             onClick={() => {
               setEditingTransaction(null);
@@ -1327,6 +1511,72 @@ export default function AccountsPage() {
                 className="flex-1 py-3 bg-emerald-600 rounded-2xl font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition-all"
               >
                 {submitting ? "Processing..." : "Confirm Payment"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPdfOptions && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-neutral-900">PDF Export Options</h3>
+              <button
+                onClick={() => setShowPdfOptions(false)}
+                className="p-2 hover:bg-neutral-100 rounded-full transition-all"
+              >
+                <X className="w-5 h-5 text-neutral-600" />
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-semibold text-neutral-700 mb-2">Type Filter</label>
+                <select
+                  value={pdfTypeFilter}
+                  onChange={(e) => setPdfTypeFilter(e.target.value as "all" | "income" | "expense")}
+                  className="w-full px-4 py-3 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="all">All Transactions</option>
+                  <option value="income">Income Only</option>
+                  <option value="expense">Expense Only</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-neutral-700 mb-2">From Date</label>
+                <input
+                  type="date"
+                  value={pdfFromDate}
+                  onChange={(e) => setPdfFromDate(e.target.value)}
+                  className="w-full px-4 py-3 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-neutral-700 mb-2">To Date</label>
+                <input
+                  type="date"
+                  value={pdfToDate}
+                  onChange={(e) => setPdfToDate(e.target.value)}
+                  className="w-full px-4 py-3 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPdfOptions(false)}
+                className="flex-1 py-3 border-2 border-neutral-200 rounded-2xl font-bold text-neutral-700 hover:bg-neutral-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={generatePDF}
+                className="flex-1 py-3 bg-emerald-600 rounded-2xl font-bold text-white hover:bg-emerald-700 transition-all"
+              >
+                Generate PDF
               </button>
             </div>
           </div>
