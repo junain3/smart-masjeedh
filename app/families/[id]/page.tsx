@@ -190,7 +190,7 @@ export default function FamilyDetailsPage() {
   const [allMasjidMembers, setAllMasjidMembers] = useState<AllMasjidMember[]>([]);
 
   // NIC transfer state for members
-  const [nicTransferCandidate, setNicTransferCandidate] = useState<{ id: string; family_id: string; name?: string; nic?: string } | null>(null);
+  const [nicTransferCandidate, setNicTransferCandidate] = useState<{ id: string; family_id: string; name?: string; nic?: string; family_name?: string; family_code?: string } | null>(null);
   const [showNicTransferModal, setShowNicTransferModal] = useState(false);
   const [nicTransferReason, setNicTransferReason] = useState("");
   const [confirmedNicTransferId, setConfirmedNicTransferId] = useState<string | null>(null);
@@ -273,6 +273,16 @@ export default function FamilyDetailsPage() {
     return str.trim().toUpperCase();
   };
 
+  const formatFamilyDisplay = (family: { head_name?: string | null; family_code?: string | null; id?: string | null } | null | undefined, fallbackId?: string): string => {
+    const head = family?.head_name?.trim();
+    const code = family?.family_code?.trim();
+    const id = family?.id || fallbackId;
+    const name = head || id || "Unknown Family";
+    if (code) {
+      return `${name}' (Code: ${code})`;
+    }
+    return `${name}'`;
+  };
   // Find possible duplicates
   // SCOPE: SAME FAMILY ONLY.
   // WARNING CONDITION:
@@ -1116,6 +1126,7 @@ export default function FamilyDetailsPage() {
       if (editingMember) {
         // === OPTIMISTIC UPDATE (EDIT) ===
         // Apply the change locally IMMEDIATELY so UI feels instant
+        const editStoreNic = nic ? formatNic(nic) : nic;
         const updatedMember: Member = {
           ...editingMember,
           name: fullName,
@@ -1124,7 +1135,7 @@ export default function FamilyDetailsPage() {
           age: ageValue ?? 0,
           gender,
           dob,
-          nic,
+          nic: editStoreNic,
           phone,
           civil_status: civilStatus,
           education: educationValue ?? undefined,
@@ -1141,6 +1152,65 @@ export default function FamilyDetailsPage() {
         };
         setMembers(prev => prev.map(m => m.id === editingMember.id ? updatedMember : m));
 
+        // Check for NIC duplicate in the same masjid before update (only if NIC changed)
+        if (nic && nic.trim() && formatNic(nic) !== formatNic(editingMember.nic || "")) {
+          const normalizedNic = formatNic(nic);
+          const { data: existingMember, error: checkError } = await supabase
+            .from("members")
+            .select("id, family_id, name, nic")
+            .eq("masjid_id", tenantContext.masjidId)
+            .eq("nic", normalizedNic)
+            .or("status.is.null,status.eq.Active")
+            .limit(1)
+            .maybeSingle();
+
+          if (checkError) {
+            console.error("NIC check error:", checkError);
+          }
+
+          if (existingMember) {
+            // Get family name for the existing member using a join
+            const { data: familyData, error: familyError } = await supabase
+              .from("families")
+              .select("id, head_name, family_code")
+              .eq("id", existingMember.family_id)
+              .eq("masjid_id", tenantContext.masjidId)
+              .maybeSingle();
+
+            if (familyError) {
+              console.error("Family fetch error:", familyError);
+            }
+
+            alert(`This NIC number (${normalizedNic}) is already registered for member '${existingMember.name}' belonging to family '${formatFamilyDisplay(familyData, existingMember.family_id)}. Please use a different NIC or transfer the existing member.`);
+            
+            // Revert optimistic update
+            setMembers(prev => prev.map(m => m.id === editingMember.id ? editingMember : m));
+            setSubmitting(false);
+            return;
+          }
+
+          // SECONDARY CHECK — catch soft-deleted duplicates too (they still fire unique constraint)
+          const { data: anyStatusMember, error: anyStatusErr } = await supabase
+            .from("members")
+            .select("id, family_id, name, nic, status")
+            .eq("masjid_id", tenantContext.masjidId)
+            .eq("nic", normalizedNic)
+            .limit(1)
+            .maybeSingle();
+          if (!anyStatusErr && anyStatusMember && anyStatusMember.id !== editingMember.id) {
+            const { data: familyData } = await supabase
+              .from("families")
+              .select("id, head_name, family_code")
+              .eq("id", anyStatusMember.family_id)
+              .eq("masjid_id", tenantContext.masjidId)
+              .maybeSingle();
+            alert(`This NIC number (${normalizedNic}) is already registered for member '${anyStatusMember.name}' (status: ${anyStatusMember.status || "Active"}) belonging to family '${formatFamilyDisplay(familyData, anyStatusMember.family_id)}. Please use a different NIC.`);
+            setMembers(prev => prev.map(m => m.id === editingMember.id ? editingMember : m));
+            setSubmitting(false);
+            return;
+          }
+        }
+
         const { error } = await supabase
           .from("members")
           .update({
@@ -1150,7 +1220,7 @@ export default function FamilyDetailsPage() {
             age: ageValue,
             gender,
             dob,
-            nic,
+            nic: nic ? formatNic(nic) : nic,
             phone,
             civil_status: civilStatus,
             education: educationValue,
@@ -1176,6 +1246,7 @@ export default function FamilyDetailsPage() {
       } else {
         // === OPTIMISTIC UPDATE (ADD) ===
         // Add the new member to the local list IMMEDIATELY with a temp id
+        const storeNic = nic ? formatNic(nic) : nic;
         const optimisticMember: Member = {
           id: tempId,
           family_id: familyId,
@@ -1186,7 +1257,7 @@ export default function FamilyDetailsPage() {
           age: ageValue ?? 0,
           gender,
           dob,
-          nic,
+          nic: storeNic,
           phone,
           civil_status: civilStatus,
           status: "Active",
@@ -1216,11 +1287,72 @@ export default function FamilyDetailsPage() {
           id: tempId,
           name: fullName,
           full_name: fullName,
-          nic,
+          nic: storeNic,
           phone,
           dob,
           masjid_id: tenantContext.masjidId,
         } as Member]);
+
+        // Check for NIC duplicate in the same masjid before insertion
+        if (nic && nic.trim()) {
+          const normalizedNic = formatNic(nic);
+          const { data: existingMember, error: checkError } = await supabase
+            .from("members")
+            .select("id, family_id, name, nic")
+            .eq("masjid_id", tenantContext.masjidId)
+            .eq("nic", normalizedNic)
+            .or("status.is.null,status.eq.Active")
+            .limit(1)
+            .maybeSingle();
+
+          if (checkError) {
+            console.error("NIC check error:", checkError);
+          }
+
+          if (existingMember) {
+            // Get family name for the existing member using a join
+            const { data: familyData, error: familyError } = await supabase
+              .from("families")
+              .select("id, head_name, family_code")
+              .eq("id", existingMember.family_id)
+              .eq("masjid_id", tenantContext.masjidId)
+              .maybeSingle();
+
+            if (familyError) {
+              console.error("Family fetch error:", familyError);
+            }
+
+            alert(`This NIC number (${normalizedNic}) is already registered for member '${existingMember.name}' belonging to family '${formatFamilyDisplay(familyData, existingMember.family_id)}. Please use a different NIC or transfer the existing member.`);
+            
+            // Revert optimistic update
+            setMembers(prev => prev.filter(m => m.id !== tempId));
+            setAllMasjidMembers(prev => prev.filter(m => m.id !== tempId));
+            setSubmitting(false);
+            return;
+          }
+
+          // SECONDARY CHECK — catch soft-deleted duplicates too (they still fire unique constraint)
+          const { data: anyStatusMember, error: anyStatusErr } = await supabase
+            .from("members")
+            .select("id, family_id, name, nic, status")
+            .eq("masjid_id", tenantContext.masjidId)
+            .eq("nic", normalizedNic)
+            .limit(1)
+            .maybeSingle();
+          if (!anyStatusErr && anyStatusMember) {
+            const { data: familyData } = await supabase
+              .from("families")
+              .select("id, head_name, family_code")
+              .eq("id", anyStatusMember.family_id)
+              .eq("masjid_id", tenantContext.masjidId)
+              .maybeSingle();
+            alert(`This NIC number (${normalizedNic}) is already registered for member '${anyStatusMember.name}' (status: ${anyStatusMember.status || "Active"}) belonging to family '${formatFamilyDisplay(familyData, anyStatusMember.family_id)}. Please use a different NIC.`);
+            setMembers(prev => prev.filter(m => m.id !== tempId));
+            setAllMasjidMembers(prev => prev.filter(m => m.id !== tempId));
+            setSubmitting(false);
+            return;
+          }
+        }
 
         const { error } = await supabase.from("members").insert([
           {
@@ -1231,7 +1363,7 @@ export default function FamilyDetailsPage() {
             age: ageValue,
             gender,
             dob,
-            nic,
+            nic: storeNic,
             phone,
             civil_status: civilStatus,
             education: educationValue,
@@ -1361,7 +1493,58 @@ export default function FamilyDetailsPage() {
 
       // Check for unique constraint violation
       if (error.code === '23505' || error.message?.includes('unique constraint')) {
-        alert(`This NIC number is already registered for another member in this masjid.`);
+        // Fetch the existing member with family name for better error message
+        // NOTE: Do NOT filter by status here. If unique constraint fired, the record exists
+        // in the DB with EXACTLY this NIC value regardless of status (soft-deleted etc.)
+        const rawNic = nic || "";
+        const candidates = [
+          rawNic,
+          rawNic.trim().toUpperCase(),
+          rawNic.trim(),
+          rawNic.toUpperCase(),
+        ].filter(Boolean) as string[];
+        const uniqueCandidates = Array.from(new Set(candidates));
+
+        let existingMember: any = null;
+        let normalizedNicDisplay = rawNic || "unknown";
+        for (const cand of uniqueCandidates) {
+          normalizedNicDisplay = cand;
+          const { data: candMember } = await supabase
+            .from("members")
+            .select("id, family_id, name, nic, status")
+            .eq("masjid_id", tenantContext.masjidId)
+            .eq("nic", cand)
+            .limit(1)
+            .maybeSingle();
+          if (candMember) {
+            existingMember = candMember;
+            break;
+          }
+        }
+
+        if (existingMember) {
+          let familyName = existingMember.family_id || "Unknown Family";
+          try {
+            const { data: familyData, error: familyFetchError } = await supabase
+              .from("families")
+              .select("id, head_name, family_code")
+              .eq("id", existingMember.family_id)
+              .eq("masjid_id", tenantContext.masjidId)
+              .maybeSingle();
+
+            if (!familyFetchError && familyData) {
+              familyName = formatFamilyDisplay(familyData, existingMember.family_id);
+            } else {
+              familyName = `${existingMember.family_id || "Unknown Family"}'`;
+            }
+          } catch (familyErr) {
+            console.error("Family lookup in error handler failed:", familyErr);
+            familyName = `${existingMember.family_id || "Unknown Family"}'`;
+          }
+          alert(`This NIC number (${existingMember.nic || normalizedNicDisplay}) is already registered for member '${existingMember.name}' belonging to family '${familyName}. Please use a different NIC or transfer the existing member.`);
+        } else {
+          alert(`This NIC number (${rawNic.trim().toUpperCase() || rawNic || "unknown"}) is already registered. Please check the member details and try again.`);
+        }
       } else {
         alert(`Error: ${error.message || t.failed_to_add_member}`);
       }
@@ -2506,14 +2689,36 @@ export default function FamilyDetailsPage() {
                             .eq("nic", nicValue)
                             .or("status.is.null,status.eq.Active")
                             .limit(1)
-                            .single();
+                            .maybeSingle();
                           
                           if (existingMember && existingMember.family_id && existingMember.family_id !== familyId) {
+                            // Fetch family name for the modal display
+                            let familyName = existingMember.family_id;
+                            let familyCode: string | undefined = undefined;
+                            try {
+                              const { data: familyData } = await supabase
+                                .from("families")
+                                .select("id, head_name, family_code")
+                                .eq("id", existingMember.family_id)
+                                .eq("masjid_id", tenantContext.masjidId)
+                                .maybeSingle();
+                              if (familyData?.head_name) {
+                                familyName = familyData.head_name;
+                              }
+                              if (familyData?.family_code) {
+                                familyCode = familyData.family_code;
+                              }
+                            } catch (fErr) {
+                              console.error("Family name fetch failed:", fErr);
+                            }
+                            
                             setNicTransferCandidate({
                               id: existingMember.id,
                               family_id: existingMember.family_id,
                               name: existingMember.name,
-                              nic: existingMember.nic
+                              nic: existingMember.nic,
+                              family_name: familyName,
+                              family_code: familyCode
                             });
                             setShowNicTransferModal(true);
                           } else {
@@ -3431,7 +3636,7 @@ export default function FamilyDetailsPage() {
           <div className="w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
             <h2 className="text-2xl font-bold mb-4 text-center text-slate-900">Transfer Member</h2>
             <p className="text-sm text-slate-600 mb-6 text-center">
-              This NIC is already registered for <span className="font-bold text-slate-900">{nicTransferCandidate.name}</span> in another family within this masjid. Do you want to transfer them to this family?
+              This NIC is already registered for <span className="font-bold text-slate-900">{nicTransferCandidate.name}</span> belonging to family <span className="font-bold text-slate-900">"{nicTransferCandidate.family_name || nicTransferCandidate.family_id}"{nicTransferCandidate.family_code ? ` (Code: ${nicTransferCandidate.family_code})` : ""}</span> within this masjid. Do you want to transfer them to this family?
             </p>
             
             <div className="space-y-2 mb-6">
