@@ -22,6 +22,7 @@ import {
   ChevronDown,
   RotateCcw,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { QRCodeSVG } from "qrcode.react";
@@ -194,7 +195,7 @@ export default function FamilyDetailsPage() {
   const [showNicTransferModal, setShowNicTransferModal] = useState(false);
   const [nicTransferReason, setNicTransferReason] = useState("");
   const [confirmedNicTransferId, setConfirmedNicTransferId] = useState<string | null>(null);
-  const [nicOtherMasjids, setNicOtherMasjids] = useState<{ id: string; masjid_name: string }[]>([]);
+  const [nicOtherMasjids, setNicOtherMasjids] = useState<{ id: string; masjid_name: string; member_name?: string; family_name?: string; family_code?: string }[]>([]);
   const [isCheckingNic, setIsCheckingNic] = useState(false);
   
   // New fields for enhanced data collection
@@ -218,6 +219,7 @@ export default function FamilyDetailsPage() {
 
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [crossMasjidWarning, setCrossMasjidWarning] = useState<{ nic: string; memberName: string; masjidName: string; familyName?: string; familyCode?: string } | null>(null);
   const [possibleDuplicates, setPossibleDuplicates] = useState<Member[]>([]);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [confirmedNoDuplicate, setConfirmedNoDuplicate] = useState(false);
@@ -282,6 +284,111 @@ export default function FamilyDetailsPage() {
       return `${name}' (Code: ${code})`;
     }
     return `${name}'`;
+  };
+
+  const formatCrossMasjidNicNote = (masjidName: string, memberName: string, familyName?: string, familyCode?: string): string => {
+    const familyInfo = familyName && familyCode 
+      ? ` belonging to family '${familyName}' (Code: ${familyCode})`
+      : familyName 
+      ? ` belonging to family '${familyName}'`
+      : '';
+    return `Note: This NIC number is already registered in another masjid (${masjidName}) for member '${memberName}'${familyInfo}.`;
+  };
+
+  const classifyNicDuplicates = async (
+    normalizedNic: string,
+    currentMasjidId: string,
+    excludeMemberId?: string | null
+  ): Promise<{
+    sameMasjidMember: { id: string; family_id: string; name: string; nic: string; status?: string } | null;
+    otherMasjid: { memberName: string; masjidName: string; familyName?: string; familyCode?: string } | null;
+  }> => {
+    const empty = { sameMasjidMember: null, otherMasjid: null };
+    try {
+      // Fetch all NIC matches, then split in JS so other-masjid rows never trigger a save block.
+      const { data, error } = await supabase
+        .from("members")
+        .select("id, family_id, name, nic, masjid_id, status")
+        .eq("nic", normalizedNic);
+
+      if (error) {
+        console.error("NIC classify error:", error);
+        return empty;
+      }
+
+      const rows = data || [];
+      const same = rows.find(
+        (m) => m.masjid_id === currentMasjidId && m.id !== excludeMemberId
+      );
+      const other = rows.find(
+        (m) => m.masjid_id && m.masjid_id !== currentMasjidId && (!m.status || m.status === "Active")
+      );
+
+      let otherMasjid: { memberName: string; masjidName: string; familyName?: string; familyCode?: string } | null = null;
+      if (other) {
+        let masjidName = other.masjid_id || "Unknown Masjeedh";
+        let familyName: string | undefined;
+        let familyCode: string | undefined;
+        
+        try {
+          const { data: masjidData, error: mErr } = await supabase
+            .from("masjids")
+            .select("id, masjid_name")
+            .eq("id", other.masjid_id)
+            .maybeSingle();
+          if (!mErr && masjidData?.masjid_name) {
+            masjidName = masjidData.masjid_name;
+          }
+        } catch (mCatch) {
+          console.error("Cross-masjid masjid name lookup error:", mCatch);
+        }
+
+        // Fetch family details for the other masjid member
+        try {
+          const { data: familyData, error: fErr } = await supabase
+            .from("families")
+            .select("id, head_name, family_code")
+            .eq("id", other.family_id)
+            .eq("masjid_id", other.masjid_id)
+            .maybeSingle();
+          if (!fErr && familyData) {
+            familyName = familyData.head_name || familyData.id;
+            familyCode = familyData.family_code;
+          }
+        } catch (fCatch) {
+          console.error("Cross-masjid family lookup error:", fCatch);
+        }
+
+        otherMasjid = { 
+          memberName: other.name || "Unknown Member", 
+          masjidName,
+          familyName,
+          familyCode
+        };
+      }
+
+      return {
+        sameMasjidMember: same
+          ? {
+              id: same.id,
+              family_id: same.family_id,
+              name: same.name,
+              nic: same.nic,
+              status: same.status,
+            }
+          : null,
+        otherMasjid,
+      };
+    } catch (e) {
+      console.error("NIC classify failed:", e);
+      return empty;
+    }
+  };
+
+  const notifyCrossMasjidNic = (info: { memberName: string; masjidName: string; familyName?: string; familyCode?: string }, nicValue: string) => {
+    setCrossMasjidWarning({ nic: nicValue, ...info });
+    setTimeout(() => setCrossMasjidWarning(null), 15000);
+    alert(formatCrossMasjidNicNote(info.masjidName, info.memberName, info.familyName, info.familyCode));
   };
   // Find possible duplicates
   // SCOPE: SAME FAMILY ONLY.
@@ -1152,24 +1259,14 @@ export default function FamilyDetailsPage() {
         };
         setMembers(prev => prev.map(m => m.id === editingMember.id ? updatedMember : m));
 
-        // Check for NIC duplicate in the same masjid before update (only if NIC changed)
+        // NIC duplicate: strict block only for this masjid; other masjids are a post-save warning.
+        let crossMasjidResult: { memberName: string; masjidName: string } | null = null;
         if (nic && nic.trim() && formatNic(nic) !== formatNic(editingMember.nic || "")) {
           const normalizedNic = formatNic(nic);
-          const { data: existingMember, error: checkError } = await supabase
-            .from("members")
-            .select("id, family_id, name, nic")
-            .eq("masjid_id", tenantContext.masjidId)
-            .eq("nic", normalizedNic)
-            .or("status.is.null,status.eq.Active")
-            .limit(1)
-            .maybeSingle();
+          const classified = await classifyNicDuplicates(normalizedNic, tenantContext.masjidId, editingMember.id);
 
-          if (checkError) {
-            console.error("NIC check error:", checkError);
-          }
-
-          if (existingMember) {
-            // Get family name for the existing member using a join
+          if (classified.sameMasjidMember) {
+            const existingMember = classified.sameMasjidMember;
             const { data: familyData, error: familyError } = await supabase
               .from("families")
               .select("id, head_name, family_code")
@@ -1181,34 +1278,17 @@ export default function FamilyDetailsPage() {
               console.error("Family fetch error:", familyError);
             }
 
-            alert(`This NIC number (${normalizedNic}) is already registered for member '${existingMember.name}' belonging to family '${formatFamilyDisplay(familyData, existingMember.family_id)}. Please use a different NIC or transfer the existing member.`);
-            
-            // Revert optimistic update
+            const statusNote = existingMember.status && existingMember.status !== "Active"
+              ? ` (status: ${existingMember.status})`
+              : "";
+            alert(`This NIC number (${normalizedNic}) is already registered for member '${existingMember.name}'${statusNote} belonging to family '${formatFamilyDisplay(familyData, existingMember.family_id)}. Please use a different NIC or transfer the existing member.`);
+
             setMembers(prev => prev.map(m => m.id === editingMember.id ? editingMember : m));
             setSubmitting(false);
             return;
           }
 
-          // SECONDARY CHECK — catch soft-deleted duplicates too (they still fire unique constraint)
-          const { data: anyStatusMember, error: anyStatusErr } = await supabase
-            .from("members")
-            .select("id, family_id, name, nic, status")
-            .eq("masjid_id", tenantContext.masjidId)
-            .eq("nic", normalizedNic)
-            .limit(1)
-            .maybeSingle();
-          if (!anyStatusErr && anyStatusMember && anyStatusMember.id !== editingMember.id) {
-            const { data: familyData } = await supabase
-              .from("families")
-              .select("id, head_name, family_code")
-              .eq("id", anyStatusMember.family_id)
-              .eq("masjid_id", tenantContext.masjidId)
-              .maybeSingle();
-            alert(`This NIC number (${normalizedNic}) is already registered for member '${anyStatusMember.name}' (status: ${anyStatusMember.status || "Active"}) belonging to family '${formatFamilyDisplay(familyData, anyStatusMember.family_id)}. Please use a different NIC.`);
-            setMembers(prev => prev.map(m => m.id === editingMember.id ? editingMember : m));
-            setSubmitting(false);
-            return;
-          }
+          crossMasjidResult = classified.otherMasjid;
         }
 
         const { error } = await supabase
@@ -1240,6 +1320,9 @@ export default function FamilyDetailsPage() {
 
         if (error) throw error;
         setSuccessMessage("Member details updated!");
+        if (crossMasjidResult) {
+          notifyCrossMasjidNic(crossMasjidResult, formatNic(nic));
+        }
 
         // === END OPTIMISTIC MUTATION ===
         endOptimisticUpdate();
@@ -1293,24 +1376,18 @@ export default function FamilyDetailsPage() {
           masjid_id: tenantContext.masjidId,
         } as Member]);
 
-        // Check for NIC duplicate in the same masjid before insertion
+        // NIC duplicate: strict block only for this masjid; other masjids are a post-save warning.
+        let crossMasjidResultAdd: { memberName: string; masjidName: string } | null = null;
         if (nic && nic.trim()) {
           const normalizedNic = formatNic(nic);
-          const { data: existingMember, error: checkError } = await supabase
-            .from("members")
-            .select("id, family_id, name, nic")
-            .eq("masjid_id", tenantContext.masjidId)
-            .eq("nic", normalizedNic)
-            .or("status.is.null,status.eq.Active")
-            .limit(1)
-            .maybeSingle();
+          const classified = await classifyNicDuplicates(
+            normalizedNic,
+            tenantContext.masjidId,
+            confirmedNicTransferId
+          );
 
-          if (checkError) {
-            console.error("NIC check error:", checkError);
-          }
-
-          if (existingMember) {
-            // Get family name for the existing member using a join
+          if (classified.sameMasjidMember) {
+            const existingMember = classified.sameMasjidMember;
             const { data: familyData, error: familyError } = await supabase
               .from("families")
               .select("id, head_name, family_code")
@@ -1322,36 +1399,18 @@ export default function FamilyDetailsPage() {
               console.error("Family fetch error:", familyError);
             }
 
-            alert(`This NIC number (${normalizedNic}) is already registered for member '${existingMember.name}' belonging to family '${formatFamilyDisplay(familyData, existingMember.family_id)}. Please use a different NIC or transfer the existing member.`);
-            
-            // Revert optimistic update
+            const statusNote = existingMember.status && existingMember.status !== "Active"
+              ? ` (status: ${existingMember.status})`
+              : "";
+            alert(`This NIC number (${normalizedNic}) is already registered for member '${existingMember.name}'${statusNote} belonging to family '${formatFamilyDisplay(familyData, existingMember.family_id)}. Please use a different NIC or transfer the existing member.`);
+
             setMembers(prev => prev.filter(m => m.id !== tempId));
             setAllMasjidMembers(prev => prev.filter(m => m.id !== tempId));
             setSubmitting(false);
             return;
           }
 
-          // SECONDARY CHECK — catch soft-deleted duplicates too (they still fire unique constraint)
-          const { data: anyStatusMember, error: anyStatusErr } = await supabase
-            .from("members")
-            .select("id, family_id, name, nic, status")
-            .eq("masjid_id", tenantContext.masjidId)
-            .eq("nic", normalizedNic)
-            .limit(1)
-            .maybeSingle();
-          if (!anyStatusErr && anyStatusMember) {
-            const { data: familyData } = await supabase
-              .from("families")
-              .select("id, head_name, family_code")
-              .eq("id", anyStatusMember.family_id)
-              .eq("masjid_id", tenantContext.masjidId)
-              .maybeSingle();
-            alert(`This NIC number (${normalizedNic}) is already registered for member '${anyStatusMember.name}' (status: ${anyStatusMember.status || "Active"}) belonging to family '${formatFamilyDisplay(familyData, anyStatusMember.family_id)}. Please use a different NIC.`);
-            setMembers(prev => prev.filter(m => m.id !== tempId));
-            setAllMasjidMembers(prev => prev.filter(m => m.id !== tempId));
-            setSubmitting(false);
-            return;
-          }
+          crossMasjidResultAdd = classified.otherMasjid;
         }
 
         const { error } = await supabase.from("members").insert([
@@ -1384,6 +1443,9 @@ export default function FamilyDetailsPage() {
 
         if (error) throw error;
         setSuccessMessage("New member added successfully!");
+        if (crossMasjidResultAdd) {
+          notifyCrossMasjidNic(crossMasjidResultAdd, formatNic(nic));
+        }
 
         // Handle NIC transfer if confirmed
         if (confirmedNicTransferId && nicTransferCandidate) {
@@ -1541,9 +1603,19 @@ export default function FamilyDetailsPage() {
             console.error("Family lookup in error handler failed:", familyErr);
             familyName = `${existingMember.family_id || "Unknown Family"}'`;
           }
-          alert(`This NIC number (${existingMember.nic || normalizedNicDisplay}) is already registered for member '${existingMember.name}' belonging to family '${familyName}. Please use a different NIC or transfer the existing member.`);
+          alert(`This NIC number (${existingMember.nic || normalizedNicDisplay}) is already registered for member '${existingMember.name}' belonging to family '${familyName}'. Please use a different NIC or transfer the existing member.`);
         } else {
-          alert(`This NIC number (${rawNic.trim().toUpperCase() || rawNic || "unknown"}) is already registered. Please check the member details and try again.`);
+          const classified = await classifyNicDuplicates(
+            formatNic(rawNic) || normalizedNicDisplay,
+            tenantContext.masjidId,
+            editingMember?.id || confirmedNicTransferId
+          );
+          if (classified.otherMasjid) {
+            // Duplicate lives in another masjid — not a current-masjid block.
+            alert(formatCrossMasjidNicNote(classified.otherMasjid.masjidName, classified.otherMasjid.memberName, classified.otherMasjid.familyName, classified.otherMasjid.familyCode));
+          } else {
+            alert(`This NIC number (${rawNic.trim().toUpperCase() || rawNic || "unknown"}) is already registered. Please check the member details and try again.`);
+          }
         }
       } else {
         alert(`Error: ${error.message || t.failed_to_add_member}`);
@@ -2016,6 +2088,19 @@ export default function FamilyDetailsPage() {
               <CheckCircle className="w-5 h-5 text-emerald-600" />
             </div>
             <p className="text-xs font-bold text-emerald-900">{successMessage}</p>
+          </div>
+        </div>
+      )}
+
+      {crossMasjidWarning && (
+        <div className="px-6 pt-4">
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-[2rem] flex items-center gap-3">
+            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+            </div>
+            <p className="text-xs font-bold text-amber-900">
+              {formatCrossMasjidNicNote(crossMasjidWarning.masjidName, crossMasjidWarning.memberName, crossMasjidWarning.familyName, crossMasjidWarning.familyCode)}
+            </p>
           </div>
         </div>
       )}
@@ -2728,22 +2813,71 @@ export default function FamilyDetailsPage() {
                           // Check across other masjids (informational notice)
                           const { data: otherMasjidMembers } = await supabase
                             .from("members")
-                            .select("id, masjid_id")
+                            .select("id, masjid_id, name, family_id")
                             .eq("nic", nicValue)
                             .neq("masjid_id", tenantContext.masjidId)
+                            .or("status.is.null,status.eq.Active")
                             .limit(5);
                           
                           if (otherMasjidMembers && otherMasjidMembers.length > 0) {
                             const masjidIds = [...new Set(otherMasjidMembers.map(m => m.masjid_id))];
-                            const { data: masjidData } = await supabase
-                              .from("masjids")
-                              .select("id, name")
-                              .in("id", masjidIds);
                             
-                            setNicOtherMasjids(masjidData?.map(m => ({
-                              id: m.id,
-                              masjid_name: m.name
-                            })) || []);
+                            const { data: masjidData, error: mErr } = await supabase
+                              .from("masjids")
+                              .select("id, masjid_name")
+                              .in("id", masjidIds);
+
+                            const nameMap = new Map(masjidData?.map(m => [m.id, m.masjid_name]) || []);
+
+                            // Fetch families for each member with strict masjid_id filtering
+                            const familyPromises = otherMasjidMembers.map(async (member) => {
+                              if (!member.family_id) return null;
+                              const { data: familyData, error: fErr } = await supabase
+                                .from("families")
+                                .select("id, head_name, family_code")
+                                .eq("id", member.family_id)
+                                .eq("masjid_id", member.masjid_id)
+                                .maybeSingle();
+                              if (!fErr && familyData) {
+                                return { 
+                                  memberId: member.id, 
+                                  familyName: familyData.head_name || familyData.id, 
+                                  familyCode: familyData.family_code 
+                                };
+                              }
+                              return null;
+                            });
+
+                            const familyResults = await Promise.all(familyPromises);
+                            const familyMap = new Map(
+                              familyResults
+                                .filter((f): f is { memberId: string; familyName: string; familyCode?: string } => f !== null)
+                                .map(f => [f.memberId, { name: f.familyName, code: f.familyCode }])
+                            );
+
+                            if (!mErr) {
+                              setNicOtherMasjids(otherMasjidMembers.map(m => {
+                                const family = familyMap.get(m.id);
+                                return {
+                                  id: m.masjid_id,
+                                  masjid_name: nameMap.get(m.masjid_id) || m.masjid_id,
+                                  member_name: m.name,
+                                  family_name: family?.name,
+                                  family_code: family?.code
+                                };
+                              }));
+                            } else {
+                              setNicOtherMasjids(otherMasjidMembers.map(m => {
+                                const family = familyMap.get(m.id);
+                                return {
+                                  id: m.masjid_id,
+                                  masjid_name: m.masjid_id,
+                                  member_name: m.name,
+                                  family_name: family?.name,
+                                  family_code: family?.code
+                                };
+                              }));
+                            }
                           } else {
                             setNicOtherMasjids([]);
                           }
@@ -2772,7 +2906,7 @@ export default function FamilyDetailsPage() {
                 {nicOtherMasjids.length > 0 && (
                   <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl col-span-2">
                     <p className="text-[10px] font-bold text-amber-900">
-                      Note: This person is also registered in {nicOtherMasjids.map(m => m.masjid_name).join(", ")}
+                      {formatCrossMasjidNicNote(nicOtherMasjids[0].masjid_name, nicOtherMasjids[0].member_name || "Unknown", nicOtherMasjids[0].family_name, nicOtherMasjids[0].family_code)}
                     </p>
                   </div>
                 )}

@@ -1061,7 +1061,20 @@ export default function FamiliesPage() {
         setFamilies(nextFamiliesDelete);
         safeCacheWrite(getCacheKey(masjidId), nextFamiliesDelete);
 
-        // First delete all members of this family
+        // First delete all transactions associated with this family
+        const { error: transactionsDeleteError } = await supabase
+          .from("transactions")
+          .delete()
+          .eq("family_id", familyId)
+          .eq("masjid_id", masjidId);
+
+        if (transactionsDeleteError) {
+          setFamilies(originalFamilies);
+          safeCacheWrite(getCacheKey(masjidId), originalFamilies);
+          throw transactionsDeleteError;
+        }
+
+        // Then delete all members of this family
         const { error: membersDeleteError } = await supabase
           .from("members")
           .delete()
@@ -1074,7 +1087,7 @@ export default function FamiliesPage() {
           throw membersDeleteError;
         }
 
-        // Then delete the family
+        // Finally delete the family
         const { error } = await supabase
           .from("families")
           .delete()
@@ -1224,7 +1237,19 @@ export default function FamiliesPage() {
 
       console.log("[Hard Delete Previous Family] Permanently deleting family:", familyId);
 
-      // First delete all members of this family
+      // First delete all transactions associated with this family
+      const { error: transactionsDeleteError } = await supabase
+        .from("transactions")
+        .delete()
+        .eq("family_id", familyId)
+        .eq("masjid_id", masjidId);
+
+      if (transactionsDeleteError) {
+        console.error("[Hard Delete Previous Family] Transactions delete error:", transactionsDeleteError);
+        throw transactionsDeleteError;
+      }
+
+      // Then delete all members of this family
       const { error: membersDeleteError } = await supabase
         .from("members")
         .delete()
@@ -1236,7 +1261,7 @@ export default function FamiliesPage() {
         throw membersDeleteError;
       }
 
-      // Then delete the family
+      // Finally delete the family
       const { error } = await supabase
         .from("families")
         .delete()

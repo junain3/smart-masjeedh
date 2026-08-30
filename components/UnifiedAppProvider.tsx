@@ -221,7 +221,16 @@ export function UnifiedAppProvider({
     recoveryLockRef.current = true;
 
     try {
-      const { data: { session: recoveredSession } } = await supabase.auth.getSession();
+      // Timeout protection for session check (10 seconds)
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Session check timeout")), 10000)
+      );
+      
+      const { data: { session: recoveredSession } } = await Promise.race([
+        sessionPromise,
+        timeoutPromise
+      ]) as any;
 
       if (recoveredSession?.user) {
         console.log("Recovering session...");

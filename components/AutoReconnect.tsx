@@ -8,9 +8,11 @@ import { App } from "@capacitor/app";
 let recoveryLock = false;
 let lastRecoveryTime = 0;
 const RECOVERY_DEBOUNCE_MS = 2000; // Minimum 2 seconds between recovery attempts
+const RECOVERY_TIMEOUT_MS = 10000; // Maximum 10 seconds for recovery operation
 
 export function AutoReconnect() {
   const recoveryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lockReleaseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const attemptRecovery = async (source: string) => {
@@ -33,9 +35,24 @@ export function AutoReconnect() {
       
       console.log(`[AutoReconnect] Starting recovery from ${source}`);
 
+      // Safety timeout to ensure lock is released even if operation hangs
+      lockReleaseTimeoutRef.current = setTimeout(() => {
+        console.warn(`[AutoReconnect] Recovery timeout from ${source} - forcing lock release`);
+        recoveryLock = false;
+        lockReleaseTimeoutRef.current = null;
+      }, RECOVERY_TIMEOUT_MS);
+
       try {
-        // Force immediate session check using shared client
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        // Timeout protection for session check
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Session check timeout")), RECOVERY_TIMEOUT_MS)
+        );
+        
+        const { data: { session }, error: sessionError } = await Promise.race([
+          sessionPromise,
+          timeoutPromise
+        ]) as any;
         
         if (sessionError) {
           console.error(`[AutoReconnect] Session check failed from ${source}:`, sessionError);
@@ -44,12 +61,25 @@ export function AutoReconnect() {
         if (session) {
           console.log(`[AutoReconnect] Session found for user:`, session.user.email);
           
-          // Refresh the session to ensure it's valid
-          const { error: refreshError } = await supabase.auth.refreshSession();
-          if (refreshError) {
-            console.error(`[AutoReconnect] Session refresh failed from ${source}:`, refreshError);
-          } else {
-            console.log(`[AutoReconnect] Session refreshed successfully from ${source}`);
+          // Refresh the session to ensure it's valid (with timeout protection)
+          try {
+            const refreshPromise = supabase.auth.refreshSession();
+            const refreshTimeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("Session refresh timeout")), RECOVERY_TIMEOUT_MS)
+            );
+            
+            const { error: refreshError } = await Promise.race([
+              refreshPromise,
+              refreshTimeoutPromise
+            ]) as any;
+            
+            if (refreshError) {
+              console.error(`[AutoReconnect] Session refresh failed from ${source}:`, refreshError);
+            } else {
+              console.log(`[AutoReconnect] Session refreshed successfully from ${source}`);
+            }
+          } catch (refreshError) {
+            console.error(`[AutoReconnect] Session refresh error from ${source}:`, refreshError);
           }
           
           // Force re-establish realtime connection
@@ -73,6 +103,12 @@ export function AutoReconnect() {
       } catch (error) {
         console.error(`[AutoReconnect] Recovery failed from ${source}:`, error);
       } finally {
+        // Clear safety timeout
+        if (lockReleaseTimeoutRef.current) {
+          clearTimeout(lockReleaseTimeoutRef.current);
+          lockReleaseTimeoutRef.current = null;
+        }
+        
         // Release lock after a delay to prevent rapid retries
         if (recoveryTimeoutRef.current) {
           clearTimeout(recoveryTimeoutRef.current);
@@ -130,9 +166,16 @@ export function AutoReconnect() {
         console.log("[AutoReconnect] Error removing Capacitor listeners:", err);
       });
 
+      // Clear all timeouts
       if (recoveryTimeoutRef.current) {
         clearTimeout(recoveryTimeoutRef.current);
       }
+      if (lockReleaseTimeoutRef.current) {
+        clearTimeout(lockReleaseTimeoutRef.current);
+      }
+      
+      // Release lock on unmount
+      recoveryLock = false;
     };
   }, []);
 
