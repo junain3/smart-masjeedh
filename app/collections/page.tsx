@@ -127,19 +127,6 @@ export default function CollectionsPage() {
     void loadData();
   }, [tenantContext?.masjidId, user?.id, resumeTick, authLoading]);
 
-  // Refetch data when window regains focus (app returns from background)
-  useEffect(() => {
-    const handleFocus = () => {
-      console.log("[Collections] Window focused, refetching data...");
-      if (tenantContext?.masjidId && user?.id && !authLoading) {
-        void loadData();
-      }
-    };
-
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [tenantContext?.masjidId, user?.id, authLoading]);
-
   const selectFamily = async (family: Family) => {
     setSelectedFamilyId(family.id);
     

@@ -204,6 +204,22 @@ export default function HomePage() {
 
   const [masjid, setMasjid] = useState<{ name: string; logo_url: string; tagline: string } | null>(null);
 
+  // Track masjid state changes for debugging
+  useEffect(() => {
+    console.log("[Dashboard] Masjid state changed:", masjid);
+  }, [masjid]);
+
+  // Clear masjid state when user logs out
+  useEffect(() => {
+    if (!user) {
+      console.log("[Dashboard] User logged out, clearing masjid state");
+      setMasjid(null);
+      setFamilyCount(0);
+      setMemberCount(0);
+      setIsLive(false);
+    }
+  }, [user]);
+
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   const [selectedScanService, setSelectedScanService] = useState("");
@@ -328,15 +344,21 @@ export default function HomePage() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!supabase) return;
-      if (!tenantContext?.masjidId) return;
+      if (!tenantContext?.masjidId) {
+        console.log("[Dashboard] Skipping fetch - no tenantContext.masjidId");
+        return;
+      }
 
+      console.log("[Dashboard] Starting fetch for masjidId:", tenantContext.masjidId);
       const cacheKey = `dashboard_data_${tenantContext.masjidId}`;
 
       // Try to load from localStorage first for instant display
       const cachedData = typeof window !== "undefined" ? localStorage.getItem(cacheKey) : null;
+      console.log("[Dashboard] Cached data found:", !!cachedData);
       if (cachedData) {
         try {
           const parsed = JSON.parse(cachedData);
+          console.log("[Dashboard] Loading from cache - masjid:", parsed.masjid);
           setFamilyCount(parsed.familyCount);
           setMemberCount(parsed.memberCount);
           setIsLive(parsed.familyCount > 0 || parsed.memberCount > 0);
@@ -349,34 +371,75 @@ export default function HomePage() {
         }
       }
 
+      // Safety fallback: If data fetch takes too long, force default values to prevent infinite skeleton
+      const safetyTimeout = setTimeout(() => {
+        console.warn("[Dashboard] Data fetch safety timeout (15s) - forcing default values");
+        setMasjid({
+          name: "Masjid",
+          logo_url: "",
+          tagline: "Your Masjid",
+        });
+        setFamilyCount(0);
+        setMemberCount(0);
+        setIsLive(false);
+      }, 15000); // 15 second safety fallback
+
       try {
+          console.log("[Dashboard] Starting data fetch for tenant:", tenantContext.masjidId);
+          
+          // Timeout protection: 30 second timeout to prevent indefinite hanging on slow networks
+          const QUERY_TIMEOUT_MS = 30000;
+          const timeoutPromise = new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error("Dashboard data fetch timeout after 30 seconds")), QUERY_TIMEOUT_MS)
+          );
+
+          console.log("[Dashboard] Executing parallel queries...");
+          const dataPromise = Promise.all([
+            // Family count
+            (async () => {
+              console.log("[Dashboard] Fetching family count for masjid_id:", tenantContext.masjidId);
+              const result = await supabase
+                .from("families")
+                .select("id", { count: "exact", head: true })
+                .eq("masjid_id", tenantContext.masjidId)
+                .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")');
+              console.log("[Dashboard] Family count result:", result);
+              return result;
+            })(),
+
+            // Member count - count active members only
+            // Note: Soft-delete cascade ensures members of soft-deleted families are also soft-deleted
+            (async () => {
+              console.log("[Dashboard] Fetching member count for masjid_id:", tenantContext.masjidId);
+              const result = await supabase
+                .from("members")
+                .select("id", { count: "exact", head: true })
+                .eq("masjid_id", tenantContext.masjidId)
+                .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")');
+              console.log("[Dashboard] Member count result:", result);
+              return result;
+            })(),
+
+            // Masjid data
+            (async () => {
+              console.log("[Dashboard] Fetching masjid data for id:", tenantContext.masjidId);
+              const result = await supabase
+                .from("masjids")
+                .select("masjid_name, logo_url, tagline, preferred_language")
+                .eq("id", tenantContext.masjidId)
+                .single();
+              console.log("[Dashboard] Masjid data result:", result);
+              return result;
+            })()
+          ]);
+
           const [
             familiesCountResult,
             membersCountResult,
             masjidDataResult
-          ] = await Promise.all([
-            // Family count
-            supabase
-              .from("families")
-              .select("id", { count: "exact", head: true })
-              .eq("masjid_id", tenantContext.masjidId)
-              .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")'),
-
-            // Member count - count active members only
-            // Note: Soft-delete cascade ensures members of soft-deleted families are also soft-deleted
-            supabase
-              .from("members")
-              .select("id", { count: "exact", head: true })
-              .eq("masjid_id", tenantContext.masjidId)
-              .not("status", "in", '("Moved Out","Left","Deceased","Inactive","Transferred")'),
-
-            // Masjid data
-            supabase
-              .from("masjids")
-              .select("masjid_name, logo_url, tagline, preferred_language")
-              .eq("id", tenantContext.masjidId)
-              .single()
-          ]);
+          ] = await Promise.race([dataPromise, timeoutPromise]) as any;
+          
+          console.log("[Dashboard] All queries completed successfully");
 
         // Update counts
         const familiesCount = familiesCountResult.count || 0;
@@ -396,6 +459,7 @@ export default function HomePage() {
         let preferredLanguage: string | null = null;
 
         const { data: masjidData, error: masjidError } = masjidDataResult;
+        console.log("[Dashboard] Masjid query result - data:", masjidData, "error:", masjidError);
         if (!masjidError && masjidData) {
           masjidObj = {
             name: masjidData.masjid_name || "Masjid",
@@ -403,10 +467,13 @@ export default function HomePage() {
             tagline: masjidData.tagline || "Your Masjid",
           };
           preferredLanguage = masjidData.preferred_language || null;
+          console.log("[Dashboard] Masjid data loaded:", masjidObj);
 
           if (preferredLanguage && ["en", "ta", "si"].includes(preferredLanguage)) {
             setLang(preferredLanguage as Language);
           }
+        } else {
+          console.error("[Dashboard] Failed to load masjid data:", masjidError);
         }
 
         setMasjid(masjidObj);
@@ -422,12 +489,18 @@ export default function HomePage() {
         }
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
-        // Set default masjid on error to prevent infinite loading
+        // Set default values on error to prevent infinite skeleton loading
         setMasjid({
           name: "Masjid",
           logo_url: "",
           tagline: "Your Masjid",
         });
+        setFamilyCount(0);
+        setMemberCount(0);
+        setIsLive(false);
+      } finally {
+        // Clear safety timeout when data fetch completes (success or error)
+        clearTimeout(safetyTimeout);
       }
     };
 

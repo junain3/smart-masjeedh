@@ -82,18 +82,26 @@ export function AutoReconnect() {
             console.error(`[AutoReconnect] Session refresh error from ${source}:`, refreshError);
           }
           
-          // Force re-establish realtime connection
+          // Force re-establish realtime connection (with timeout protection)
           try {
-            // Close existing channels to prevent duplicates
-            const channels = supabase.getChannels();
-            channels.forEach(channel => {
-              console.log(`[AutoReconnect] Closing channel:`, channel.topic);
-              supabase.removeChannel(channel);
-            });
-            
-            // Reconnect realtime
-            console.log(`[AutoReconnect] Reconnecting realtime from ${source}`);
-            // The realtime connection will be automatically re-established when channels are subscribed
+            const realtimePromise = (async () => {
+              // Close existing channels to prevent duplicates
+              const channels = supabase.getChannels();
+              channels.forEach(channel => {
+                console.log(`[AutoReconnect] Closing channel:`, channel.topic);
+                supabase.removeChannel(channel);
+              });
+              
+              // Reconnect realtime
+              console.log(`[AutoReconnect] Reconnecting realtime from ${source}`);
+              // The realtime connection will be automatically re-established when channels are subscribed
+            })();
+
+            const realtimeTimeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("Realtime reconnection timeout")), 5000)
+            );
+
+            await Promise.race([realtimePromise, realtimeTimeoutPromise]);
           } catch (realtimeError) {
             console.error(`[AutoReconnect] Realtime reconnection failed from ${source}:`, realtimeError);
           }

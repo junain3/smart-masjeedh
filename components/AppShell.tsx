@@ -65,9 +65,13 @@ export function AppShell(props: {
 
   // Use tenantContext from auth provider
   useEffect(() => {
+    console.log("[AppShell] tenantContext changed:", tenantContext);
     if (tenantContext) {
+      console.log("[AppShell] Setting role:", tenantContext.role, "permissions:", tenantContext.permissions);
       setRole(tenantContext.role as any);
       setPermissions((tenantContext.permissions || null) as any);
+    } else {
+      console.log("[AppShell] tenantContext is null, role and permissions remain:", { role, permissions });
     }
   }, [tenantContext]);
 
@@ -84,11 +88,24 @@ export function AppShell(props: {
 
   const handleLogout = async () => {
     try {
+      // Clear dashboard cache from localStorage synchronously
+      if (typeof window !== "undefined") {
+        const keys = Object.keys(localStorage);
+        keys.forEach(key => {
+          if (key.startsWith('dashboard_data_')) {
+            localStorage.removeItem(key);
+            console.log('[AppShell] Cleared cache key:', key);
+          }
+        });
+      }
+      // Sign out
       await supabase.auth.signOut();
-      router.push('/login');
+      // Hard navigation to force immediate page reload and clear all state
+      window.location.href = '/login';
     } catch (error) {
       console.error('Logout error:', error);
-      router.push('/login');
+      // Force navigation even on error
+      window.location.href = '/login';
     }
   };
 
@@ -97,23 +114,30 @@ export function AppShell(props: {
     const isSuper = role === "super_admin" || role === "co_admin";
     const perms = permissions || {};
     
+    console.log("[AppShell] Computing navigation items:", { role, isSuper, permissions: perms });
+    
     const base: NavItem[] = [
       { href: "/", label: t.dashboard, icon: <Home className="w-5 h-5" /> },
     ];
 
     if (isSuper || perms.families) {
+      console.log("[AppShell] Adding Families (isSuper:", isSuper, ", perms.families:", perms.families, ")");
       base.push({ href: "/families", label: t.families, icon: <Users className="w-5 h-5" /> });
     }
     if (isSuper || perms.accounts) {
+      console.log("[AppShell] Adding Accounts (isSuper:", isSuper, ", perms.accounts:", perms.accounts, ")");
       base.push({ href: "/accounts", label: t.accounts, icon: <CreditCard className="w-5 h-5" /> });
     }
     if (isSuper || perms.events) {
+      console.log("[AppShell] Adding Events (isSuper:", isSuper, ", perms.events:", perms.events, ")");
       base.push({ href: "/events", label: t.events, icon: <Calendar className="w-5 h-5" /> });
     }
     if (isSuper || perms.subscriptions_collect) {
+      console.log("[AppShell] Adding Collections (isSuper:", isSuper, ", perms.subscriptions_collect:", perms.subscriptions_collect, ")");
       base.push({ href: "/collections", label: t.collections, icon: <Wallet className="w-5 h-5" /> });
     }
     if (isSuper || perms.subscriptions_approve) {
+      console.log("[AppShell] Adding Pending Collections (isSuper:", isSuper, ", perms.subscriptions_approve:", perms.subscriptions_approve, ")");
       base.push({
         href: "/subscriptions/pending",
         label: t.pending_collections,
@@ -122,6 +146,7 @@ export function AppShell(props: {
     }
 
     if (isSuper) {
+      console.log("[AppShell] Adding Staff and Admin (isSuper:", isSuper, ")");
       base.push({
         href: "/staff",
         label: t.staff_management,
@@ -143,6 +168,7 @@ export function AppShell(props: {
       action: handleLogout 
     });
     
+    console.log("[AppShell] Final navigation items count:", base.length);
     return base;
   }, [t, role, permissions, handleLogout]);
 

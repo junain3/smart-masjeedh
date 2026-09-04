@@ -378,33 +378,6 @@ export default function FamiliesPage() {
   }, [tenantContext?.masjidId, resumeTick]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof document === "undefined") return;
-
-    const triggerSilentRefresh = () => {
-      if (!tenantContext?.masjidId) return;
-      void fetchFamilies(true);
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        triggerSilentRefresh();
-      }
-    };
-
-    const handleFocus = () => {
-      triggerSilentRefresh();
-    };
-
-    document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("focus", handleFocus);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, [tenantContext?.masjidId]);
-
-  useEffect(() => {
     const fetchPrintMasjidName = async () => {
       if (!tenantContext?.masjidId) return;
       const name = await getPdfMasjidName(supabase, tenantContext.masjidId);

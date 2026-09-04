@@ -593,35 +593,6 @@ export default function FamilyDetailsPage() {
     void checkAuth();
   }, [authUser, tenantContext, familyId, router, resumeTick]);
 
-  useEffect(() => {
-    // Recovery: Detect when app regains focus or becomes visible after idle session
-    const handleFocus = async () => {
-      if (authUser && !isOptimisticUpdateInProgress()) {
-        console.log("[Family] Focus refresh - no mutation in progress");
-        await fetchData(authUser);
-      } else if (isOptimisticUpdateInProgress()) {
-        console.log("[Family] Focus refresh SKIPPED - mutation in progress");
-      }
-    };
-
-    const handleVisibility = async () => {
-      if (document.visibilityState === "visible" && authUser && !isOptimisticUpdateInProgress()) {
-        console.log("[Family] Visibility refresh - no mutation in progress");
-        await fetchData(authUser);
-      } else if (isOptimisticUpdateInProgress()) {
-        console.log("[Family] Visibility refresh SKIPPED - mutation in progress");
-      }
-    };
-
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [authUser]);
-
   const fetchData = async (currentUser: any, options?: { silent?: boolean }) => {
     // === REQUEST GENERATION MECHANISM ===
     // Capture the data version at the start of the request
@@ -648,14 +619,13 @@ export default function FamilyDetailsPage() {
 
     try {
       // Fetch all data in parallel using Promise.all for better performance
-      const [
-        familyResult,
-        membersResult,
-        softDeletedMembersResult,
-        allMembersResult,
-        paymentsResult,
-        servicesResult
-      ] = await Promise.all([
+      // Timeout protection: 30 second timeout to prevent indefinite hanging on slow networks
+      const QUERY_TIMEOUT_MS = 30000;
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error("Data fetch timeout after 30 seconds")), QUERY_TIMEOUT_MS)
+      );
+
+      const dataPromise = Promise.all([
         // Family data
         supabase
           .from("families")
@@ -702,6 +672,15 @@ export default function FamilyDetailsPage() {
           .eq("masjid_id", tenantContext.masjidId)
           .order("date", { ascending: false })
       ]);
+
+      const [
+        familyResult,
+        membersResult,
+        softDeletedMembersResult,
+        allMembersResult,
+        paymentsResult,
+        servicesResult
+      ] = await Promise.race([dataPromise, timeoutPromise]) as any;
 
       // Process family data
       const { data: familyData, error: familyError } = familyResult;
