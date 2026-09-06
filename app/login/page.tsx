@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useMockAuth } from "@/components/MockAuthProvider";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { signIn, requiresOnboarding, user } = useMockAuth();
 
   const [email, setEmail] = useState("");
@@ -16,6 +17,12 @@ export default function LoginPage() {
   const [recovering, setRecovering] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"error" | "success" | "">("");
+
+  // Get deletion info from URL params
+  const deletionReason = searchParams.get('reason');
+  const deletedBy = searchParams.get('deleted_by');
+  const deletedReason = searchParams.get('deleted_reason');
+  const deletedAt = searchParams.get('deleted_at');
 
   // Redirect to home if already logged in
   useEffect(() => {
@@ -43,6 +50,28 @@ export default function LoginPage() {
     await signIn(email, password);
 
     console.log("LOGIN STEP 2: signIn finished");
+
+    // Check if user account is deleted before redirecting
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: roleData, error: roleError } = await supabase
+        .from("user_roles")
+        .select("status, deleted_by, deleted_reason, deleted_at")
+        .eq("auth_user_id", user.id)
+        .single();
+
+      if (!roleError && roleData && roleData.status === 'deleted') {
+        console.log("DEBUG: User account is deleted, signing out");
+        await supabase.auth.signOut();
+        const loginUrl = new URL('/login', window.location.origin);
+        loginUrl.searchParams.set('reason', 'deleted');
+        if (roleData.deleted_by) loginUrl.searchParams.set('deleted_by', roleData.deleted_by);
+        if (roleData.deleted_reason) loginUrl.searchParams.set('deleted_reason', roleData.deleted_reason);
+        if (roleData.deleted_at) loginUrl.searchParams.set('deleted_at', roleData.deleted_at);
+        window.location.href = loginUrl.toString();
+        return;
+      }
+    }
 
     const next = new URLSearchParams(window.location.search).get("next");
     console.log("LOGIN STEP 3: redirecting to", next || "/");
@@ -104,6 +133,33 @@ export default function LoginPage() {
             role="alert"
           >
             {message}
+          </div>
+        )}
+
+        {deletionReason && (
+          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            <div className="flex items-start">
+              <svg className="w-5 h-5 text-red-600 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-red-800">
+                  {deletionReason === 'deleted' ? 'Account Deleted' : deletionReason === 'masjid_deleted' ? 'Masjid Deleted' : 'Access Revoked'}
+                </h3>
+                <div className="mt-1 text-sm text-red-700">
+                  <p>Your account has been deleted. Your data is retained for a 3-month grace period. Contact support for restoration.</p>
+                  {deletedReason && (
+                    <p className="mt-1"><strong>Reason:</strong> {deletedReason}</p>
+                  )}
+                  {deletedBy && (
+                    <p className="mt-1"><strong>Deleted by:</strong> {deletedBy}</p>
+                  )}
+                  {deletedAt && (
+                    <p className="mt-1"><strong>Deleted on:</strong> {new Date(deletedAt).toLocaleString()}</p>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Settings, Upload } from "lucide-react";
+import { ArrowLeft, Settings, Upload, Trash2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { getTenantContext } from "@/lib/tenant";
@@ -28,6 +28,12 @@ export default function GeneralSettingsPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const t = getTranslation(lang);
+  const { toast } = useAppToast();
+
+  // Delete account state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const fetchMasjidSettings = async () => {
     if (!supabase || !tenantContext?.masjidId) return;
@@ -166,6 +172,88 @@ export default function GeneralSettingsPage() {
     } catch (e: any) {
       console.error("Failed to save settings:", e);
       alert("Failed to save settings");
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmation !== "DELETE MY ACCOUNT") {
+      try {
+        toast({
+          kind: "error",
+          title: "Invalid Confirmation",
+          message: 'Please type exactly "DELETE MY ACCOUNT" to confirm.',
+        });
+      } catch (toastError) {
+        console.error("Toast error:", toastError);
+      }
+      return;
+    }
+
+    setDeleting(true);
+
+    try {
+      // Get current session to send access token
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        try {
+          toast({
+            kind: "error",
+            title: "Authentication Error",
+            message: "No active session found. Please log in again.",
+          });
+        } catch (toastError) {
+          console.error("Toast error:", toastError);
+        }
+        setDeleting(false);
+        return;
+      }
+
+      const response = await fetch("/api/user/delete-account", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          confirmationText: deleteConfirmation,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to delete account");
+      }
+
+      try {
+        toast({
+          kind: "success",
+          title: "Account Deleted",
+          message: "Your account has been deleted successfully.",
+        });
+      } catch (toastError) {
+        console.error("Toast error:", toastError);
+      }
+
+      // Redirect to login after successful deletion
+      setTimeout(() => {
+        router.push("/login");
+      }, 2000);
+    } catch (error: any) {
+      console.error("Delete account error:", error);
+      try {
+        toast({
+          kind: "error",
+          title: "Deletion Failed",
+          message: error.message || "Failed to delete account. Please try again.",
+        });
+      } catch (toastError) {
+        console.error("Toast error:", toastError);
+      }
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -348,9 +436,120 @@ export default function GeneralSettingsPage() {
                 Save Settings
               </button>
             </div>
+
+            {/* Delete Account Section - Super Admin Only */}
+            {tenantContext?.role === 'super_admin' && (
+              <div className="border-t border-gray-200 pt-6 mt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Delete Account</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Permanently delete your account and all masjid data. This action cannot be undone.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowDeleteModal(true)}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 font-medium transition-colors flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete Account
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Delete Account Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowDeleteModal(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-100 rounded-full">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">Delete Account</h3>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-gray-700">
+                This action will soft-delete your account and masjid. Your data will be retained for 3 months and can be restored by contacting support.
+              </p>
+
+              {tenantContext?.role === 'super_admin' && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-amber-900 mb-1">
+                        ⚠️ SOFT DELETE - 3 MONTH GRACE PERIOD
+                      </p>
+                      <p className="text-sm text-amber-800">
+                        Only the oldest super admin can delete the account. This will:
+                      </p>
+                      <ul className="text-sm text-amber-800 mt-2 space-y-1 list-disc list-inside">
+                        <li>Mark your account and masjid as deleted</li>
+                        <li>Prevent access to all masjid data</li>
+                        <li>Retain data for 3 months for restoration</li>
+                        <li>Contact support to restore within 3 months</li>
+                        <li>Data permanently deleted after 3 months</li>
+                      </ul>
+                      <p className="text-sm text-amber-800 mt-2 font-semibold">
+                        Note: Only the oldest super admin can initiate deletion.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Type <span className="font-mono bg-gray-100 px-2 py-1 rounded">DELETE MY ACCOUNT</span> to confirm
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmation}
+                  onChange={(e) => setDeleteConfirmation(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="DELETE MY ACCOUNT"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setDeleteConfirmation("");
+                  }}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 font-medium transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleting || deleteConfirmation !== "DELETE MY ACCOUNT"}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {deleting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      Delete Account
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

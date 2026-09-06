@@ -48,6 +48,7 @@ export function UnifiedAppProvider({
   const [tenantLoading, setTenantLoading] = useState(false);
   const [tenantError, setTenantError] = useState<string | null>(null);
   const [requiresOnboarding, setRequiresOnboarding] = useState(false);
+  const [isUserDeleted, setIsUserDeleted] = useState(false);
   const [availableMasjids, setAvailableMasjids] = useState<Array<{
     masjid_id: string;
     role: string;
@@ -59,6 +60,8 @@ export function UnifiedAppProvider({
   const lastFetchedMasjidIdRef = useRef<string | null>(null);
   const initializationLockRef = useRef(false);
   const recoveryLockRef = useRef(false);
+  const forceLogoutInProgressRef = useRef(false);
+  const accessCheckInProgressRef = useRef(false);
 
   // --- Resume Tick for Session Recovery ---
   const [resumeTick, setResumeTick] = useState(0);
@@ -90,8 +93,53 @@ export function UnifiedAppProvider({
     };
   }, [authLoading]);
 
-  
+
   // --- Core Methods ---
+
+  const forceLogout = useCallback(async (
+    reason: string = 'deleted',
+    metadata?: { deleted_by?: string; deleted_reason?: string; deleted_at?: string }
+  ) => {
+    // Prevent multiple concurrent force logouts
+    if (forceLogoutInProgressRef.current) {
+      console.log('[UnifiedAppProvider] Force logout already in progress, skipping');
+      return;
+    }
+
+    forceLogoutInProgressRef.current = true;
+    console.log('[UnifiedAppProvider] Force logout initiated:', reason, metadata);
+
+    try {
+      // Sign out from Supabase
+      await supabase.auth.signOut();
+
+      // Clear all local state
+      setSession(null);
+      setUser(null);
+      setTenantContext(null);
+      setAvailableMasjids([]);
+      setRequiresOnboarding(false);
+      setIsUserDeleted(true);
+      setTenantError(reason === 'deleted'
+        ? "Your account has been deleted. Your data is retained for a 3-month grace period. Contact support for restoration."
+        : "Your access has been revoked. Please contact support."
+      );
+
+      // Redirect to login page with reason and metadata
+      if (typeof window !== 'undefined') {
+        const loginUrl = new URL('/login', window.location.origin);
+        loginUrl.searchParams.set('reason', reason);
+        if (metadata?.deleted_by) loginUrl.searchParams.set('deleted_by', metadata.deleted_by);
+        if (metadata?.deleted_reason) loginUrl.searchParams.set('deleted_reason', metadata.deleted_reason);
+        if (metadata?.deleted_at) loginUrl.searchParams.set('deleted_at', metadata.deleted_at);
+        window.location.href = loginUrl.toString();
+      }
+    } catch (error) {
+      console.error('[UnifiedAppProvider] Force logout error:', error);
+    } finally {
+      forceLogoutInProgressRef.current = false;
+    }
+  }, []);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
@@ -128,46 +176,82 @@ export function UnifiedAppProvider({
 
   // --- Load Tenant Context with Full Features ---
   const loadTenantContext = useCallback(async (userId: string) => {
+    // Prevent loading if force logout is in progress
+    if (forceLogoutInProgressRef.current) {
+      console.log("[loadTenantContext] Force logout in progress, skipping tenant context load");
+      return;
+    }
+
+    if (tenantLoading) {
+      console.log("[loadTenantContext] Already loading, skipping");
+      return;
+    }
+
+    if (isUserDeleted) {
+      console.log("[loadTenantContext] User is deleted, skipping tenant context load");
+      return;
+    }
+
+    console.log("[loadTenantContext] Loading for userId:", userId);
     setTenantLoading(true);
     setTenantError(null);
-    console.log("[loadTenantContext] Loading for userId:", userId);
-    
+
     try {
-      // Timeout protection: 10 second timeout to prevent indefinite hanging
-      const TENANT_LOAD_TIMEOUT_MS = 10000;
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error("Tenant context load timeout after 10 seconds")), TENANT_LOAD_TIMEOUT_MS)
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Tenant context loading timeout")), 15000)
       );
 
       const loadPromise = (async () => {
         // Try the RPC function first which bypasses RLS
         const { data: rpcData, error: rpcError } = await supabase
           .rpc('get_current_user_roles');
-        
+
         console.log("[loadTenantContext] RPC result:", { rpcData, rpcError });
         let roleData = rpcData;
-        
+
         // If RPC didn't work, try direct query with auth_user_id
         if (rpcError || !roleData || roleData.length === 0) {
           console.log("[loadTenantContext] RPC failed, trying direct query with auth_user_id:", rpcError);
           const { data: authData, error: authError } = await supabase
             .from("user_roles")
-            .select("masjid_id, role, permissions, onboarding_completed, full_name")
+            .select("masjid_id, role, permissions, status, deleted_by, deleted_reason, deleted_at")
             .eq("auth_user_id", userId);
 
           console.log("[loadTenantContext] Direct query (auth_user_id) result:", { authData, authError });
           if (!authError && authData && authData.length > 0) {
+            // Check if user role is deleted (only if status column exists)
+            if (authData[0].status === 'deleted') {
+              console.error("[UnifiedAppProvider] User role is deleted:", userId);
+              await forceLogout('deleted', {
+                deleted_by: authData[0].deleted_by,
+                deleted_reason: authData[0].deleted_reason,
+                deleted_at: authData[0].deleted_at
+              });
+              return;
+            }
             roleData = authData;
           } else {
             // Fall back to user_id for backwards compatibility
             console.log("[loadTenantContext] auth_user_id query failed, trying user_id fallback");
             const { data: userIdData, error: userIdError } = await supabase
               .from("user_roles")
-              .select("masjid_id, role, permissions, onboarding_completed, full_name")
+              .select("masjid_id, role, permissions, status, deleted_by, deleted_reason, deleted_at")
               .eq("user_id", userId);
-            
+
             console.log("[loadTenantContext] Direct query (user_id) result:", { userIdData, userIdError });
-            roleData = userIdData;
+            if (!userIdError && userIdData && userIdData.length > 0) {
+              // Check if user role is deleted (only if status column exists)
+              if (userIdData[0].status === 'deleted') {
+                console.error("[UnifiedAppProvider] User role is deleted:", userId);
+                await forceLogout('deleted', {
+                  deleted_by: userIdData[0].deleted_by,
+                  deleted_reason: userIdData[0].deleted_reason,
+                  deleted_at: userIdData[0].deleted_at
+                });
+                return;
+              }
+              roleData = userIdData;
+            }
           }
         }
 
@@ -176,6 +260,31 @@ export function UnifiedAppProvider({
           setAvailableMasjids(roleData);
 
           const firstRole = roleData[0];
+
+          // Check if masjid is deleted (only if status column exists)
+          try {
+            const { data: masjidData, error: masjidError } = await supabase
+              .from("masjids")
+              .select("status, deleted_by, deleted_reason, deleted_at")
+              .eq("id", firstRole.masjid_id)
+              .single();
+
+            // Only block if status column exists and is 'deleted'
+            // If column doesn't exist (migration not run yet), allow access
+            if (!masjidError && masjidData && masjidData.status === 'deleted') {
+              console.error("[UnifiedAppProvider] Masjid is deleted:", firstRole.masjid_id);
+              await forceLogout('masjid_deleted', {
+                deleted_by: masjidData.deleted_by,
+                deleted_reason: masjidData.deleted_reason,
+                deleted_at: masjidData.deleted_at
+              });
+              return;
+            }
+          } catch (e) {
+            // If status column doesn't exist, ignore and continue
+            console.log("[UnifiedAppProvider] Status column check failed (migration not run yet), continuing...");
+          }
+
           const { data: userData } = await supabase.auth.getUser();
           const newTenantContext: TenantContext = {
             masjidId: firstRole.masjid_id,
@@ -185,22 +294,20 @@ export function UnifiedAppProvider({
             permissions: firstRole.permissions || {},
           };
           setTenantContext(newTenantContext);
-          
+
           console.log("[UnifiedAppProvider] Tenant context loaded:", {
             userId,
             role: newTenantContext.role,
             masjidId: newTenantContext.masjidId,
             permissions: newTenantContext.permissions,
           });
-          
+
           const isSuperAdmin = firstRole.role === "super_admin";
           const hasCompletedOnboarding = firstRole.onboarding_completed === true;
           setRequiresOnboarding(!isSuperAdmin && !hasCompletedOnboarding);
         } else {
           console.error("[UnifiedAppProvider] No user_roles found for user:", userId);
-          setAvailableMasjids([]);
-          setTenantContext(null);
-          setRequiresOnboarding(true);
+          await forceLogout('no_role');
         }
       })();
 
@@ -215,16 +322,16 @@ export function UnifiedAppProvider({
       setTenantLoading(false);
       console.log("[loadTenantContext] tenantLoading set to false");
     }
-  }, []);
+  }, [forceLogout, isUserDeleted, tenantLoading]);
 
   // --- Reactively load tenant context when user exists but tenantContext is null ---
   // This handles the case where the component remounts after login redirect
   useEffect(() => {
-    if (user && !tenantContext && !tenantLoading) {
+    if (user && !tenantContext && !tenantLoading && !isUserDeleted) {
       console.log("[UnifiedAppProvider] User exists but no tenantContext, loading tenant context reactively");
       loadTenantContext(user.id);
     }
-  }, [user, tenantContext, tenantLoading, loadTenantContext]);
+  }, [user, tenantContext, tenantLoading, isUserDeleted, loadTenantContext]);
 
   const fetchTenantContext = useCallback(async (options?: { force?: boolean }): Promise<TenantContext | null> => {
     if (!options?.force && tenantPromiseRef.current) {

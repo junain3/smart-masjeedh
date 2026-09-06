@@ -105,6 +105,26 @@ function VerifyPageContent() {
       }
 
       console.log("DEBUG: Verification successful, user logged in");
+
+      // Check if user account is deleted before redirecting
+      const { data: roleData, error: roleError } = await supabase
+        .from("user_roles")
+        .select("status, deleted_by, deleted_reason, deleted_at")
+        .eq("auth_user_id", userData.user.id)
+        .single();
+
+      if (!roleError && roleData && roleData.status === 'deleted') {
+        console.log("DEBUG: User account is deleted, signing out");
+        await supabase.auth.signOut();
+        const loginUrl = new URL('/login', window.location.origin);
+        loginUrl.searchParams.set('reason', 'deleted');
+        if (roleData.deleted_by) loginUrl.searchParams.set('deleted_by', roleData.deleted_by);
+        if (roleData.deleted_reason) loginUrl.searchParams.set('deleted_reason', roleData.deleted_reason);
+        if (roleData.deleted_at) loginUrl.searchParams.set('deleted_at', roleData.deleted_at);
+        router.push(loginUrl.toString());
+        return;
+      }
+
       router.push("/");
 
     } catch (err: any) {
