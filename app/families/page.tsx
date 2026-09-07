@@ -15,6 +15,7 @@ import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 import SearchResultsPrintView from "@/components/SearchResultsPrintView";
 import { getPrintEngine, getPrintButtonLabel, type PrintReportType } from "@/lib/print-engine";
 import { sortFamiliesByCode } from "@/lib/collection-utils";
+import { generateNextFamilyCode } from "@/lib/family-code-utils";
 import {
   ACTIVE_RECORD_STATUS,
   ACTIVE_RECORD_STATUS_FILTER,
@@ -488,24 +489,15 @@ export default function FamiliesPage() {
     if (isOpen && isLive && !editingFamily) {
       // Fetch the actual maximum family code from database
       fetchMaxFamilyCode().then((maxCode) => {
-        if (maxCode) {
-          // Try to extract prefix and number (e.g., FM-01 -> FM, 01)
-          const match = maxCode.match(/^([A-Za-z\s-]+)(\d+)$/);
-          if (match) {
-            const prefix = match[1];
-            const num = parseInt(match[2]);
-            setFamilyCode(`${prefix}${(num + 1).toString().padStart(match[2].length, '0')}`);
-          } else {
-            // Fallback if format is different
-            setFamilyCode("");
-          }
-        } else {
-          // No families yet, start with FM-01
-          setFamilyCode("FM-01");
-        }
+        // Use the new utility function to generate the next code
+        // This supports various formats: M01, FM001, TH001, LMS01, etc.
+        // Defaults to "M01" if no previous code exists
+        const nextCode = generateNextFamilyCode(maxCode);
+        setFamilyCode(nextCode);
       });
     } else if (isOpen && !isLive) {
-      setFamilyCode("FM-01");
+      // Default to M01 for demo mode
+      setFamilyCode("M01");
     }
   }, [isOpen, isLive]);
 
