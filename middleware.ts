@@ -8,7 +8,18 @@ export async function middleware(req: NextRequest) {
 
   // Skip access check for public routes
   const { pathname } = req.nextUrl
-  if (pathname === '/login' || pathname === '/signup' || pathname === '/easy-login' || pathname === '/verify') {
+  if (
+    pathname === '/login' ||
+    pathname === '/signup' ||
+    pathname === '/easy-login' ||
+    pathname === '/verify' ||
+    pathname === '/update-password' ||
+    pathname === '/forgot-password' ||
+    pathname === '/register' ||
+    pathname === '/privacy-policy' ||
+    pathname.startsWith('/auth/') ||
+    pathname.startsWith('/invite')
+  ) {
     return supabaseResponse
   }
 

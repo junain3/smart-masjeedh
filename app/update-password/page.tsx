@@ -16,10 +16,48 @@ export default function UpdatePasswordPage() {
   const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
-    // Check if user has an active session (from the auth callback)
+    // Step 1: Client-side URL hash fragment session detection.
+    // Supabase recovery links by default use #access_token=...&type=recovery
+    // when the Site URL is used directly (no custom /auth/callback redirect).
+    // `detectSessionInUrl: true` on the client handles this automatically,
+    // but we explicitly request getSession() to flush any URL-sourced tokens
+    // and trigger the UnifiedAppProvider PASSWORD_RECOVERY listener if needed.
+    let cancelled = false;
+
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      // Force URL hash fragment processing before getSession() read
+      try {
+        await supabase.auth.initialize();
+      } catch (_e) {
+        // no-op - initialize may not exist on all client versions
+      }
+      const { data: { session }, error: sessErr } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (sessErr) {
+        console.error("Update-password getSession error:", sessErr);
+      }
+
       if (!session) {
+        // As a fallback, check if URL has recovery-type tokens in hash and try
+        // verifyOtp if ?token= is present as a query string on this page
+        const params = new URLSearchParams(window.location.search);
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+        const type = params.get("type") || hashParams.get("type") || "recovery";
+        const token = params.get("token") || hashParams.get("token") || hashParams.get("access_token");
+        if (token && (type === "recovery" || type === "signup" || type === "magiclink")) {
+          try {
+            const { error: verifyErr } = await supabase.auth.verifyOtp({
+              token_hash: token,
+              type: type as any,
+            });
+            if (!verifyErr && !cancelled) {
+              setHasSession(true);
+              return;
+            }
+          } catch (vErr) {
+            console.error("update-password inline verifyOtp failed:", vErr);
+          }
+        }
         setMessage("Invalid or expired recovery link. Please request a new password reset.");
         setMessageType("error");
       } else {
@@ -27,6 +65,8 @@ export default function UpdatePasswordPage() {
       }
     };
     checkSession();
+
+    return () => { cancelled = true; };
   }, []);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {

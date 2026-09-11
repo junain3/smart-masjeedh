@@ -16,6 +16,13 @@ export function AutoReconnect() {
 
   useEffect(() => {
     const attemptRecovery = async (source: string) => {
+      // Smallest recovery guard: During an active password reset flow,
+      // do NOT race the recovery redirect (may refresh/re-sync sessions
+      // and navigate user away from /update-password).
+      if (typeof window !== "undefined" && window.location.pathname === "/update-password") {
+        return;
+      }
+
       const now = Date.now();
       
       // Debounce: Don't recover if we just recovered recently

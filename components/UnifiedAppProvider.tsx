@@ -507,6 +507,26 @@ export function UnifiedAppProvider({
         setUser(newSession.user);
         console.log("[UnifiedAppProvider] User set to:", newSession.user?.email || "null");
 
+        if (event === "PASSWORD_RECOVERY") {
+          console.log("[UnifiedAppProvider] PASSWORD_RECOVERY detected");
+
+          if (typeof window !== "undefined") {
+            if (window.location.pathname !== "/update-password") {
+              console.log("[UnifiedAppProvider] PASSWORD_RECOVERY redirecting to /update-password");
+              // Use replace() so the back button doesn't re-enter the recovery state
+              window.location.replace("/update-password");
+            } else {
+              console.log("[UnifiedAppProvider] Already on /update-password — no redirect needed");
+            }
+          }
+
+          // IMPORTANT: return after PASSWORD_RECOVERY — do NOT run
+          // SIGNED_IN branch, tenant loading, dashboard redirects, or any
+          // other normal auth-init logic that could route the user away
+          // from the password reset flow.
+          return;
+        }
+
         if (event === "SIGNED_IN") {
           await loadTenantContext(newSession.user.id);
           // Release authLoading after successful sign-in and tenant context load
