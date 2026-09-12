@@ -26,6 +26,8 @@ export async function GET(request: NextRequest) {
   const error = requestUrl.searchParams.get("error");
   const errorDescription = requestUrl.searchParams.get("error_description");
 
+  console.log("[Auth Callback] Request received:", { code: !!code, token: !!token, type, next, error });
+
   // Propagate auth errors immediately
   if (error) {
     const loginUrl = new URL("/login", request.url);

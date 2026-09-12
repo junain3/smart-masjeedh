@@ -80,6 +80,12 @@ export default function SettingsPage() {
                 <p className="text-sm text-gray-600">Configure notifications and alerts</p>
               </div>
             </Link>
+            <Link href="/settings/change-password" className="block">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 hover:bg-blue-100 transition-colors">
+                <h3 className="font-semibold text-blue-900 mb-2">Change Password</h3>
+                <p className="text-sm text-blue-700">Update your account password</p>
+              </div>
+            </Link>
             <Link href="/settings/sms" className="block">
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-6 hover:bg-emerald-100 transition-colors">
                 <h3 className="font-semibold text-emerald-900 mb-2">SMS Gateway</h3>

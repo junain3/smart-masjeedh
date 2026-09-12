@@ -42,24 +42,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get masjid_id from session or use first masjid
+    // Get masjid_id from session
     const { data: { session } } = await supabase.auth.getSession();
-    let masjidId = session?.user?.id;
+    let masjidId = null;
 
-    if (!masjidId) {
-      // Fallback to first masjid
-      const { data: masjidData } = await supabase
-        .from("masjids")
-        .select("id")
+    if (session?.user?.id) {
+      const { data: roleRow } = await supabase
+        .from("user_roles")
+        .select("masjid_id")
+        .eq("auth_user_id", session.user.id)
         .limit(1)
-        .single();
-      masjidId = masjidData?.id;
+        .maybeSingle();
+
+      masjidId = roleRow?.masjid_id || null;
     }
 
     if (!masjidId) {
       return NextResponse.json(
-        { error: "Could not determine masjid" },
-        { status: 500 }
+        { error: "Could not determine masjid - user has no assigned role" },
+        { status: 400 }
       );
     }
 

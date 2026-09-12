@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Mail, Shield, Check } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 export const dynamic = 'force-dynamic';
 
@@ -39,10 +40,21 @@ export default function AdminPage() {
     setMessage('');
 
     try {
+      // Get the session token for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        setError('Authentication required. Please log in again.');
+        setLoading(false);
+        return;
+      }
+
       const response = await fetch('/admin/api/invite-user', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           email,
@@ -55,7 +67,8 @@ export default function AdminPage() {
       const data = await response.json();
 
       if (data.success) {
-        setMessage(`Invitation sent to ${email}. OTP: ${data.otp}`);
+        const warning = data.warning ? ` (${data.warning})` : '';
+        setMessage(`Invitation sent to ${email}. Link: ${data.invite_link}${warning}`);
         setEmail('');
         setRole('staff');
         setCommissionPercent('10');

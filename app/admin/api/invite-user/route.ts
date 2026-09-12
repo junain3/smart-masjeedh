@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import * as crypto from "crypto";
-import { Resend } from 'resend';
 
 const supabaseAdmin = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,30 +14,6 @@ const supabaseAdmin = createAdminClient(
   }
 );
 
-function createClient() {
-  const cookieStore = cookies();
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value }) =>
-              cookieStore.set(name, value)
-            );
-          } catch {
-            // The setAll method was called from a Server Component
-          }
-        },
-      },
-    }
-  );
-}
-
 export async function POST(request: NextRequest) {
   try {
     const { email, role, permissions, commission_percent, masjid_id } = await request.json();
@@ -51,29 +25,77 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve masjid_id
-const supabase = createClient();
-const { data: { session } } = await supabase.auth.getSession();
+    // Get authenticated user from Authorization header or session
+    let authUser = null;
+    const authHeader = request.headers.get("authorization");
 
-let masjidId = masjid_id;
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice("Bearer ".length).trim();
+      if (token) {
+        const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+        if (error) {
+          console.error("[Invite User] getUser(token) failed:", error);
+        }
+        if (user) {
+          authUser = user;
+        }
+      }
+    }
 
-if (!masjidId && session?.user?.id) {
-  const { data: roleRow } = await supabaseAdmin
-    .from("user_roles")
-    .select("masjid_id")
-    .eq("user_id", session.user.id)
-    .limit(1)
-    .maybeSingle();
+    // Fallback to session-based auth
+    if (!authUser) {
+      const supabase = createClient();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      console.log("[Invite User] Session retrieval:", { session, sessionError });
+      authUser = session?.user;
+    }
 
-  masjidId = roleRow?.masjid_id || null;
-}
+    if (!authUser) {
+      console.error("[Invite User] Authentication failed");
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
 
-if (!masjidId) {
-  return NextResponse.json(
-    { error: "Could not determine masjid" },
-    { status: 400 }
-  );
-}
+    console.log("[Invite User] Authenticated user:", authUser.id, authUser.email);
+
+    let masjidId = masjid_id;
+
+    if (!masjidId && authUser.id) {
+      // Try auth_user_id first (new schema)
+      const { data: roleRow, error: authError } = await supabaseAdmin
+        .from("user_roles")
+        .select("masjid_id")
+        .eq("auth_user_id", authUser.id)
+        .limit(1)
+        .maybeSingle();
+
+      console.log("[Invite User] auth_user_id query:", { roleRow, authError });
+
+      if (roleRow?.masjid_id) {
+        masjidId = roleRow.masjid_id;
+      } else {
+        // Fallback to user_id (old schema)
+        const { data: oldRoleRow, error: oldError } = await supabaseAdmin
+          .from("user_roles")
+          .select("masjid_id")
+          .eq("user_id", authUser.id)
+          .limit(1)
+          .maybeSingle();
+
+        console.log("[Invite User] user_id fallback query:", { oldRoleRow, oldError });
+        masjidId = oldRoleRow?.masjid_id || null;
+      }
+    }
+
+    if (!masjidId) {
+      console.error("[Invite User] Could not determine masjid_id for user:", authUser.id);
+      return NextResponse.json(
+        { error: "Could not determine masjid - user has no assigned role" },
+        { status: 403 }
+      );
+    }
 
     // Generate OTP and invitation token
     const invitationToken = crypto.randomBytes(32).toString('hex');
@@ -83,7 +105,7 @@ if (!masjidId) {
       email,
       role,
       invitationToken,
-      created_by: session?.user?.id
+      created_by: authUser?.id
     });
 
     // Console logs before insert
@@ -93,7 +115,7 @@ if (!masjidId) {
       role: role,
       token: invitationToken,
       status: "pending",
-      created_by: session?.user?.id,
+      created_by: authUser?.id,
       expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
     });
 
@@ -116,7 +138,7 @@ if (!masjidId) {
           role: role,
           token: invitationToken,
           status: "pending",
-          created_by: session?.user?.id,
+          created_by: authUser?.id,
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
         });
 
@@ -145,43 +167,30 @@ if (!masjidId) {
       );
     }
 
-    // Send invitation email using Resend (non-blocking)
+    // Send invitation email using Supabase Auth Admin API
     let emailWarning = null;
     try {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      
-      const { data, error } = await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || 'noreply@smartmasjeedh.com',
-        to: [email],
-        subject: 'Invitation to Smart Masjeedh Management System',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f9fa;">
-            <div style="background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-              <h2 style="color: #333333; margin-bottom: 20px;">Welcome to Smart Masjeedh Management System!</h2>
-              <p style="color: #666666; font-size: 16px; line-height: 1.5;">You have been invited to join our team as <strong>${role}</strong>.</p>
-              <p style="color: #666666; font-size: 16px; line-height: 1.5;">Click the button below to complete your registration:</p>
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${process.env.NEXT_PUBLIC_APP_URL}/invite-register?token=${invitationToken}" 
-                   style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block;">
-                  Complete Registration
-                </a>
-              </div>
-              <p style="color: #999999; font-size: 14px; margin-top: 20px;">This invitation expires in 24 hours.</p>
-            </div>
-          </div>
-        `,
+      console.log("[Invite User] Sending invitation email via Supabase Auth to:", email);
+
+      const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/invite-register?token=${invitationToken}`,
+        data: {
+          role: role,
+          masjid_id: masjidId,
+          invitation_token: invitationToken
+        }
       });
 
-      if (error) {
-        console.error("Resend error:", error);
-        emailWarning = "Email sending failed, but invitation was created successfully";
+      if (inviteError) {
+        console.error("[Invite User] Supabase invite error:", inviteError);
+        emailWarning = `Email sending failed: ${inviteError.message}. Invitation was created in database.`;
       } else {
-        console.log("Email sent successfully via Resend:", data);
+        console.log("[Invite User] Invitation email sent successfully via Supabase:", inviteData);
       }
-      
+
     } catch (emailError: any) {
-      console.error("Email sending error:", emailError);
-      emailWarning = "Email sending failed, but invitation was created successfully";
+      console.error("[Invite User] Email sending exception:", emailError);
+      emailWarning = `Email sending failed: ${emailError.message}. Invitation was created in database.`;
     }
 
     // Return success with invitation link (even if email failed)

@@ -47,12 +47,22 @@ export default function RootRecoveryGuard({
     const accessToken = getParam("access_token");
     const refreshToken = getParam("refresh_token");
 
+    // Log for debugging
+    console.log("[RecoveryGuard] URL check:", {
+      search: window.location.search,
+      hash: window.location.hash,
+      type,
+      hasAccessToken: !!accessToken,
+      hasRefreshToken: !!refreshToken,
+    });
+
     // Minimum: type === "recovery"
     const isRecoveryFlow = type === "recovery";
 
     // Also support other Supabase flow types (signup/invite/magiclink) — but
     // they have their own handlers. Here we ONLY short-circuit recovery.
     if (!isRecoveryFlow) {
+      console.log("[RecoveryGuard] Not a recovery flow, type:", type);
       // No recovery — fall through to normal homepage / dashboard rendering
       return;
     }
