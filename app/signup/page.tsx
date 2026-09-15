@@ -52,51 +52,120 @@ export default function SignupPage() {
 
       console.log("DEBUG: User created successfully:", authData.user.id);
 
-      // Step 2: Create masjid record
-      const { data: masjidData, error: masjidError } = await supabase
-        .from("masjids")
-        .insert({
-          masjid_name: formData.masjidName,
-          tagline: formData.tagline,
-          created_by: authData.user.id,
-        })
-        .select("id")
-        .single();
-
-      if (masjidError) {
-        throw new Error(`Masjid creation failed: ${masjidError.message}`);
-      }
-
-      if (!masjidData?.id) {
-        throw new Error("Failed to create masjid");
-      }
-
-      console.log("DEBUG: Masjid created successfully:", masjidData.id);
-
-      // Step 3: Create user_roles record
-      const { error: roleError } = await supabase
+      // Step 2: Check if there's an existing deleted user_roles entry for this user
+      const { data: existingRole, error: existingRoleError } = await supabase
         .from("user_roles")
-        .insert({
-          masjid_id: masjidData.id,
-          user_id: authData.user.id,
-          auth_user_id: authData.user.id,
-          email: formData.email,
-          role: "super_admin",
-          permissions: {
-            accounts: true,
-            events: true,
-            members: true,
-            subscriptions_collect: true,
-            subscriptions_approve: true,
-            staff_management: true,
-            reports: true,
-            settings: true,
-          },
-          verified: true,
-        });
+        .select("*")
+        .or(`user_id.eq.${authData.user.id},auth_user_id.eq.${authData.user.id}`)
+        .maybeSingle();
 
-      if (roleError) {
-        throw new Error(`Role creation failed: ${roleError.message}`);
+      console.log("DEBUG: Existing role check:", { existingRole, existingRoleError });
+
+      let masjidId: string;
+
+      if (existingRole && existingRole.status === 'deleted') {
+        // Restore the deleted entry
+        console.log("DEBUG: Found deleted role, restoring it");
+
+        // Restore the masjid if it was deleted
+        const { data: existingMasjid, error: masjidCheckError } = await supabase
+          .from("masjids")
+          .select("*")
+          .eq("id", existingRole.masjid_id)
+          .maybeSingle();
+
+        if (existingMasjid && existingMasjid.status === 'deleted') {
+          console.log("DEBUG: Restoring deleted masjid");
+          await supabase
+            .from("masjids")
+            .update({
+              status: 'active',
+              deleted_at: null,
+              deleted_by: null,
+              deleted_reason: null,
+              masjid_name: formData.masjidName,
+              tagline: formData.tagline,
+            })
+            .eq("id", existingRole.masjid_id);
+        }
+
+        // Restore the user_roles entry
+        const { error: restoreError } = await supabase
+          .from("user_roles")
+          .update({
+            status: 'active',
+            deleted_at: null,
+            deleted_by: null,
+            deleted_reason: null,
+            role: "super_admin",
+            permissions: {
+              accounts: true,
+              events: true,
+              members: true,
+              subscriptions_collect: true,
+              subscriptions_approve: true,
+              staff_management: true,
+              reports: true,
+              settings: true,
+            },
+            verified: true,
+          })
+          .eq("id", existingRole.id);
+
+        if (restoreError) {
+          throw new Error(`Role restoration failed: ${restoreError.message}`);
+        }
+
+        masjidId = existingRole.masjid_id;
+        console.log("DEBUG: Role restored successfully");
+      } else {
+        // Step 2: Create masjid record
+        const { data: masjidData, error: masjidError } = await supabase
+          .from("masjids")
+          .insert({
+            masjid_name: formData.masjidName,
+            tagline: formData.tagline,
+            created_by: authData.user.id,
+          })
+          .select("id")
+          .single();
+
+        if (masjidError) {
+          throw new Error(`Masjid creation failed: ${masjidError.message}`);
+        }
+
+        if (!masjidData?.id) {
+          throw new Error("Failed to create masjid");
+        }
+
+        console.log("DEBUG: Masjid created successfully:", masjidData.id);
+        masjidId = masjidData.id;
+
+        // Step 3: Create user_roles record
+        const { error: roleError } = await supabase
+          .from("user_roles")
+          .insert({
+            masjid_id: masjidId,
+            user_id: authData.user.id,
+            auth_user_id: authData.user.id,
+            email: formData.email,
+            role: "super_admin",
+            permissions: {
+              accounts: true,
+              events: true,
+              members: true,
+              subscriptions_collect: true,
+              subscriptions_approve: true,
+              staff_management: true,
+              reports: true,
+              settings: true,
+            },
+            verified: true,
+          });
+
+        if (roleError) {
+          throw new Error(`Role creation failed: ${roleError.message}`);
+        }
       }
 
       console.log("DEBUG: User role created successfully");

@@ -41,20 +41,16 @@ export async function middleware(req: NextRequest) {
 
     if (user && !userError) {
       // Check user_roles status with deletion metadata
+      // Check both auth_user_id and user_id for compatibility
       const { data: userRole, error: roleError } = await supabase
         .from('user_roles')
         .select('masjid_id, status, deleted_at, deleted_by, deleted_reason')
-        .eq('auth_user_id', user.id)
-        .single()
+        .or(`auth_user_id.eq.${user.id},user_id.eq.${user.id}`)
+        .maybeSingle()
 
-      if (roleError || !userRole) {
-        const loginUrl = new URL('/login', req.url)
-        loginUrl.searchParams.set('reason', 'no_role')
-        return NextResponse.redirect(loginUrl)
-      }
-
-      // Check if user role is deleted
-      if (userRole.status === 'deleted') {
+      // Only redirect if user has a role that is deleted
+      // New users without roles should be allowed to proceed
+      if (userRole && userRole.status === 'deleted') {
         const loginUrl = new URL('/login', req.url)
         loginUrl.searchParams.set('reason', 'deleted')
         if (userRole.deleted_by) loginUrl.searchParams.set('deleted_by', userRole.deleted_by)
@@ -63,20 +59,22 @@ export async function middleware(req: NextRequest) {
         return NextResponse.redirect(loginUrl)
       }
 
-      // Check if masjid is deleted with deletion metadata
-      const { data: masjid, error: masjidError } = await supabase
-        .from('masjids')
-        .select('status, deleted_at, deleted_by, deleted_reason')
-        .eq('id', userRole.masjid_id)
-        .single()
+      // Only check masjid status if user has a role
+      if (userRole && userRole.masjid_id) {
+        const { data: masjid, error: masjidError } = await supabase
+          .from('masjids')
+          .select('status, deleted_at, deleted_by, deleted_reason')
+          .eq('id', userRole.masjid_id)
+          .maybeSingle()
 
-      if (masjidError || !masjid || masjid.status === 'deleted') {
-        const loginUrl = new URL('/login', req.url)
-        loginUrl.searchParams.set('reason', 'masjid_deleted')
-        if (masjid?.deleted_by) loginUrl.searchParams.set('deleted_by', masjid.deleted_by)
-        if (masjid?.deleted_reason) loginUrl.searchParams.set('deleted_reason', masjid.deleted_reason)
-        if (masjid?.deleted_at) loginUrl.searchParams.set('deleted_at', masjid.deleted_at)
-        return NextResponse.redirect(loginUrl)
+        if (masjid && masjid.status === 'deleted') {
+          const loginUrl = new URL('/login', req.url)
+          loginUrl.searchParams.set('reason', 'masjid_deleted')
+          if (masjid.deleted_by) loginUrl.searchParams.set('deleted_by', masjid.deleted_by)
+          if (masjid.deleted_reason) loginUrl.searchParams.set('deleted_reason', masjid.deleted_reason)
+          if (masjid.deleted_at) loginUrl.searchParams.set('deleted_at', masjid.deleted_at)
+          return NextResponse.redirect(loginUrl)
+        }
       }
     }
   } catch (error) {

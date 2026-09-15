@@ -59,8 +59,10 @@ export default function LoginPage() {
       const { data: roleData, error: roleError } = await supabase
         .from("user_roles")
         .select("status, deleted_by, deleted_reason, deleted_at")
-        .eq("auth_user_id", user.id)
-        .single();
+        .or(`auth_user_id.eq.${user.id},user_id.eq.${user.id}`)
+        .maybeSingle();
+
+      console.log("[Login] User role check:", { userId: user.id, roleData, roleError });
 
       if (!roleError && roleData && roleData.status === 'deleted') {
         console.log("DEBUG: User account is deleted, signing out");

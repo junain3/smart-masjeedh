@@ -52,32 +52,98 @@ export default function MasjidSetup({ onSetupComplete }: MasjidSetupProps) {
         throw new Error("Failed to create masjid");
       }
 
-      // Create user role
-      const { error: roleError } = await supabase
+      // Check if there's an existing deleted user_roles entry for this user
+      const { data: existingRole, error: existingRoleError } = await supabase
         .from("user_roles")
-        .insert({
-          masjid_id: masjidData.id,
-          user_id: session.user.id, // Use auth user ID as user_id for consistency
-          auth_user_id: session.user.id,
-          email: session.user.email || "",
-          role: "super_admin",
-          permissions: {
-            accounts: true,
-            events: true,
-            members: true,
-            subscriptions_collect: true,
-            subscriptions_approve: true,
-            staff_management: true,
-            reports: true,
-            settings: true
-          },
-          verified: true
-        });
+        .select("*")
+        .or(`user_id.eq.${session.user.id},auth_user_id.eq.${session.user.id}`)
+        .maybeSingle();
 
-      console.log("DEBUG MasjidSetup - Role creation result:", { error: roleError?.message });
+      console.log("DEBUG MasjidSetup - Existing role check:", { existingRole, existingRoleError });
 
-      if (roleError) {
-        throw new Error(roleError.message);
+      if (existingRole && existingRole.status === 'deleted') {
+        // Restore the deleted entry
+        console.log("DEBUG MasjidSetup - Found deleted role, restoring it");
+
+        // Restore the masjid if it was deleted
+        const { data: existingMasjid, error: masjidCheckError } = await supabase
+          .from("masjids")
+          .select("*")
+          .eq("id", existingRole.masjid_id)
+          .maybeSingle();
+
+        if (existingMasjid && existingMasjid.status === 'deleted') {
+          console.log("DEBUG MasjidSetup - Restoring deleted masjid");
+          await supabase
+            .from("masjids")
+            .update({
+              status: 'active',
+              deleted_at: null,
+              deleted_by: null,
+              deleted_reason: null,
+              masjid_name: formData.name || `${session.user.email?.split('@')[0]}'s Masjid`,
+              tagline: formData.tagline || "Smart Masjid Management",
+            })
+            .eq("id", existingRole.masjid_id);
+        }
+
+        // Restore the user_roles entry
+        const { error: restoreError } = await supabase
+          .from("user_roles")
+          .update({
+            status: 'active',
+            deleted_at: null,
+            deleted_by: null,
+            deleted_reason: null,
+            role: "super_admin",
+            permissions: {
+              accounts: true,
+              events: true,
+              members: true,
+              subscriptions_collect: true,
+              subscriptions_approve: true,
+              staff_management: true,
+              reports: true,
+              settings: true
+            },
+            verified: true,
+            email: session.user.email || "",
+          })
+          .eq("id", existingRole.id);
+
+        if (restoreError) {
+          throw new Error(restoreError.message);
+        }
+
+        console.log("DEBUG MasjidSetup - Role restored successfully");
+      } else {
+        // Create user role
+        const { error: roleError } = await supabase
+          .from("user_roles")
+          .insert({
+            masjid_id: masjidData.id,
+            user_id: session.user.id, // Use auth user ID as user_id for consistency
+            auth_user_id: session.user.id,
+            email: session.user.email || "",
+            role: "super_admin",
+            permissions: {
+              accounts: true,
+              events: true,
+              members: true,
+              subscriptions_collect: true,
+              subscriptions_approve: true,
+              staff_management: true,
+              reports: true,
+              settings: true
+            },
+            verified: true
+          });
+
+        console.log("DEBUG MasjidSetup - Role creation result:", { error: roleError?.message });
+
+        if (roleError) {
+          throw new Error(roleError.message);
+        }
       }
 
       console.log("DEBUG MasjidSetup - Setup completed successfully");

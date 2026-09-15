@@ -131,6 +131,7 @@ export async function POST(req: NextRequest) {
 }
 
 async function deleteTenantData(masjidId: string) {
+  const admin = getSupabaseAdmin();
   const tenantTables = [
     "subscription_collections",
     "collector_commission_payments",
@@ -146,7 +147,7 @@ async function deleteTenantData(masjidId: string) {
   ];
 
   for (const table of tenantTables) {
-    const { error } = await supabaseAdmin
+    const { error } = await admin
       .from(table)
       .delete()
       .eq("masjid_id", masjidId);
@@ -154,7 +155,7 @@ async function deleteTenantData(masjidId: string) {
     if (error) throw error;
   }
 
-  const { error: masjidError } = await supabaseAdmin
+  const { error: masjidError } = await admin
     .from("masjids")
     .delete()
     .eq("id", masjidId);

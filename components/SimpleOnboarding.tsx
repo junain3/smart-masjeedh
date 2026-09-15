@@ -46,27 +46,96 @@ export default function SimpleOnboarding({ onComplete }: SimpleOnboardingProps) 
 
       console.log("DEBUG: Masjid created:", masjidData.id);
 
-      // Step 2: Create user_roles
-      const { error: roleError } = await supabase
+      // Check if there's an existing deleted user_roles entry for this user
+      const { data: existingRole, error: existingRoleError } = await supabase
         .from("user_roles")
-        .insert({
-          masjid_id: masjidData.id,
-          auth_user_id: session.user.id,
-          role: "super_admin",
-          permissions: {
-            accounts: true,
-            events: true,
-            members: true,
-            subscriptions_collect: true,
-            subscriptions_approve: true,
-            staff_management: true,
-            reports: true,
-            settings: true
-          }
-        });
+        .select("*")
+        .or(`user_id.eq.${session.user.id},auth_user_id.eq.${session.user.id}`)
+        .maybeSingle();
 
-      if (roleError) {
-        throw new Error(roleError.message || "Failed to create user role");
+      console.log("DEBUG: Existing role check:", { existingRole, existingRoleError });
+
+      if (existingRole && existingRole.status === 'deleted') {
+        // Restore the deleted entry
+        console.log("DEBUG: Found deleted role, restoring it");
+
+        // Restore the masjid if it was deleted
+        const { data: existingMasjid, error: masjidCheckError } = await supabase
+          .from("masjids")
+          .select("*")
+          .eq("id", existingRole.masjid_id)
+          .maybeSingle();
+
+        if (existingMasjid && existingMasjid.status === 'deleted') {
+          console.log("DEBUG: Restoring deleted masjid");
+          await supabase
+            .from("masjids")
+            .update({
+              status: 'active',
+              deleted_at: null,
+              deleted_by: null,
+              deleted_reason: null,
+              masjid_name: masjidName || `${session.user.email?.split('@')[0]}'s Masjid`,
+            })
+            .eq("id", existingRole.masjid_id);
+        }
+
+        // Restore the user_roles entry
+        const { error: restoreError } = await supabase
+          .from("user_roles")
+          .update({
+            status: 'active',
+            deleted_at: null,
+            deleted_by: null,
+            deleted_reason: null,
+            role: "super_admin",
+            permissions: {
+              accounts: true,
+              events: true,
+              members: true,
+              subscriptions_collect: true,
+              subscriptions_approve: true,
+              staff_management: true,
+              reports: true,
+              settings: true
+            },
+            verified: true,
+            user_id: session.user.id,
+            email: session.user.email || "",
+          })
+          .eq("id", existingRole.id);
+
+        if (restoreError) {
+          throw new Error(restoreError.message || "Failed to restore user role");
+        }
+
+        console.log("DEBUG: Role restored successfully");
+      } else {
+        // Step 2: Create user_roles
+        const { error: roleError } = await supabase
+          .from("user_roles")
+          .insert({
+            masjid_id: masjidData.id,
+            user_id: session.user.id,
+            auth_user_id: session.user.id,
+            email: session.user.email || "",
+            role: "super_admin",
+            permissions: {
+              accounts: true,
+              events: true,
+              members: true,
+              subscriptions_collect: true,
+              subscriptions_approve: true,
+              staff_management: true,
+              reports: true,
+              settings: true
+            },
+            verified: true
+          });
+
+        if (roleError) {
+          throw new Error(roleError.message || "Failed to create user role");
+        }
       }
 
       console.log("DEBUG: User role created successfully");

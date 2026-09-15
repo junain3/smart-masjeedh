@@ -103,17 +103,53 @@ function RegisterPageContent() {
         }
 
         if (masjidData?.id) {
-          console.log('DEBUG: Creating super admin role...');
-          
-          // 3. Create super admin role for user
-          const { error: roleError } = await supabase
+          console.log('DEBUG: Checking for existing deleted role...');
+
+          // Check if there's an existing deleted user_roles entry for this user
+          const { data: existingRole, error: existingRoleError } = await supabase
             .from('user_roles')
-            .insert([
-              {
-                masjid_id: masjidData.id,
-                user_id: authData.user.id,
-                auth_user_id: authData.user.id,
-                email: email,
+            .select('*')
+            .or(`user_id.eq.${authData.user.id},auth_user_id.eq.${authData.user.id}`)
+            .maybeSingle();
+
+          console.log('DEBUG: Existing role check:', { existingRole, existingRoleError });
+
+          if (existingRole && existingRole.status === 'deleted') {
+            // Restore the deleted entry
+            console.log('DEBUG: Found deleted role, restoring it');
+
+            // Restore the masjid if it was deleted
+            const { data: existingMasjid, error: masjidCheckError } = await supabase
+              .from('masjids')
+              .select('*')
+              .eq('id', existingRole.masjid_id)
+              .maybeSingle();
+
+            if (existingMasjid && existingMasjid.status === 'deleted') {
+              console.log('DEBUG: Restoring deleted masjid');
+              await supabase
+                .from('masjids')
+                .update({
+                  status: 'active',
+                  deleted_at: null,
+                  deleted_by: null,
+                  deleted_reason: null,
+                  masjid_name: masjidName,
+                  tagline: tagline,
+                  subscription_status: 'trial',
+                  trial_extended: false
+                })
+                .eq('id', existingRole.masjid_id);
+            }
+
+            // Restore the user_roles entry
+            const { error: restoreError } = await supabase
+              .from('user_roles')
+              .update({
+                status: 'active',
+                deleted_at: null,
+                deleted_by: null,
+                deleted_reason: null,
                 role: 'super_admin',
                 permissions: {
                   accounts: true,
@@ -124,16 +160,53 @@ function RegisterPageContent() {
                   staff_management: true,
                   reports: true,
                   settings: true
+                },
+                verified: true,
+                email: email,
+              })
+              .eq('id', existingRole.id);
+
+            if (restoreError) {
+              alert("பங்கு மீட்பு தோல்வி: " + restoreError.message);
+              setLoading(false);
+              return;
+            }
+
+            console.log('DEBUG: Role restored successfully');
+          } else {
+            console.log('DEBUG: Creating super admin role...');
+
+            // 3. Create super admin role for user
+            const { error: roleError } = await supabase
+              .from('user_roles')
+              .insert([
+                {
+                  masjid_id: masjidData.id,
+                  user_id: authData.user.id,
+                  auth_user_id: authData.user.id,
+                  email: email,
+                  role: 'super_admin',
+                  permissions: {
+                    accounts: true,
+                    events: true,
+                    members: true,
+                    subscriptions_collect: true,
+                    subscriptions_approve: true,
+                    staff_management: true,
+                    reports: true,
+                    settings: true
+                  },
+                  verified: true
                 }
-              }
-            ]);
+              ]);
 
-          console.log('DEBUG: Role creation result:', { error: roleError?.message });
+            console.log('DEBUG: Role creation result:', { error: roleError?.message });
 
-          if (roleError) {
-            alert("பங்கு உருவாக்கம் தோல்வி: " + roleError.message);
-            setLoading(false);
-            return;
+            if (roleError) {
+              alert("பங்கு உருவாக்கம் தோல்வி: " + roleError.message);
+              setLoading(false);
+              return;
+            }
           }
 
           console.log('DEBUG: Registration successful!');

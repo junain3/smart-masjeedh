@@ -141,7 +141,15 @@ function InviteRegisterContent() {
         // Don't fail registration, just log error
       }
 
-      // Step 3: Insert into user_roles (critical step)
+      // Step 3: Check if there's an existing deleted user_roles entry for this user
+      const { data: existingRole, error: existingRoleError } = await supabase
+        .from('user_roles')
+        .select('*')
+        .or(`user_id.eq.${data.user.id},auth_user_id.eq.${data.user.id}`)
+        .maybeSingle();
+
+      console.log('DEBUG: Existing role check:', { existingRole, existingRoleError });
+
       const roleMap: { [key: string]: string } = {
         'co admin': 'co_admin',
         'co_admin': 'co_admin',
@@ -150,30 +158,60 @@ function InviteRegisterContent() {
         'staff': 'staff',
         'editor': 'editor'
       };
-      
+
       const normalizedRole = roleMap[invitation.role.toLowerCase().trim()] || invitation.role;
-      
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert([
-          {
-            masjid_id: invitation.masjid_id,
-            user_id: data.user.id,
-            auth_user_id: data.user.id,
-            email: email,
+
+      if (existingRole && existingRole.status === 'deleted') {
+        // Restore the deleted entry
+        console.log('DEBUG: Found deleted role, restoring it');
+
+        const { error: restoreError } = await supabase
+          .from('user_roles')
+          .update({
+            status: 'active',
+            deleted_at: null,
+            deleted_by: null,
+            deleted_reason: null,
             role: normalizedRole,
-            permissions: invitation.permissions || {}
-          }
-        ]);
+            permissions: invitation.permissions || {},
+            verified: true,
+            email: email,
+          })
+          .eq('id', existingRole.id);
 
-      console.log('DEBUG: User role creation result:', { error: roleError?.message });
+        if (restoreError) {
+          setError('பங்கு மீட்பு தோல்வி: ' + restoreError.message);
+          console.error('CRITICAL: Role restoration failed:', restoreError);
+          setLoading(false);
+          return;
+        }
 
-      // Critical: If user_roles insert fails, stop immediately
-      if (roleError) {
-        setError('பங்கு உருவாக்கம் தோல்வி: ' + roleError.message);
-        console.error('CRITICAL: User role creation failed, auth user exists but role not assigned:', roleError);
-        setLoading(false);
-        return;
+        console.log('DEBUG: Role restored successfully');
+      } else {
+        // Insert into user_roles (critical step)
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert([
+            {
+              masjid_id: invitation.masjid_id,
+              user_id: data.user.id,
+              auth_user_id: data.user.id,
+              email: email,
+              role: normalizedRole,
+              permissions: invitation.permissions || {},
+              verified: true,
+            }
+          ]);
+
+        console.log('DEBUG: User role creation result:', { error: roleError?.message });
+
+        // Critical: If user_roles insert fails, stop immediately
+        if (roleError) {
+          setError('பங்கு உருவாக்கம் தோல்வி: ' + roleError.message);
+          console.error('CRITICAL: User role creation failed, auth user exists but role not assigned:', roleError);
+          setLoading(false);
+          return;
+        }
       }
 
       // Step 4: Create collector profile (always runs)
