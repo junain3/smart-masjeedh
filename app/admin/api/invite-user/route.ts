@@ -128,52 +128,65 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Store invitation in database with try/catch
-    try {
-      const { error: inviteError } = await supabaseAdmin
-        .from("invitations")
-        .insert({
-          masjid_id: masjidId,
-          email: email,
-          role: role,
-          token: invitationToken,
-          status: "pending",
-          created_by: authUser?.id,
-          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
-        });
+    // Delete any existing pending invitations for this email to avoid unique constraint violations
+    console.log("[Invite User] Checking for existing invitations for email:", email);
+    const { error: deleteError } = await supabaseAdmin
+      .from("invitations")
+      .delete()
+      .eq("email", email)
+      .eq("status", "pending");
 
-      if (inviteError) {
-        console.error("Invitation insert error:", inviteError);
-        console.error("Error details:", {
-          message: inviteError.message,
-          details: inviteError.details,
-          hint: inviteError.hint,
-          code: inviteError.code
-        });
-        return NextResponse.json(
-          { 
-            error: "Failed to create invitation",
-            details: inviteError.message,
-            code: inviteError.code
-          },
-          { status: 500 }
-        );
-      }
-    } catch (error: any) {
-      console.error("ERROR: Invitation insert failed with exception:", error);
+    if (deleteError) {
+      console.error("[Invite User] Warning: Failed to delete existing invitations:", deleteError);
+      // Don't fail the request if deletion fails, just log it
+    } else {
+      console.log("[Invite User] Existing pending invitations deleted successfully");
+    }
+
+    // Store invitation in database
+    const { error: inviteError } = await supabaseAdmin
+      .from("invitations")
+      .insert({
+        masjid_id: masjidId,
+        email: email,
+        role: role,
+        token: invitationToken,
+        status: "pending",
+        created_by: authUser?.id,
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
+      });
+
+    if (inviteError) {
+      console.error("[Invite User] Invitation insert error:", inviteError);
+      console.error("[Invite User] Error details:", {
+        message: inviteError.message,
+        details: inviteError.details,
+        hint: inviteError.hint,
+        code: inviteError.code
+      });
       return NextResponse.json(
-        { error: error.message },
+        { 
+          error: inviteError.message || "Failed to create invitation",
+          details: inviteError.details,
+          code: inviteError.code
+        },
         { status: 500 }
       );
     }
 
     // Send invitation email using Supabase Auth Admin API
-    let emailWarning = null;
     try {
-      console.log("[Invite User] Sending invitation email via Supabase Auth to:", email);
+      console.log('[Invite User] Sending invitation email via Supabase Auth to:', email);
+      console.log('[Invite User] SMTP Settings Check:', {
+        hasSmtpHost: !!process.env.SMTP_HOST,
+        hasSmtpPort: !!process.env.SMTP_PORT,
+        hasSmtpUser: !!process.env.SMTP_USER,
+        hasSmtpPassword: !!process.env.SMTP_PASSWORD,
+        hasSmtpFrom: !!process.env.SMTP_FROM
+      });
 
-      const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/invite-register?token=${invitationToken}`,
+      const { data: inviteData, error: emailError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?token=${invitationToken}&type=invite`,
         data: {
           role: role,
           masjid_id: masjidId,
@@ -181,42 +194,47 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      if (inviteError) {
-        console.error("[Invite User] Supabase invite error:", inviteError);
-        emailWarning = `Email sending failed: ${inviteError.message}. Invitation was created in database.`;
-      } else {
-        console.log("[Invite User] Invitation email sent successfully via Supabase:", inviteData);
+      if (emailError) {
+        console.error("[Invite User] Supabase invite error:", emailError);
+        return NextResponse.json({
+          success: false,
+          error: `Failed to send invitation email: ${emailError.message}. Please check your SMTP configuration.`,
+          details: emailError
+        }, { status: 500 });
       }
+
+      console.log("[Invite User] Invitation email sent successfully via Supabase:", inviteData);
 
     } catch (emailError: any) {
       console.error("[Invite User] Email sending exception:", emailError);
-      emailWarning = `Email sending failed: ${emailError.message}. Invitation was created in database.`;
+      return NextResponse.json({
+        success: false,
+        error: `Failed to send invitation email: ${emailError.message}. Please check your SMTP configuration.`,
+        details: emailError.message
+      }, { status: 500 });
     }
 
-    // Return success with invitation link (even if email failed)
+    // Return success
     return NextResponse.json({
       success: true,
-      message: emailWarning ? "Invitation created successfully (email warning)" : "Invitation sent successfully",
+      message: "Invitation sent successfully",
       invite_link: `/invite-register?token=${invitationToken}`,
-      invitationToken: invitationToken,
-      warning: emailWarning
+      invitationToken: invitationToken
     });
 
   } catch (error) {
-    console.error("Invite user error:", error);
-    console.error("Error stack:", error instanceof Error ? error.stack : 'No stack available');
-    console.error("Error type:", typeof error);
+    console.error("[Invite User] API Error:", error);
+    console.error("[Invite User] Error stack:", error instanceof Error ? error.stack : 'No stack available');
+    console.error("[Invite User] Error type:", typeof error);
     
     if (error instanceof Error) {
-      console.error("Error message:", error.message);
-      console.error("Error name:", error.name);
+      console.error("[Invite User] Error message:", error.message);
+      console.error("[Invite User] Error name:", error.name);
     }
     
     return NextResponse.json(
       { 
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : 'Unknown error',
-        type: typeof error
+        error: error instanceof Error ? error.message : "Internal server error"
       },
       { status: 500 }
     );

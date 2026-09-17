@@ -25,8 +25,9 @@ export async function GET(request: NextRequest) {
   const next = requestUrl.searchParams.get("next");
   const error = requestUrl.searchParams.get("error");
   const errorDescription = requestUrl.searchParams.get("error_description");
+  const invitationToken = requestUrl.searchParams.get("invitation_token");
 
-  console.log("[Auth Callback] Request received:", { code: !!code, token: !!token, type, next, error });
+  console.log("[Auth Callback] Request received:", { code: !!code, token: !!token, type, next, error, invitationToken });
 
   // Propagate auth errors immediately
   if (error) {
@@ -62,12 +63,14 @@ export async function GET(request: NextRequest) {
 
   try {
     let establishedSession = false;
+    let lastError: any = null;
 
     // MODE A: PKCE flow (code exchange) - magiclink signup/invitations etc.
     if (code) {
       const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
       if (exchangeErr) {
         console.error("Auth callback: exchangeCodeForSession failed:", exchangeErr);
+        lastError = exchangeErr;
       } else {
         establishedSession = true;
       }
@@ -90,6 +93,7 @@ export async function GET(request: NextRequest) {
       });
       if (verifyErr) {
         console.error("Auth callback: verifyOtp failed:", verifyErr);
+        lastError = verifyErr;
       } else {
         establishedSession = true;
       }
@@ -102,8 +106,15 @@ export async function GET(request: NextRequest) {
       } = await supabase.auth.getSession();
       if (!session) {
         const loginUrl = new URL("/login", request.url);
-        loginUrl.searchParams.set("error", "auth_failed");
-        if (!code && !token) loginUrl.searchParams.set("reason", "no_token_or_code");
+        
+        // Show specific error for invite failures
+        if (type === "invite") {
+          loginUrl.searchParams.set("error", "invite_failed");
+          loginUrl.searchParams.set("error_description", lastError?.message || "Invite verification failed. The invite link may be expired or invalid.");
+        } else {
+          loginUrl.searchParams.set("error", "auth_failed");
+          if (!code && !token) loginUrl.searchParams.set("reason", "no_token_or_code");
+        }
         return NextResponse.redirect(loginUrl);
       }
     }
@@ -115,7 +126,15 @@ export async function GET(request: NextRequest) {
     if (type === "email_change") {
       return buildRedirectResponse(request, next || "/settings/users", response);
     }
-    if (type === "signup" || type === "invite" || type === "email" || type === "magiclink") {
+    if (type === "invite") {
+      // Force invited users to set password before accessing dashboard
+      // Pass invitation token to update-password for registration completion
+      const updatePasswordUrl = invitationToken
+        ? `/update-password?token=${invitationToken}&type=invite`
+        : "/update-password";
+      return buildRedirectResponse(request, updatePasswordUrl, response);
+    }
+    if (type === "signup" || type === "email" || type === "magiclink") {
       const redirectPath = next || "/dashboard";
       return buildRedirectResponse(request, redirectPath, response);
     }

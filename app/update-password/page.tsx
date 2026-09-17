@@ -1,13 +1,16 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get('token');
+  const inviteType = searchParams.get('type');
 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -17,6 +20,7 @@ export default function UpdatePasswordPage() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"error" | "success" | "">("");
   const [hasSession, setHasSession] = useState(false);
+  const [invitation, setInvitation] = useState<any>(null);
 
   useEffect(() => {
     // Step 1: Client-side URL hash fragment session detection.
@@ -65,12 +69,26 @@ export default function UpdatePasswordPage() {
         setMessageType("error");
       } else {
         setHasSession(true);
+        
+        // If this is an invite flow, fetch invitation details
+        if (inviteToken && inviteType === 'invite') {
+          const { data: inviteData, error: inviteError } = await supabase
+            .from('invitations')
+            .select('*')
+            .eq('token', inviteToken)
+            .eq('status', 'pending')
+            .maybeSingle();
+          
+          if (!inviteError && inviteData) {
+            setInvitation(inviteData);
+          }
+        }
       }
     };
     checkSession();
 
     return () => { cancelled = true; };
-  }, []);
+  }, [inviteToken, inviteType]);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,14 +129,24 @@ export default function UpdatePasswordPage() {
         return;
       }
 
-      // Success - sign out and redirect to login
-      await supabase.auth.signOut();
-      setMessage("Password updated successfully");
-      setMessageType("success");
-      
-      setTimeout(() => {
-        router.push("/login?password_updated=true");
-      }, 1500);
+      // If this is an invite flow, redirect to complete registration
+      if (inviteToken && inviteType === 'invite' && invitation) {
+        setMessage("Password set successfully. Completing registration...");
+        setMessageType("success");
+        
+        setTimeout(() => {
+          router.push(`/invite-register?token=${inviteToken}`);
+        }, 1500);
+      } else {
+        // Regular password recovery flow - sign out and redirect to login
+        await supabase.auth.signOut();
+        setMessage("Password updated successfully");
+        setMessageType("success");
+        
+        setTimeout(() => {
+          router.push("/login?password_updated=true");
+        }, 1500);
+      }
     } catch (error) {
       console.error("Update password error:", error);
       setMessage("An error occurred while updating password");

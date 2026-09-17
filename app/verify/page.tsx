@@ -59,76 +59,63 @@ function VerifyPageContent() {
     setError("");
 
     try {
-      console.log("DEBUG: Verifying code for email:", email);
-      console.log("DEBUG: Code entered:", verificationCode);
+      console.log("[Verify] Verifying OTP for email:", email);
 
-      // Check if verification code exists and is valid
-      const { data: verificationData, error: verificationError } = await supabase
-        .from("email_verifications")
-        .select("*")
-        .eq("email", email)
-        .eq("code", verificationCode)
-        .eq("used", false)
-        .single();
-
-      console.log("DEBUG: Verification query:", { data: verificationData, error: verificationError });
-
-      if (verificationError || !verificationData) {
-        throw new Error("Invalid verification code");
-      }
-
-      // Check if code is expired (24 hours)
-      const createdAt = new Date(verificationData.created_at);
-      const now = new Date();
-      const hoursDiff = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
-      
-      if (hoursDiff > 24) {
-        throw new Error("Verification code has expired");
-      }
-
-      // Mark code as used
-      await supabase
-        .from("email_verifications")
-        .update({ used: true })
-        .eq("id", verificationData.id);
-
-      // Get user by email
-      const { data: userData, error: userError } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: verificationData.temp_password, // Use temp password for verification
+      // Use Supabase Auth verifyOtp
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token: verificationCode,
+        type: 'signup',
       });
 
-      if (userError) {
-        console.log("DEBUG: Auto-login failed, user needs to login manually");
-        setSuccess(true);
-        return;
+      if (error) {
+        console.error("[Verify] Supabase verifyOtp error:", error);
+        throw new Error(error.message);
       }
 
-      console.log("DEBUG: Verification successful, user logged in");
+      console.log("[Verify] OTP verification successful");
 
-      // Check if user account is deleted before redirecting
-      const { data: roleData, error: roleError } = await supabase
-        .from("user_roles")
-        .select("status, deleted_by, deleted_reason, deleted_at")
-        .eq("auth_user_id", userData.user.id)
-        .single();
+      // Create masjid and user_roles after successful verification
+      const masjidName = localStorage.getItem('signup_masjid_name');
+      const tagline = localStorage.getItem('signup_tagline');
 
-      if (!roleError && roleData && roleData.status === 'deleted') {
-        console.log("DEBUG: User account is deleted, signing out");
-        await supabase.auth.signOut();
-        const loginUrl = new URL('/login', window.location.origin);
-        loginUrl.searchParams.set('reason', 'deleted');
-        if (roleData.deleted_by) loginUrl.searchParams.set('deleted_by', roleData.deleted_by);
-        if (roleData.deleted_reason) loginUrl.searchParams.set('deleted_reason', roleData.deleted_reason);
-        if (roleData.deleted_at) loginUrl.searchParams.set('deleted_at', roleData.deleted_at);
-        router.push(loginUrl.toString());
-        return;
+      if (!masjidName) {
+        throw new Error("Masjid name not found. Please sign up again.");
       }
 
-      router.push("/");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("User not found after verification");
+      }
+
+      // Call API to create masjid and user_roles
+      const response = await fetch('/api/complete-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          email: user.email,
+          masjidName,
+          tagline,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to complete signup");
+      }
+
+      console.log("[Verify] Masjid and user_roles created successfully");
+
+      // Clear localStorage
+      localStorage.removeItem('signup_masjid_name');
+      localStorage.removeItem('signup_tagline');
+
+      setSuccess(true);
 
     } catch (err: any) {
-      console.error("DEBUG: Verification error:", err);
+      console.error("[Verify] Error:", err);
       setError(err.message || "Verification failed");
     } finally {
       setLoading(false);
@@ -140,32 +127,23 @@ function VerifyPageContent() {
     setError("");
 
     try {
-      console.log("DEBUG: Resending code to:", email);
+      console.log("[Verify] Resending OTP to:", email);
 
-      // Generate new 6-digit code
-      const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      // Store verification code
-      const { error: storeError } = await supabase
-        .from("email_verifications")
-        .insert({
-          email: email,
-          code: newCode,
-          temp_password: "verified", // Placeholder
-        });
+      // Use Supabase Auth resend
+      const { data, error } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+      });
 
-      if (storeError) {
-        throw new Error("Failed to generate verification code");
+      if (error) {
+        console.error("[Verify] Supabase resend error:", error);
+        throw new Error(error.message);
       }
 
-      // TODO: Send actual email
-      console.log("DEBUG: New verification code:", newCode);
-      console.log("DEBUG: Email would be sent to:", email);
-
-      alert(`New verification code: ${newCode} (In production, this would be emailed)`);
+      console.log("[Verify] OTP resent successfully");
 
     } catch (err: any) {
-      console.error("DEBUG: Resend error:", err);
+      console.error("[Verify] Resend error:", err);
       setError(err.message || "Failed to resend code");
     } finally {
       setResending(false);
@@ -180,9 +158,9 @@ function VerifyPageContent() {
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <span className="text-3xl">✅</span>
             </div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-4">Email Verified!</h2>
+            <h2 className="text-2xl font-bold text-slate-900 mb-4">Account Created!</h2>
             <p className="text-slate-600 mb-6">
-              Your email has been verified successfully. You can now sign in to access your dashboard.
+              Your account has been created successfully. You can now sign in to access your dashboard.
             </p>
             <button
               onClick={() => router.push("/login")}

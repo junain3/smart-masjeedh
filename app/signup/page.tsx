@@ -34,172 +34,37 @@ export default function SignupPage() {
         throw new Error("Password must be at least 6 characters");
       }
 
-      console.log("DEBUG: Starting signup process...");
+      console.log("[Signup] Calling Supabase Auth signUp for:", formData.email);
 
-      // Step 1: Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Call Supabase Auth signUp - this will send a real OTP email
+      const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        options: {
+          data: {
+            masjidName: formData.masjidName,
+            tagline: formData.tagline,
+          },
+        },
       });
 
-      if (authError) {
-        throw new Error(authError.message);
+      if (error) {
+        console.error("[Signup] Supabase signUp error:", error);
+        throw new Error(error.message);
       }
 
-      if (!authData.user) {
-        throw new Error("Failed to create user account");
-      }
+      console.log("[Signup] SignUp successful, OTP sent to email");
 
-      console.log("DEBUG: User created successfully:", authData.user.id);
+      // Store masjid data for after verification
+      localStorage.setItem('signup_masjid_name', formData.masjidName);
+      localStorage.setItem('signup_tagline', formData.tagline || '');
 
-      // Step 2: Check if there's an existing deleted user_roles entry for this user
-      const { data: existingRole, error: existingRoleError } = await supabase
-        .from("user_roles")
-        .select("*")
-        .or(`user_id.eq.${authData.user.id},auth_user_id.eq.${authData.user.id}`)
-        .maybeSingle();
-
-      console.log("DEBUG: Existing role check:", { existingRole, existingRoleError });
-
-      let masjidId: string;
-
-      if (existingRole && existingRole.status === 'deleted') {
-        // Restore the deleted entry
-        console.log("DEBUG: Found deleted role, restoring it");
-
-        // Restore the masjid if it was deleted
-        const { data: existingMasjid, error: masjidCheckError } = await supabase
-          .from("masjids")
-          .select("*")
-          .eq("id", existingRole.masjid_id)
-          .maybeSingle();
-
-        if (existingMasjid && existingMasjid.status === 'deleted') {
-          console.log("DEBUG: Restoring deleted masjid");
-          await supabase
-            .from("masjids")
-            .update({
-              status: 'active',
-              deleted_at: null,
-              deleted_by: null,
-              deleted_reason: null,
-              masjid_name: formData.masjidName,
-              tagline: formData.tagline,
-            })
-            .eq("id", existingRole.masjid_id);
-        }
-
-        // Restore the user_roles entry
-        const { error: restoreError } = await supabase
-          .from("user_roles")
-          .update({
-            status: 'active',
-            deleted_at: null,
-            deleted_by: null,
-            deleted_reason: null,
-            role: "super_admin",
-            permissions: {
-              accounts: true,
-              events: true,
-              members: true,
-              subscriptions_collect: true,
-              subscriptions_approve: true,
-              staff_management: true,
-              reports: true,
-              settings: true,
-            },
-            verified: true,
-          })
-          .eq("id", existingRole.id);
-
-        if (restoreError) {
-          throw new Error(`Role restoration failed: ${restoreError.message}`);
-        }
-
-        masjidId = existingRole.masjid_id;
-        console.log("DEBUG: Role restored successfully");
-      } else {
-        // Step 2: Create masjid record
-        const { data: masjidData, error: masjidError } = await supabase
-          .from("masjids")
-          .insert({
-            masjid_name: formData.masjidName,
-            tagline: formData.tagline,
-            created_by: authData.user.id,
-          })
-          .select("id")
-          .single();
-
-        if (masjidError) {
-          throw new Error(`Masjid creation failed: ${masjidError.message}`);
-        }
-
-        if (!masjidData?.id) {
-          throw new Error("Failed to create masjid");
-        }
-
-        console.log("DEBUG: Masjid created successfully:", masjidData.id);
-        masjidId = masjidData.id;
-
-        // Step 3: Create user_roles record
-        const { error: roleError } = await supabase
-          .from("user_roles")
-          .insert({
-            masjid_id: masjidId,
-            user_id: authData.user.id,
-            auth_user_id: authData.user.id,
-            email: formData.email,
-            role: "super_admin",
-            permissions: {
-              accounts: true,
-              events: true,
-              members: true,
-              subscriptions_collect: true,
-              subscriptions_approve: true,
-              staff_management: true,
-              reports: true,
-              settings: true,
-            },
-            verified: true,
-          });
-
-        if (roleError) {
-          throw new Error(`Role creation failed: ${roleError.message}`);
-        }
-      }
-
-      console.log("DEBUG: User role created successfully");
-
-      // Step 4: Generate and send verification code
-      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      // Store verification code
-      const { error: verificationError } = await supabase
-        .from("email_verifications")
-        .insert({
-          email: formData.email,
-          code: verificationCode,
-          temp_password: "verified",
-        });
-
-      if (verificationError) {
-        console.log("DEBUG: Verification code storage failed, but signup succeeded");
-        // Don't throw error, continue with flow
-      } else {
-        console.log("DEBUG: Verification code stored:", verificationCode);
-        console.log("DEBUG: Email would be sent to:", formData.email);
-        
-        // TODO: Send actual email
-        // For now, show code to user
-        alert(`Your verification code is: ${verificationCode}`);
-      }
-
-      // Step 5: Redirect to verification page
+      // Redirect to verification page
       router.push(`/verify?email=${encodeURIComponent(formData.email)}`);
 
     } catch (err: any) {
-      console.error("DEBUG: Signup error:", err);
-      setError(err.message || "Signup failed");
+      console.error("[Signup] Error:", err);
+      setError(err.message || "Failed to create account");
     } finally {
       setLoading(false);
     }

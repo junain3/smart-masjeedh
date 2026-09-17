@@ -14,6 +14,7 @@ function InviteRegisterContent() {
   const [step, setStep] = useState<'verify' | 'register'>('register');
   const [loading, setLoading] = useState(false);
   const [invitation, setInvitation] = useState<any>(null);
+  const [hasSession, setHasSession] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -26,10 +27,20 @@ function InviteRegisterContent() {
   const hasFetchedInvitation = useRef(false);
 
   useEffect(() => {
-    if (token && !hasFetchedInvitation.current) {
-      hasFetchedInvitation.current = true;
-      verifyInvitation();
-    }
+    const initialize = async () => {
+      // Check if user already has a session (came from /update-password)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setHasSession(true);
+        setEmail(session.user.email || '');
+      }
+
+      if (token && !hasFetchedInvitation.current) {
+        hasFetchedInvitation.current = true;
+        verifyInvitation();
+      }
+    };
+    initialize();
   }, [token]);
 
   const verifyInvitation = async () => {
@@ -78,40 +89,58 @@ function InviteRegisterContent() {
     setError('');
     setSuccess('');
 
-    if (password !== confirmPassword) {
-      setError('கடவுச்சொற்கள் பொருந்தவில்லை');
-      setLoading(false);
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('கடவுச்சொல் குறைந்தது 6 எழுத்துகளாக இருக்க வேண்டும்');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      console.log('DEBUG: Creating user for email:', email);
-
-      // Step 1: Create auth user
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: email,
-        password: password,
-      });
-
-      console.log('DEBUG: Sign up result:', { data, error: signUpError?.message });
-
-      if (signUpError) {
-        setError('பதிவு தோல்வி: ' + signUpError.message);
+    // If user already has session (came from /update-password), skip password validation
+    if (!hasSession) {
+      if (password !== confirmPassword) {
+        setError('கடவுச்சொற்கள் பொருந்தவில்லை');
         setLoading(false);
         return;
       }
 
-      // Strict check: Ensure auth user was created
-      if (!data.user) {
-        setError('பயனர் உருவாக்கம் தோல்வி: ஆதாரப்பூர்வமான பயனர் உருவாக்கப்படவில்லை');
+      if (password.length < 6) {
+        setError('கடவுச்சொல் குறைந்தது 6 எழுத்துகளாக இருக்க வேண்டும்');
         setLoading(false);
         return;
+      }
+    }
+
+    try {
+      let userData;
+      
+      // Step 1: Create auth user (only if no session)
+      if (!hasSession) {
+        console.log('DEBUG: Creating user for email:', email);
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: email,
+          password: password,
+        });
+
+        console.log('DEBUG: Sign up result:', { data, error: signUpError?.message });
+
+        if (signUpError) {
+          setError('பதிவு தோல்வி: ' + signUpError.message);
+          setLoading(false);
+          return;
+        }
+
+        // Strict check: Ensure auth user was created
+        if (!data.user) {
+          setError('பயனர் உருவாக்கம் தோல்வி: ஆதாரப்பூர்வமான பயனர் உருவாக்கப்படவில்லை');
+          setLoading(false);
+          return;
+        }
+        
+        userData = data;
+      } else {
+        // User already has session from /update-password
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setError('செஷன் கிடைக்கவில்லை');
+          setLoading(false);
+          return;
+        }
+        userData = { user };
+        console.log('DEBUG: Using existing session for user:', user.id);
       }
 
       if (!invitation) {
@@ -127,7 +156,7 @@ function InviteRegisterContent() {
         .from('user_profiles')
         .insert([
           {
-            id: data.user.id,
+            id: userData.user.id,
             masjid_id: invitation.masjid_id,
             full_name: fullName,
             phone: phone || null,
@@ -145,7 +174,7 @@ function InviteRegisterContent() {
       const { data: existingRole, error: existingRoleError } = await supabase
         .from('user_roles')
         .select('*')
-        .or(`user_id.eq.${data.user.id},auth_user_id.eq.${data.user.id}`)
+        .or(`user_id.eq.${userData.user.id},auth_user_id.eq.${userData.user.id}`)
         .maybeSingle();
 
       console.log('DEBUG: Existing role check:', { existingRole, existingRoleError });
@@ -194,8 +223,8 @@ function InviteRegisterContent() {
           .insert([
             {
               masjid_id: invitation.masjid_id,
-              user_id: data.user.id,
-              auth_user_id: data.user.id,
+              user_id: userData.user.id,
+              auth_user_id: userData.user.id,
               email: email,
               role: normalizedRole,
               permissions: invitation.permissions || {},
@@ -219,7 +248,7 @@ function InviteRegisterContent() {
         .from('subscription_collector_profiles')
         .upsert({
           masjid_id: invitation.masjid_id,
-          user_id: data.user.id,
+          user_id: userData.user.id,
           default_commission_percent: invitation.commission_percent || 10
         }, {
           onConflict: 'masjid_id,user_id'
@@ -247,7 +276,13 @@ function InviteRegisterContent() {
       setSuccess('பதிவு வெற்றி! இப்போது உள்நுழையலாம்.');
       
       setTimeout(() => {
-        router.push('/login');
+        if (hasSession) {
+          // User already has session, redirect to dashboard
+          router.push('/');
+        } else {
+          // User needs to login
+          router.push('/login');
+        }
       }, 2000);
       
     } catch (error: any) {
@@ -338,47 +373,59 @@ function InviteRegisterContent() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                கடவுச்சொல்
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  placeholder="கடவுச்சொல் உள்ளிடுவும்"
-                  required
-                  minLength={6}
-                />
-              </div>
-            </div>
+            {!hasSession && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    கடவுச்சொல்
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      placeholder="கடவுச்சொல் உள்ளிடுவும்"
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                கடவுச்சொல் உறுதிப்படுத்தல்
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  placeholder="கடவுச்சொல் மீண்டும் உள்ளிடுவும்"
-                  required
-                  minLength={6}
-                />
-              </div>
-            </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    கடவுச்சொல் உறுதிப்படுத்தல்
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      placeholder="கடவுச்சொல் மீண்டும் உள்ளிடுவும்"
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                </div>
 
-            <div className="bg-blue-50 p-3 rounded-lg">
-              <p className="text-sm text-blue-800">
-                கடவுச்சொல் குறைந்தது 6 எழுத்துகளாக இருக்க வேண்டும்.
-              </p>
-            </div>
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    கடவுச்சொல் குறைந்தது 6 எழுத்துகளாக இருக்க வேண்டும்.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {hasSession && (
+              <div className="bg-emerald-50 p-3 rounded-lg">
+                <p className="text-sm text-emerald-800">
+                  உங்கள் கடவுச்சொல் ஏற்கனவே அமைக்கப்பட்டது. தயவு செய்து உங்கள் விவரங்களை முடிக்கவும்.
+                </p>
+              </div>
+            )}
 
             {success && (
               <div className="bg-green-50 p-3 rounded-lg">
