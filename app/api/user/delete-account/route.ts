@@ -112,9 +112,9 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      console.log("[Delete Account] Masjid Creator Deletion - Starting archive and hard delete for masjid:", userRole.masjid_id);
+      console.log("[Delete Account] Super Admin Deletion - Starting soft-delete with 90-day archive for masjid:", userRole.masjid_id);
 
-      // Step 1: Fetch and archive all masjeedh data for developer reference
+      // Step 1: Fetch and archive all masjeedh data
       console.log("[Delete Account] Step 1: Fetching and archiving masjeedh data");
       
       const backupData: any = {
@@ -171,7 +171,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Save snapshot to deleted_masjeedhs_archive for developer reference
+      // Save snapshot to deleted_masjeedhs_archive with 90-day grace period
+      const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
       const { error: archiveError } = await supabaseAdmin
         .from("deleted_masjeedhs_archive")
         .insert({
@@ -180,101 +181,118 @@ export async function POST(req: NextRequest) {
           owner_email: user.email,
           owner_user_id: user.id,
           backup_data: backupData,
-          status: 'archived',
-          expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+          status: 'pending_deletion',
+          deleted_at: new Date().toISOString(),
+          expires_at: expiresAt.toISOString(),
         });
 
       if (archiveError) {
         console.error("[Delete Account] Archive error:", archiveError);
-        // Don't fail deletion if archive fails, but log it
-      } else {
-        console.log("[Delete Account] Data archived successfully");
-      }
-
-      // Step 2: Hard delete all user_roles for this masjid
-      console.log("[Delete Account] Step 2: Deleting all user_roles for masjid:", userRole.masjid_id);
-      const { error: rolesDeleteError } = await supabaseAdmin
-        .from("user_roles")
-        .delete()
-        .eq("masjid_id", userRole.masjid_id);
-
-      if (rolesDeleteError) {
-        console.error("[Delete Account] User roles delete error:", rolesDeleteError);
         return NextResponse.json(
-          { error: `Failed to delete user roles: ${rolesDeleteError.message}` },
+          { error: `Failed to archive masjeedh data: ${archiveError.message}` },
           { status: 500 }
         );
       }
 
-      console.log("[Delete Account] User roles deleted successfully");
+      console.log("[Delete Account] Data archived successfully with 90-day grace period");
 
-      // Step 3: Hard delete all related records
-      console.log("[Delete Account] Step 3: Deleting all related records for masjid:", userRole.masjid_id);
-      
-      const tablesToDelete = [
-        'members',
-        'staff',
-        'events',
-        'subscriptions',
-        'families',
-        'service_distributions',
-        'salary_advances',
-        'staff_ledger',
-        'message_logs',
-        'whatsapp_configs',
-      ];
-
-      for (const tableName of tablesToDelete) {
-        try {
-          const { error: tableDeleteError } = await supabaseAdmin
-            .from(tableName)
-            .delete()
-            .eq("masjid_id", userRole.masjid_id);
-          
-          if (tableDeleteError) {
-            console.log(`[Delete Account] Warning: Failed to delete from ${tableName}:`, tableDeleteError.message);
-          }
-        } catch (err: any) {
-          console.log(`[Delete Account] Warning: Error deleting from ${tableName}:`, err.message);
-        }
-      }
-
-      console.log("[Delete Account] Related records deleted successfully");
-
-      // Step 4: Hard delete masjid record
-      console.log("[Delete Account] Step 4: Deleting masjid record:", userRole.masjid_id);
+      // Step 2: Soft-delete masjid record (set status = 'deleted')
+      console.log("[Delete Account] Step 2: Soft-deleting masjid record:", userRole.masjid_id);
       const { error: masjidDeleteError } = await supabaseAdmin
         .from("masjids")
-        .delete()
+        .update({
+          status: 'deleted',
+          deleted_at: new Date().toISOString(),
+          deleted_by: user.id,
+          deleted_reason: 'Super Admin initiated account deletion',
+        })
         .eq("id", userRole.masjid_id);
 
       if (masjidDeleteError) {
-        console.error("[Delete Account] Masjid delete error:", masjidDeleteError);
+        console.error("[Delete Account] Masjid soft-delete error:", masjidDeleteError);
         return NextResponse.json(
-          { error: `Failed to delete masjid: ${masjidDeleteError.message}` },
+          { error: `Failed to soft-delete masjid: ${masjidDeleteError.message}` },
           { status: 500 }
         );
       }
 
-      console.log("[Delete Account] Masjid deleted successfully");
+      console.log("[Delete Account] Masjid soft-deleted successfully");
 
-      // Step 5: Delete auth user from Supabase Auth
+      // Step 3: Soft-delete all user_roles for this masjid
+      console.log("[Delete Account] Step 3: Soft-deleting all user_roles for masjid:", userRole.masjid_id);
+      const { error: rolesDeleteError } = await supabaseAdmin
+        .from("user_roles")
+        .update({
+          status: 'deleted',
+          deleted_at: new Date().toISOString(),
+          deleted_by: user.id,
+          deleted_reason: 'Super Admin initiated account deletion',
+        })
+        .eq("masjid_id", userRole.masjid_id);
+
+      if (rolesDeleteError) {
+        console.error("[Delete Account] User roles soft-delete error:", rolesDeleteError);
+        return NextResponse.json(
+          { error: `Failed to soft-delete user roles: ${rolesDeleteError.message}` },
+          { status: 500 }
+        );
+      }
+
+      console.log("[Delete Account] User roles soft-deleted successfully");
+
+      // Step 4: Soft-delete related records (set status = 'deleted' if table has status column)
+      console.log("[Delete Account] Step 4: Soft-deleting related records for masjid:", userRole.masjid_id);
+      
+      const tablesToSoftDelete = [
+        { table: 'members', hasStatus: true },
+        { table: 'staff', hasStatus: true },
+        { table: 'events', hasStatus: true },
+        { table: 'subscriptions', hasStatus: true },
+        { table: 'families', hasStatus: true },
+      ];
+
+      for (const { table, hasStatus } of tablesToSoftDelete) {
+        try {
+          if (hasStatus) {
+            const { error: tableDeleteError } = await supabaseAdmin
+              .from(table)
+              .update({
+                status: 'deleted',
+                deleted_at: new Date().toISOString(),
+              })
+              .eq("masjid_id", userRole.masjid_id);
+            
+            if (tableDeleteError) {
+              console.log(`[Delete Account] Warning: Failed to soft-delete ${table}:`, tableDeleteError.message);
+            } else {
+              console.log(`[Delete Account] Successfully soft-deleted from ${table}`);
+            }
+          }
+        } catch (err: any) {
+          console.log(`[Delete Account] Warning: Error soft-deleting from ${table}:`, err.message);
+        }
+      }
+
+      console.log("[Delete Account] Related records soft-deleted successfully");
+
+      // Step 5: Delete auth user from Supabase Auth (this blocks login)
       console.log("[Delete Account] Step 5: Deleting auth user from Supabase Auth:", user.id);
       const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
 
       if (authDeleteError) {
         console.error("[Delete Account] Auth user delete error:", authDeleteError);
-        return NextResponse.json(
-          { error: `Failed to delete auth user: ${authDeleteError.message}` },
-          { status: 500 }
-        );
+        // Don't fail the request if auth deletion fails - data is already soft-deleted
+        console.log("[Delete Account] Warning: Auth user deletion failed, but soft-delete completed");
+      } else {
+        console.log("[Delete Account] Auth user deleted successfully");
       }
 
-      console.log("[Delete Account] Masjid Creator Deletion - All steps completed successfully");
+      console.log("[Delete Account] Super Admin Soft-Delete - All steps completed successfully");
 
       return NextResponse.json({
         success: true,
-        message: "Your masjeedh and all associated data have been permanently deleted.",
+        message: "Your masjeedh has been deactivated. Your data is preserved for 90 days. Contact support if you wish to reactivate.",
+        grace_period_ends: expiresAt.toISOString(),
       });
 
     } else {

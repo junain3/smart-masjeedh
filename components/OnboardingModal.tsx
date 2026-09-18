@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, User, Loader2 } from "lucide-react";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useAppToast } from "@/components/ToastProvider";
+import { supabase } from "@/lib/supabase";
 
 interface OnboardingModalProps {
   isOpen: boolean;
@@ -12,10 +13,26 @@ interface OnboardingModalProps {
 }
 
 export function OnboardingModal({ isOpen, onClose, onComplete }: OnboardingModalProps) {
-  const { user, tenantContext } = useSupabaseAuth();
+  const { user, tenantContext, refreshTenantContext } = useSupabaseAuth();
   const { toast } = useAppToast();
   const [fullName, setFullName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Check if onboarding was already dismissed or completed
+  const isDismissed = typeof window !== 'undefined' && localStorage.getItem(`onboarding_completed_${user?.id}`);
+
+  // Don't show modal if already dismissed
+  if (!isOpen || isDismissed) {
+    return null;
+  }
+
+  const handleClose = () => {
+    // Save to localStorage to prevent showing modal again when user dismisses
+    if (typeof window !== 'undefined' && user?.id) {
+      localStorage.setItem(`onboarding_completed_${user.id}`, 'true');
+    }
+    onClose();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,11 +58,18 @@ export function OnboardingModal({ isOpen, onClose, onComplete }: OnboardingModal
     setIsSubmitting(true);
 
     try {
+      // Get the session token directly from Supabase
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        throw new Error("No active session found. Please log in again.");
+      }
+
       const response = await fetch("/admin/api/update-profile", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${tenantContext?.accessToken || ""}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           userId: user.id,
@@ -65,6 +89,14 @@ export function OnboardingModal({ isOpen, onClose, onComplete }: OnboardingModal
         title: "Welcome!",
         message: "Your profile has been set up successfully",
       });
+
+      // Save to localStorage to prevent showing modal again
+      if (typeof window !== 'undefined' && user?.id) {
+        localStorage.setItem(`onboarding_completed_${user.id}`, 'true');
+      }
+
+      // Refresh tenant context to reflect full_name across the app
+      await refreshTenantContext();
 
       onComplete();
       onClose();
@@ -95,7 +127,7 @@ export function OnboardingModal({ isOpen, onClose, onComplete }: OnboardingModal
               <h2 className="text-xl font-bold">Welcome to Smart Masjid</h2>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="text-white/80 hover:text-white transition-colors"
               disabled={isSubmitting}
             >

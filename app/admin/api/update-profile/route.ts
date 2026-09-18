@@ -63,8 +63,11 @@ export const POST = async (request: NextRequest) => {
     if (full_name !== undefined) {
       updateData.full_name = full_name;
     }
-    if (onboarding_completed !== undefined) {
-      updateData.onboarding_completed = onboarding_completed;
+    
+    // Only include onboarding_completed if it's being set to true
+    // This handles cases where the column might not exist in older schemas
+    if (onboarding_completed === true) {
+      updateData.onboarding_completed = true;
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -74,7 +77,7 @@ export const POST = async (request: NextRequest) => {
       );
     }
 
-    // First, check if the user record exists
+    // First, check if the user record exists and get masjid_id
     console.log("[update-profile] Checking if user record exists for userId:", userId);
     const { data: existingRecord, error: checkError } = await supabaseAdmin
       .from("user_roles")
@@ -94,17 +97,20 @@ export const POST = async (request: NextRequest) => {
       console.log("[update-profile] Found existing record:", existingRecord);
     }
 
-    // Update user_roles table
+    // Update user_roles table matching both user_id and masjid_id
+    const userMasjidId = existingRecord.masjid_id;
     console.log("[update-profile] Attempting to update user_roles with:", {
       userId,
+      masjidId: userMasjidId,
       updateData,
-      query: `auth_user_id.eq.${userId},user_id.eq.${userId}`
+      query: `auth_user_id.eq.${userId},user_id.eq.${userId},masjid_id.eq.${userMasjidId}`
     });
 
     const { data: updatedProfile, error: updateError } = await supabaseAdmin
       .from("user_roles")
       .update(updateData)
       .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
+      .eq("masjid_id", userMasjidId)
       .select()
       .single();
 

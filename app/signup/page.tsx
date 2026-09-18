@@ -34,30 +34,27 @@ export default function SignupPage() {
         throw new Error("Password must be at least 6 characters");
       }
 
-      console.log("[Signup] Calling Supabase Auth signUp for:", formData.email);
+      console.log("[Signup] Sending OTP for:", formData.email);
 
-      // Call Supabase Auth signUp - this will send a real OTP email
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            masjidName: formData.masjidName,
-            tagline: formData.tagline,
-          },
-        },
+      // Call custom send-otp endpoint
+      const response = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email }),
       });
 
-      if (error) {
-        console.error("[Signup] Supabase signUp error:", error);
-        throw new Error(error.message);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send verification code");
       }
 
-      console.log("[Signup] SignUp successful, OTP sent to email");
+      console.log("[Signup] OTP sent successfully");
 
-      // Store masjid data for after verification
+      // Store masjid data and password for after verification
       localStorage.setItem('signup_masjid_name', formData.masjidName);
       localStorage.setItem('signup_tagline', formData.tagline || '');
+      localStorage.setItem('signup_password', formData.password);
 
       // Redirect to verification page
       router.push(`/verify?email=${encodeURIComponent(formData.email)}`);

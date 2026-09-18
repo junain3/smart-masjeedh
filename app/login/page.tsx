@@ -47,11 +47,11 @@ export default function LoginPage() {
   setLoading(true);
 
   try {
-    console.log("LOGIN STEP 1: submit started");
+    console.log("[Login] Step 1: Attempting sign in");
 
     await signIn(email, password);
 
-    console.log("LOGIN STEP 2: signIn finished");
+    console.log("[Login] Step 2: Sign in successful, checking account status");
 
     // Check if user account is deleted before redirecting
     const { data: { user } } = await supabase.auth.getUser();
@@ -65,7 +65,7 @@ export default function LoginPage() {
       console.log("[Login] User role check:", { userId: user.id, roleData, roleError });
 
       if (!roleError && roleData && roleData.status === 'deleted') {
-        console.log("DEBUG: User account is deleted, signing out");
+        console.log("[Login] User account is deleted, signing out");
         await supabase.auth.signOut();
         const loginUrl = new URL('/login', window.location.origin);
         loginUrl.searchParams.set('reason', 'deleted');
@@ -78,12 +78,32 @@ export default function LoginPage() {
     }
 
     const next = new URLSearchParams(window.location.search).get("next");
-    console.log("LOGIN STEP 3: redirecting to", next || "/");
+    console.log("[Login] Step 3: Redirecting to", next || "/");
 
     router.replace(next || "/");
   } catch (error: any) {
-    console.error("LOGIN STEP ERROR:", error);
-    setMessage("Invalid email or password");
+    console.error("[Login] Error:", error);
+    
+    // Check if email exists via server-side API
+    try {
+      const checkResponse = await fetch('/api/auth/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+
+      const checkData = await checkResponse.json();
+
+      if (checkResponse.ok && !checkData.exists) {
+        setMessage("This email is not registered. No account found for this email address.");
+      } else {
+        setMessage("Invalid password. Please try again.");
+      }
+    } catch (checkError) {
+      console.error("[Login] Email check failed:", checkError);
+      setMessage("Invalid email or password");
+    }
+    
     setMessageType("error");
     setLoading(false);
   }

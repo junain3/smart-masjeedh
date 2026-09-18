@@ -15,7 +15,7 @@ import { escapePdfHtml, getPdfMasjidName } from "@/lib/pdf-utils";
 import SearchResultsPrintView from "@/components/SearchResultsPrintView";
 import { getPrintEngine, getPrintButtonLabel, type PrintReportType } from "@/lib/print-engine";
 import { sortFamiliesByCode } from "@/lib/collection-utils";
-import { generateNextFamilyCode } from "@/lib/family-code-utils";
+import { generateNextFamilyCode, parseFamilyCode } from "@/lib/family-code-utils";
 import {
   ACTIVE_RECORD_STATUS,
   ACTIVE_RECORD_STATUS_FILTER,
@@ -174,6 +174,10 @@ export default function FamiliesPage() {
   const [familyDeleteReason, setFamilyDeleteReason] = useState("");
   const [familyDeleteConfirmText, setFamilyDeleteConfirmText] = useState("");
   const [isFamilyDeleteSubmitting, setIsFamilyDeleteSubmitting] = useState(false);
+
+  // Family code format locking state
+  const [lockedFormat, setLockedFormat] = useState<{ prefix: string; padding: number } | null>(null);
+  const [isFormatLocked, setIsFormatLocked] = useState(false);
 
   // Previous Families management state
   const [softDeletedFamilies, setSoftDeletedFamilies] = useState<Family[]>([]);
@@ -428,6 +432,7 @@ export default function FamiliesPage() {
   // Fetch maximum family code from database for accurate ID generation
   // Strictly filters by current masjid_id (tenant) for multi-tenant isolation
   // Fetches ALL family codes for this masjid, parses numeric parts, finds TRUE mathematical max
+  // Also determines the locked format if families exist
   async function fetchMaxFamilyCode() {
     if (!supabase || !tenantContext?.masjidId) return null;
     const currentMasjidId = tenantContext.masjidId;
@@ -439,12 +444,30 @@ export default function FamiliesPage() {
         .eq("masjid_id", currentMasjidId);
 
       if (error) throw error;
-      if (!data || data.length === 0) return null;
+      if (!data || data.length === 0) {
+        // No families exist yet - format is not locked
+        setIsFormatLocked(false);
+        setLockedFormat(null);
+        return null;
+      }
 
       let maxNumber = 0;
       let bestPrefix = "M";
       let bestPadLength = 2;
       let maxRawCode: string | null = null;
+
+      // Determine the format from the first family to lock it
+      const firstCode = data[0]?.family_code;
+      if (firstCode) {
+        const firstMatch = firstCode.match(/^([^\d]*)(\d+)$/);
+        if (firstMatch) {
+          const lockedPrefix = firstMatch[1];
+          const lockedPadding = firstMatch[2].length;
+          setLockedFormat({ prefix: lockedPrefix, padding: lockedPadding });
+          setIsFormatLocked(true);
+          console.log("[Family Code] Format locked to:", { prefix: lockedPrefix, padding: lockedPadding });
+        }
+      }
 
       for (const row of data) {
         // Double-check tenant isolation in JS as a safety net (defense in depth)
@@ -489,17 +512,25 @@ export default function FamiliesPage() {
     if (isOpen && isLive && !editingFamily) {
       // Fetch the actual maximum family code from database
       fetchMaxFamilyCode().then((maxCode) => {
-        // Use the new utility function to generate the next code
-        // This supports various formats: M01, FM001, TH001, LMS01, etc.
-        // Defaults to "M01" if no previous code exists
-        const nextCode = generateNextFamilyCode(maxCode);
-        setFamilyCode(nextCode);
+        // If format is locked, generate next code using locked format
+        if (isFormatLocked && lockedFormat) {
+          const maxNumber = maxCode ? parseInt(maxCode.replace(lockedFormat.prefix, ''), 10) : 0;
+          const nextNumber = maxNumber + 1;
+          const nextCode = `${lockedFormat.prefix}${nextNumber.toString().padStart(lockedFormat.padding, '0')}`;
+          setFamilyCode(nextCode);
+        } else {
+          // Use the new utility function to generate the next code
+          // This supports various formats: M01, FM001, TH001, LMS01, etc.
+          // Defaults to "M01" if no previous code exists
+          const nextCode = generateNextFamilyCode(maxCode);
+          setFamilyCode(nextCode);
+        }
       });
     } else if (isOpen && !isLive) {
       // Default to M01 for demo mode
       setFamilyCode("M01");
     }
-  }, [isOpen, isLive]);
+  }, [isOpen, isLive, isFormatLocked, lockedFormat]);
 
   async function fetchFamilies(silent: boolean = false) {
     if (fetchLockRef.current) {
@@ -667,6 +698,18 @@ export default function FamiliesPage() {
         return;
       }
 
+      // Validate family code format if locked
+      if (isFormatLocked && lockedFormat && !editingFamily) {
+        const parsed = parseFamilyCode(familyCode);
+        if (parsed.isValid) {
+          if (parsed.prefix !== lockedFormat.prefix || parsed.padding !== lockedFormat.padding) {
+            setErrorMessage(`Family code must follow the format: ${lockedFormat.prefix} with ${lockedFormat.padding} digit padding (e.g., ${lockedFormat.prefix}${'1'.padStart(lockedFormat.padding, '0')})`);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
       // Check for family duplicates
       if (!confirmedNoFamilyDuplicate && !editingFamily) {
         const duplicateCheck = checkForFamilyDuplicates();
@@ -819,37 +862,81 @@ export default function FamiliesPage() {
             // Don't fail the whole thing if member creation fails
           }
         } else {
-          // Normal mode: use RPC function for automatic family_code generation
-          const { data, error } = await supabase.rpc('insert_family_with_auto_code', {
-            p_masjid_id: tenantContext.masjidId,
-            p_head_name: headName,
-            p_address: address,
-            p_phone: phone,
-            p_subscription_amount: parseFloat(subscriptionAmount) || 0,
-            p_opening_balance: parseFloat(openingBalance) || 0,
-            p_is_widow_head: isWidowHead,
-            p_house_type: houseType || null,
-            p_has_toilet: hasToilet,
-            p_special_needs_details: specialNeedsDetails || null,
-            p_foreign_members_details: foreignMembersDetails || null,
-            p_health_details: healthDetails || null,
-            p_has_car: hasCar,
-            p_has_three_wheeler: hasThreeWheeler,
-            p_has_van: hasVan,
-            p_has_lorry: hasLorry,
-            p_has_tractor: hasTractor,
-            p_extra_notes: extraNotes || null,
-            p_user_id: authUserId
-          }).select();
+          // Normal mode: use user's manual input for family_code
+          const finalFamilyCode = familyCode.trim();
 
-          if (error) throw error;
+          // Check if code already exists
+          const { data: existingFamily, error: checkError } = await supabase
+            .from("families")
+            .select("id")
+            .eq("masjid_id", tenantContext.masjidId)
+            .eq("family_code", finalFamilyCode)
+            .maybeSingle();
 
-          if (!data || data.length === 0) {
+          if (checkError) throw checkError;
+
+          if (existingFamily) {
+            throw new Error("This family code already exists. Please use a different code.");
+          }
+
+          // Insert family with user's manual code
+          const { data: insertData, error: insertError } = await supabase
+            .from("families")
+            .insert([{
+              family_code: finalFamilyCode,
+              head_name: headName,
+              address,
+              phone,
+              subscription_amount: parseFloat(subscriptionAmount) || 0,
+              opening_balance: parseFloat(openingBalance) || 0,
+              is_widow_head: isWidowHead,
+              house_type: houseType || null,
+              has_toilet: hasToilet,
+              special_needs_details: specialNeedsDetails || null,
+              foreign_members_details: foreignMembersDetails || null,
+              health_details: healthDetails || null,
+              has_car: hasCar,
+              has_three_wheeler: hasThreeWheeler,
+              has_van: hasVan,
+              has_lorry: hasLorry,
+              has_tractor: hasTractor,
+              extra_notes: extraNotes || null,
+              user_id: authUserId,
+              masjid_id: tenantContext.masjidId
+            }])
+            .select();
+
+          if (insertError) throw insertError;
+
+          if (!insertData || insertData.length === 0) {
             throw new Error("Failed to create family.");
           }
-          
-          newFamilyId = data[0].id;
-          assignedCode = data[0].family_code;
+
+          newFamilyId = insertData[0].id;
+          assignedCode = finalFamilyCode;
+
+          // Lock the format immediately after first family creation
+          const parsed = parseFamilyCode(assignedCode);
+          if (parsed.isValid) {
+            setLockedFormat({ prefix: parsed.prefix, padding: parsed.padding });
+            setIsFormatLocked(true);
+            console.log("[Family Code] Format locked on first save:", { prefix: parsed.prefix, padding: parsed.padding });
+          }
+
+          // Create family head member
+          const { error: memberInsertError } = await supabase.from("members").insert([{
+            family_id: newFamilyId,
+            name: headName,
+            full_name: headName,
+            relationship: "Family Head",
+            civil_status: "",
+            user_id: authUserId,
+            masjid_id: tenantContext.masjidId
+          }]);
+
+          if (memberInsertError) {
+            // Don't fail the whole thing if member creation fails
+          }
         }
 
         setSuccessMessage(`குடும்பம் வெற்றிகரமாகச் சேமிக்கப்பட்டது. குறியீடு: ${assignedCode}`);
@@ -2614,53 +2701,63 @@ export default function FamiliesPage() {
                   </div>
                 )}
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.phone}</label>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(event) => {
-                        setPhone(event.target.value);
-                        setStep1Errors(prev => ({ ...prev, phone: undefined }));
-                      }}
-                      onBlur={(event) => {
-                        setPhone(formatPhone(event.target.value));
-                      }}
-                      className={`w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold ${step1Errors.phone ? 'border-2 border-red-500' : ''}`}
-                      placeholder="Phone Number"
-                      required
-                    />
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.phone}</label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => {
+                      setPhone(event.target.value);
+                      setStep1Errors(prev => ({ ...prev, phone: undefined }));
+                    }}
+                    onBlur={(event) => {
+                      setPhone(formatPhone(event.target.value));
+                    }}
+                    className={`w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold ${step1Errors.phone ? 'border-2 border-red-500' : ''}`}
+                    placeholder="Phone Number"
+                    required
+                  />
                   {step1Errors.phone && (
                     <p className="text-red-500 text-xs mt-1">Required</p>
                   )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.family_code}</label>
-                    {isRestoreMode ? (
-                      <input
-                        type="text"
-                        value={manualFamilyCode}
-                        onChange={(event) => {
-                          console.log("=== Manual family code changed ===");
-                          console.log("- New value:", event.target.value);
-                          setManualFamilyCode(event.target.value);
-                        }}
-                        className="w-full rounded-2xl bg-amber-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all font-bold"
-                        placeholder="Enter deleted family code (e.g., M4)"
-                        required
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        value={familyCode}
-                        onChange={(event) => setFamilyCode(event.target.value)}
-                        className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
-                        placeholder="Family Code"
-                        required
-                      />
-                    )}
-                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.family_code}</label>
+                  {isRestoreMode ? (
+                    <input
+                      type="text"
+                      value={manualFamilyCode}
+                      onChange={(event) => {
+                        console.log("=== Manual family code changed ===");
+                        console.log("- New value:", event.target.value);
+                        setManualFamilyCode(event.target.value);
+                      }}
+                      className="w-full rounded-2xl bg-amber-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all font-bold"
+                      placeholder="Enter deleted family code (e.g., M4)"
+                      required
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={familyCode}
+                      onChange={(event) => {
+                        // Only allow editing if format is not locked
+                        if (!isFormatLocked || editingFamily) {
+                          setFamilyCode(event.target.value);
+                        }
+                      }}
+                      readOnly={isFormatLocked && !editingFamily}
+                      className={`w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold ${isFormatLocked && !editingFamily ? 'bg-slate-100 cursor-not-allowed opacity-75' : ''}`}
+                      placeholder="Family Code"
+                      required
+                    />
+                  )}
+                  {isFormatLocked && !editingFamily && !isRestoreMode && (
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Format locked to {lockedFormat?.prefix} with {lockedFormat?.padding} digit padding
+                    </p>
+                  )}
                 </div>
                 
                 {/* Admin-only restore option */}

@@ -14,16 +14,42 @@ const supabaseAdmin = createAdminClient(
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, email, masjidName, tagline } = await request.json();
+    const { email, password, masjidName, tagline } = await request.json();
 
-    if (!userId || !email || !masjidName) {
+    if (!email || !password || !masjidName) {
       return NextResponse.json(
-        { error: "userId, email, and masjidName are required" },
+        { error: "email, password, and masjidName are required" },
         { status: 400 }
       );
     }
 
-    console.log("[Complete Signup] Creating masjid and user_roles for user:", userId);
+    console.log("[Complete Signup] Creating user, masjid and user_roles for email:", email);
+
+    // Step 1: Create user in Supabase Auth using admin API to ensure auth.users row exists
+    console.log("[Complete Signup] Creating Supabase Auth user with admin API");
+    const { data: userData, error: userError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // Auto-confirm email since we already verified via OTP
+    });
+
+    if (userError) {
+      console.error("[Complete Signup] User creation failed:", userError);
+      return NextResponse.json(
+        { error: `User creation failed: ${userError.message}`, details: userError },
+        { status: 500 }
+      );
+    }
+
+    if (!userData.user) {
+      return NextResponse.json(
+        { error: "Failed to create user account" },
+        { status: 500 }
+      );
+    }
+
+    const userId = userData.user.id;
+    console.log("[Complete Signup] User created successfully:", userId);
 
     // Step 1: Check if there's an existing deleted user_roles entry for this user
     const { data: existingRole, error: existingRoleError } = await supabaseAdmin

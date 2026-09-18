@@ -23,7 +23,10 @@ export default function AdminPage() {
     subscriptions_approve: false,
     staff_management: false,
     reports: false,
-    settings: false
+    settings: false,
+    events: false,
+    families: false,
+    expenses: false
   });
 
   const handlePermissionChange = (permission: string, value: boolean) => {
@@ -33,6 +36,61 @@ export default function AdminPage() {
     }));
   };
 
+  // Handle role change with dynamic permission rules
+  const handleRoleChange = (newRole: string) => {
+    setRole(newRole);
+    
+    if (newRole === 'super_admin') {
+      // Super Admin: Check ALL permissions
+      setPermissions({
+        accounts: true,
+        members: true,
+        subscriptions_collect: true,
+        subscriptions_approve: true,
+        staff_management: true,
+        reports: true,
+        settings: true,
+        events: true,
+        families: true,
+        expenses: true
+      });
+    } else if (newRole === 'co_admin') {
+      // Co-Admin: Check ALL permissions by default (editable)
+      setPermissions({
+        accounts: true,
+        members: true,
+        subscriptions_collect: true,
+        subscriptions_approve: true,
+        staff_management: true,
+        reports: true,
+        settings: true,
+        events: true,
+        families: true,
+        expenses: true
+      });
+    } else {
+      // Editor/Staff: Empty defaults for manual selection
+      setPermissions({
+        accounts: false,
+        members: false,
+        subscriptions_collect: false,
+        subscriptions_approve: false,
+        staff_management: false,
+        reports: false,
+        settings: false,
+        events: false,
+        families: false,
+        expenses: false
+      });
+    }
+  };
+
+  // Check if Super Admin (permissions locked)
+  const isSuperAdmin = role === 'super_admin';
+  
+  // Check if at least one permission is selected
+  const hasAnyPermission = Object.values(permissions).some(v => v);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -40,6 +98,13 @@ export default function AdminPage() {
     setMessage('');
 
     try {
+      // Validate at least one permission is selected
+      if (!hasAnyPermission) {
+        setError('Please select at least one permission to proceed');
+        setLoading(false);
+        return;
+      }
+
       // Get the session token for authentication
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -68,7 +133,8 @@ export default function AdminPage() {
 
       if (data.success) {
         const warning = data.warning ? ` (${data.warning})` : '';
-        setMessage(`Invitation sent to ${email}. Link: ${data.invite_link}${warning}`);
+        setMessage(`Invitation sent to ${email}${warning}`);
+        // Clear form
         setEmail('');
         setRole('staff');
         setCommissionPercent('10');
@@ -79,7 +145,10 @@ export default function AdminPage() {
           subscriptions_approve: false,
           staff_management: false,
           reports: false,
-          settings: false
+          settings: false,
+          events: false,
+          families: false,
+          expenses: false
         });
       } else {
         setError(data.error || 'Failed to send invitation');
@@ -156,7 +225,7 @@ export default function AdminPage() {
                 </label>
                 <select
                   value={role}
-                  onChange={(e) => setRole(e.target.value)}
+                  onChange={(e) => handleRoleChange(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="staff">Staff</option>
@@ -164,6 +233,9 @@ export default function AdminPage() {
                   <option value="co_admin">Co Admin</option>
                   <option value="super_admin">Super Admin</option>
                 </select>
+                {isSuperAdmin && (
+                  <p className="text-xs text-gray-500 mt-1">Super Admin has all permissions locked</p>
+                )}
               </div>
 
               {role === 'staff' && (
@@ -194,10 +266,15 @@ export default function AdminPage() {
                       <input
                         type="checkbox"
                         checked={value}
+                        disabled={isSuperAdmin}
                         onChange={(e) => handlePermissionChange(key, e.target.checked)}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-2"
+                        className={`w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-2 ${
+                          isSuperAdmin ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
                       />
-                      <span className="text-sm text-gray-700 capitalize">
+                      <span className={`text-sm text-gray-700 capitalize ${
+                        isSuperAdmin ? 'opacity-50' : ''
+                      }`}>
                         {key.replace('_', ' ')}
                       </span>
                     </label>

@@ -61,40 +61,41 @@ function VerifyPageContent() {
     try {
       console.log("[Verify] Verifying OTP for email:", email);
 
-      // Use Supabase Auth verifyOtp
-      const { data, error } = await supabase.auth.verifyOtp({
-        email,
-        token: verificationCode,
-        type: 'signup',
+      // Call custom verify-otp endpoint
+      const verifyResponse = await fetch('/api/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          otp: verificationCode,
+        }),
       });
 
-      if (error) {
-        console.error("[Verify] Supabase verifyOtp error:", error);
-        throw new Error(error.message);
+      const verifyData = await verifyResponse.json();
+
+      if (!verifyResponse.ok) {
+        throw new Error(verifyData.error || "Invalid verification code");
       }
 
-      console.log("[Verify] OTP verification successful");
+      console.log("[Verify] OTP verified successfully");
 
-      // Create masjid and user_roles after successful verification
+      // Get stored signup data
       const masjidName = localStorage.getItem('signup_masjid_name');
       const tagline = localStorage.getItem('signup_tagline');
+      const password = localStorage.getItem('signup_password');
 
-      if (!masjidName) {
-        throw new Error("Masjid name not found. Please sign up again.");
+      if (!masjidName || !password) {
+        throw new Error("Signup data not found. Please sign up again.");
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error("User not found after verification");
-      }
-
-      // Call API to create masjid and user_roles
+      // Call API to create user, masjid and user_roles
+      console.log("[Verify] Calling complete-signup API");
       const response = await fetch('/api/complete-signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: user.id,
-          email: user.email,
+          email,
+          password,
           masjidName,
           tagline,
         }),
@@ -111,6 +112,7 @@ function VerifyPageContent() {
       // Clear localStorage
       localStorage.removeItem('signup_masjid_name');
       localStorage.removeItem('signup_tagline');
+      localStorage.removeItem('signup_password');
 
       setSuccess(true);
 
@@ -129,15 +131,17 @@ function VerifyPageContent() {
     try {
       console.log("[Verify] Resending OTP to:", email);
 
-      // Use Supabase Auth resend
-      const { data, error } = await supabase.auth.resend({
-        type: 'signup',
-        email,
+      // Call custom send-otp endpoint
+      const response = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       });
 
-      if (error) {
-        console.error("[Verify] Supabase resend error:", error);
-        throw new Error(error.message);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to resend code");
       }
 
       console.log("[Verify] OTP resent successfully");

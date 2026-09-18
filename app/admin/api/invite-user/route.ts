@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import * as crypto from "crypto";
+import nodemailer from "nodemailer";
 
 const supabaseAdmin = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -143,13 +144,14 @@ export async function POST(request: NextRequest) {
       console.log("[Invite User] Existing pending invitations deleted successfully");
     }
 
-    // Store invitation in database
+    // Store invitation in database with permissions
     const { error: inviteError } = await supabaseAdmin
       .from("invitations")
       .insert({
         masjid_id: masjidId,
         email: email,
         role: role,
+        permissions: permissions || {}, // Store the selected permissions
         token: invitationToken,
         status: "pending",
         created_by: authUser?.id,
@@ -174,51 +176,111 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Send invitation email using Supabase Auth Admin API
+    // Fetch masjid name for email
+    const { data: masjidData } = await supabaseAdmin
+      .from("masjids")
+      .select("masjid_name")
+      .eq("id", masjidId)
+      .single();
+
+    const masjidName = masjidData?.masjid_name || "Masjid";
+
+    // Send invitation email via Gmail SMTP
     try {
-      console.log('[Invite User] Sending invitation email via Supabase Auth to:', email);
-      console.log('[Invite User] SMTP Settings Check:', {
-        hasSmtpHost: !!process.env.SMTP_HOST,
-        hasSmtpPort: !!process.env.SMTP_PORT,
-        hasSmtpUser: !!process.env.SMTP_USER,
-        hasSmtpPassword: !!process.env.SMTP_PASSWORD,
-        hasSmtpFrom: !!process.env.SMTP_FROM
+      // Log SMTP configuration for debugging (without exposing password)
+      console.log("[Invite User] SMTP Configuration:", {
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: false,
+        user: process.env.SMTP_USER ? '***' + process.env.SMTP_USER.slice(-4) : 'NOT_SET',
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        hasPassword: !!process.env.SMTP_PASSWORD
       });
 
-      const { data: inviteData, error: emailError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?token=${invitationToken}&type=invite`,
-        data: {
-          role: role,
-          masjid_id: masjidId,
-          invitation_token: invitationToken
-        }
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: false, // true for 465, false for other ports
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASSWORD,
+        },
       });
 
-      if (emailError) {
-        console.error("[Invite User] Supabase invite error:", emailError);
-        return NextResponse.json({
-          success: false,
-          error: `Failed to send invitation email: ${emailError.message}. Please check your SMTP configuration.`,
-          details: emailError
-        }, { status: 500 });
-      }
+      const inviteLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/invite-accept?token=${invitationToken}`;
 
-      console.log("[Invite User] Invitation email sent successfully via Supabase:", inviteData);
+      const mailOptions = {
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to: email,
+        subject: `Invitation to join ${masjidName}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">You're Invited!</h1>
+            </div>
+            <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb;">
+              <p style="color: #374151; font-size: 16px; margin-bottom: 20px;">
+                You have been invited to join <strong>${masjidName}</strong> as a <strong>${role.replace('_', ' ').toUpperCase()}</strong>.
+              </p>
+              <p style="color: #6b7280; font-size: 14px; margin-bottom: 30px;">
+                Click the button below to accept the invitation and set your password.
+              </p>
+              <div style="text-align: center;">
+                <a href="${inviteLink}" 
+                   style="display: inline-block; background: #10b981; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+                  Accept Invitation & Set Password
+                </a>
+              </div>
+              <p style="color: #9ca3af; font-size: 12px; margin-top: 30px; text-align: center;">
+                This invitation will expire in 24 hours.<br>
+                If you didn't expect this invitation, you can safely ignore this email.
+              </p>
+            </div>
+          </div>
+        `,
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log("[Invite User] Email sent successfully to:", email);
 
     } catch (emailError: any) {
-      console.error("[Invite User] Email sending exception:", emailError);
+      console.error("[Invite User] Email sending error - Full details:");
+      console.error("[Invite User] Error name:", emailError.name);
+      console.error("[Invite User] Error message:", emailError.message);
+      console.error("[Invite User] Error code:", emailError.code);
+      console.error("[Invite User] Error stack:", emailError.stack);
+      console.error("[Invite User] SMTP Config Check:", {
+        hasSMTP_HOST: !!process.env.SMTP_HOST,
+        hasSMTP_PORT: !!process.env.SMTP_PORT,
+        hasSMTP_USER: !!process.env.SMTP_USER,
+        hasSMTP_PASSWORD: !!process.env.SMTP_PASSWORD,
+        hasSMTP_FROM: !!process.env.SMTP_FROM,
+        SMTP_HOST: process.env.SMTP_HOST,
+        SMTP_PORT: process.env.SMTP_PORT,
+        SMTP_USER: process.env.SMTP_USER,
+        SMTP_FROM: process.env.SMTP_FROM
+      });
+      
+      // Don't fail the request if email fails, just log it
+      // The invitation is already stored in database
       return NextResponse.json({
-        success: false,
-        error: `Failed to send invitation email: ${emailError.message}. Please check your SMTP configuration.`,
-        details: emailError.message
-      }, { status: 500 });
+        success: true,
+        message: "Invitation created successfully (email delivery failed, but link is available)",
+        invite_link: `/invite-accept?token=${invitationToken}`,
+        invitationToken: invitationToken,
+        warning: "Email could not be sent. Please share the link manually.",
+        error_details: {
+          message: emailError.message,
+          code: emailError.code
+        }
+      });
     }
 
     // Return success
     return NextResponse.json({
       success: true,
       message: "Invitation sent successfully",
-      invite_link: `/invite-register?token=${invitationToken}`,
+      invite_link: `/invite-accept?token=${invitationToken}`,
       invitationToken: invitationToken
     });
 

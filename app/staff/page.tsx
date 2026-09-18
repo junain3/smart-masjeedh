@@ -846,26 +846,36 @@ export default function StaffPage() {
     try {
       const ctx = await resolveTenant();
 
-      const { error } = await supabase
-        .from("user_roles")
-        .update({ role: editingRole, permissions: nextPermissions })
-        .eq("user_id", editingUserRole.user_id)
-        .eq("masjid_id", ctx.masjidId);
+      // Get session token for server-side API call
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("No active session");
+      }
 
-      if (error) throw error;
+      // Call server-side API to update user access
+      const response = await fetch("/admin/api/update-user-access", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          userId: editingUserRole.user_id,
+          masjidId: ctx.masjidId,
+          role: editingRole,
+          permissions: nextPermissions,
+          commissionPercent: nextPermissions.subscriptions_collect ? commission : undefined,
+        }),
+      });
 
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update access");
+      }
+
+      // Update local state
       if (nextPermissions.subscriptions_collect) {
-        const { error: profileError } = await supabase
-          .from("subscription_collector_profiles")
-          .upsert(
-            {
-              masjid_id: ctx.masjidId,
-              user_id: editingUserRole.user_id,
-              default_commission_percent: commission,
-            },
-            { onConflict: "masjid_id,user_id" }
-          );
-        if (profileError) throw profileError;
         setCollectorProfiles((prev) => ({ ...prev, [editingUserRole.user_id]: commission }));
       }
 
