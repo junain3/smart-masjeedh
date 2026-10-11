@@ -175,10 +175,6 @@ export default function FamiliesPage() {
   const [familyDeleteConfirmText, setFamilyDeleteConfirmText] = useState("");
   const [isFamilyDeleteSubmitting, setIsFamilyDeleteSubmitting] = useState(false);
 
-  // Family code format locking state
-  const [lockedFormat, setLockedFormat] = useState<{ prefix: string; padding: number } | null>(null);
-  const [isFormatLocked, setIsFormatLocked] = useState(false);
-
   // Previous Families management state
   const [softDeletedFamilies, setSoftDeletedFamilies] = useState<Family[]>([]);
   const [showPreviousFamilies, setShowPreviousFamilies] = useState(false);
@@ -432,7 +428,6 @@ export default function FamiliesPage() {
   // Fetch maximum family code from database for accurate ID generation
   // Strictly filters by current masjid_id (tenant) for multi-tenant isolation
   // Fetches ALL family codes for this masjid, parses numeric parts, finds TRUE mathematical max
-  // Also determines the locked format if families exist
   async function fetchMaxFamilyCode() {
     if (!supabase || !tenantContext?.masjidId) return null;
     const currentMasjidId = tenantContext.masjidId;
@@ -445,9 +440,6 @@ export default function FamiliesPage() {
 
       if (error) throw error;
       if (!data || data.length === 0) {
-        // No families exist yet - format is not locked
-        setIsFormatLocked(false);
-        setLockedFormat(null);
         return null;
       }
 
@@ -455,19 +447,6 @@ export default function FamiliesPage() {
       let bestPrefix = "M";
       let bestPadLength = 2;
       let maxRawCode: string | null = null;
-
-      // Determine the format from the first family to lock it
-      const firstCode = data[0]?.family_code;
-      if (firstCode) {
-        const firstMatch = firstCode.match(/^([^\d]*)(\d+)$/);
-        if (firstMatch) {
-          const lockedPrefix = firstMatch[1];
-          const lockedPadding = firstMatch[2].length;
-          setLockedFormat({ prefix: lockedPrefix, padding: lockedPadding });
-          setIsFormatLocked(true);
-          console.log("[Family Code] Format locked to:", { prefix: lockedPrefix, padding: lockedPadding });
-        }
-      }
 
       for (const row of data) {
         // Double-check tenant isolation in JS as a safety net (defense in depth)
@@ -512,25 +491,17 @@ export default function FamiliesPage() {
     if (isOpen && isLive && !editingFamily) {
       // Fetch the actual maximum family code from database
       fetchMaxFamilyCode().then((maxCode) => {
-        // If format is locked, generate next code using locked format
-        if (isFormatLocked && lockedFormat) {
-          const maxNumber = maxCode ? parseInt(maxCode.replace(lockedFormat.prefix, ''), 10) : 0;
-          const nextNumber = maxNumber + 1;
-          const nextCode = `${lockedFormat.prefix}${nextNumber.toString().padStart(lockedFormat.padding, '0')}`;
-          setFamilyCode(nextCode);
-        } else {
-          // Use the new utility function to generate the next code
-          // This supports various formats: M01, FM001, TH001, LMS01, etc.
-          // Defaults to "M01" if no previous code exists
-          const nextCode = generateNextFamilyCode(maxCode);
-          setFamilyCode(nextCode);
-        }
+        // Use the utility function to generate the next code
+        // This supports various formats: M01, FM001, TH001, LMS01, etc.
+        // Defaults to "M01" if no previous code exists
+        const nextCode = generateNextFamilyCode(maxCode);
+        setFamilyCode(nextCode);
       });
     } else if (isOpen && !isLive) {
       // Default to M01 for demo mode
       setFamilyCode("M01");
     }
-  }, [isOpen, isLive, isFormatLocked, lockedFormat]);
+  }, [isOpen, isLive]);
 
   async function fetchFamilies(silent: boolean = false) {
     if (fetchLockRef.current) {
@@ -698,16 +669,12 @@ export default function FamiliesPage() {
         return;
       }
 
-      // Validate family code format if locked
-      if (isFormatLocked && lockedFormat && !editingFamily) {
-        const parsed = parseFamilyCode(familyCode);
-        if (parsed.isValid) {
-          if (parsed.prefix !== lockedFormat.prefix || parsed.padding !== lockedFormat.padding) {
-            setErrorMessage(`Family code must follow the format: ${lockedFormat.prefix} with ${lockedFormat.padding} digit padding (e.g., ${lockedFormat.prefix}${'1'.padStart(lockedFormat.padding, '0')})`);
-            setLoading(false);
-            return;
-          }
-        }
+      // Validate family code format (flexible - any prefix + digits)
+      const parsed = parseFamilyCode(familyCode);
+      if (!parsed.isValid) {
+        setErrorMessage("Family code must follow the format: prefix followed by digits (e.g., M01, TH001, FM100)");
+        setLoading(false);
+        return;
       }
 
       // Check for family duplicates
@@ -914,14 +881,6 @@ export default function FamiliesPage() {
 
           newFamilyId = insertData[0].id;
           assignedCode = finalFamilyCode;
-
-          // Lock the format immediately after first family creation
-          const parsed = parseFamilyCode(assignedCode);
-          if (parsed.isValid) {
-            setLockedFormat({ prefix: parsed.prefix, padding: parsed.padding });
-            setIsFormatLocked(true);
-            console.log("[Family Code] Format locked on first save:", { prefix: parsed.prefix, padding: parsed.padding });
-          }
 
           // Create family head member
           const { error: memberInsertError } = await supabase.from("members").insert([{
@@ -2742,21 +2701,13 @@ export default function FamiliesPage() {
                       type="text"
                       value={familyCode}
                       onChange={(event) => {
-                        // Only allow editing if format is not locked
-                        if (!isFormatLocked || editingFamily) {
-                          setFamilyCode(event.target.value);
-                        }
+                        setFamilyCode(event.target.value);
                       }}
-                      readOnly={isFormatLocked && !editingFamily}
-                      className={`w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold ${isFormatLocked && !editingFamily ? 'bg-slate-100 cursor-not-allowed opacity-75' : ''}`}
+                      readOnly={!editingFamily}
+                      className="w-full rounded-2xl bg-slate-50 border-none px-5 py-4 text-sm text-slate-900 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-bold"
                       placeholder="Family Code"
                       required
                     />
-                  )}
-                  {isFormatLocked && !editingFamily && !isRestoreMode && (
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      Format locked to {lockedFormat?.prefix} with {lockedFormat?.padding} digit padding
-                    </p>
                   )}
                 </div>
                 

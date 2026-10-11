@@ -46,7 +46,7 @@ function InviteRegisterContent() {
   const verifyInvitation = async () => {
     try {
       console.log('DEBUG: Verifying invitation token:', token);
-      
+
       const { data, error } = await supabase
         .from('invitations')
         .select('*')
@@ -68,9 +68,27 @@ function InviteRegisterContent() {
         return;
       }
 
+      // Check if email already exists before showing registration form
+      console.log('DEBUG: Checking if email already exists:', data.email);
+
+      // Check auth.users via admin API (need to call an API endpoint for this)
+      const checkResponse = await fetch('/api/check-email-exists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: data.email })
+      });
+
+      const checkResult = await checkResponse.json();
+
+      if (checkResult.exists) {
+        console.log('DEBUG: Email already exists:', data.email);
+        setError('This email already exists - இந்த மின்னஞ்சல் ஏற்கனவே பதிவு செய்யப்பட்டது');
+        return;
+      }
+
       setInvitation(data);
       setEmail(data.email);
-      
+
     } catch (err) {
       console.error("INVITE FETCH EXCEPTION:", err);
       setError('ஏதோ தவறு ஏற்பட்டது');

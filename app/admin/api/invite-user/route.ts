@@ -98,6 +98,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if email is already registered with an ACTIVE role
+    // Only block if email exists in auth.users AND has an active user_roles entry
+    console.log("[Invite User] Checking if email is already registered with active role:", email);
+
+    // Check user_roles table first - only block if user has an ACTIVE role (not soft-deleted)
+    const { data: existingRole, error: roleCheckError } = await supabaseAdmin
+      .from("user_roles")
+      .select("email, masjid_id, status")
+      .eq("email", email)
+      .eq("status", "active") // Only check active users, allow soft-deleted users to be re-invited
+      .maybeSingle();
+
+    if (!roleCheckError && existingRole) {
+      console.log("[Invite User] Email already exists in user_roles with active status:", email, "for masjid:", existingRole.masjid_id);
+      return NextResponse.json(
+        { error: "Already registered email - இந்த மின்னஞ்சல் ஏற்கனவே பதிவு செய்யப்பட்டது" },
+        { status: 400 }
+      );
+    }
+
+    // If no active user_roles, allow invitation even if auth.users exists
+    // This allows re-inviting users who were soft-deleted or exist in auth.users but not in this masjid
+    console.log("[Invite User] Email is available for invitation:", email);
+
     // Generate OTP and invitation token
     const invitationToken = crypto.randomBytes(32).toString('hex');
     
@@ -207,6 +231,11 @@ export async function POST(request: NextRequest) {
         },
       });
 
+      // Verify transporter configuration before sending
+      console.log("[Invite User] Verifying SMTP transporter configuration...");
+      await transporter.verify();
+      console.log("[Invite User] SMTP transporter verified successfully");
+
       const inviteLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/invite-accept?token=${invitationToken}`;
 
       const mailOptions = {
@@ -226,7 +255,7 @@ export async function POST(request: NextRequest) {
                 Click the button below to accept the invitation and set your password.
               </p>
               <div style="text-align: center;">
-                <a href="${inviteLink}" 
+                <a href="${inviteLink}"
                    style="display: inline-block; background: #10b981; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
                   Accept Invitation & Set Password
                 </a>
@@ -240,8 +269,8 @@ export async function POST(request: NextRequest) {
         `,
       };
 
-      await transporter.sendMail(mailOptions);
-      console.log("[Invite User] Email sent successfully to:", email);
+      const info = await transporter.sendMail(mailOptions);
+      console.log("[Invite User] Email sent successfully to:", email, "Message ID:", info.messageId);
 
     } catch (emailError: any) {
       console.error("[Invite User] Email sending error - Full details:");
@@ -260,20 +289,31 @@ export async function POST(request: NextRequest) {
         SMTP_USER: process.env.SMTP_USER,
         SMTP_FROM: process.env.SMTP_FROM
       });
-      
-      // Don't fail the request if email fails, just log it
-      // The invitation is already stored in database
-      return NextResponse.json({
-        success: true,
-        message: "Invitation created successfully (email delivery failed, but link is available)",
-        invite_link: `/invite-accept?token=${invitationToken}`,
-        invitationToken: invitationToken,
-        warning: "Email could not be sent. Please share the link manually.",
-        error_details: {
-          message: emailError.message,
-          code: emailError.code
-        }
-      });
+
+      // Delete the invitation since email failed - don't leave orphaned invitations
+      await supabaseAdmin
+        .from("invitations")
+        .delete()
+        .eq("token", invitationToken);
+
+      // Fail the request if email fails - don't silently succeed
+      return NextResponse.json(
+        {
+          error: "Failed to send invitation email",
+          details: {
+            message: emailError.message,
+            code: emailError.code,
+            smtp_config: {
+              hasSMTP_HOST: !!process.env.SMTP_HOST,
+              hasSMTP_PORT: !!process.env.SMTP_PORT,
+              hasSMTP_USER: !!process.env.SMTP_USER,
+              hasSMTP_PASSWORD: !!process.env.SMTP_PASSWORD,
+              hasSMTP_FROM: !!process.env.SMTP_FROM,
+            }
+          }
+        },
+        { status: 500 }
+      );
     }
 
     // Return success

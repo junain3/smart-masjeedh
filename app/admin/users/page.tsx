@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Edit, Search, Loader2, User, Mail, Shield, Check, X } from "lucide-react";
+import { ArrowLeft, Edit, Search, Loader2, User, Mail, Shield, Check, X, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useSupabaseAuth } from "@/components/SupabaseAuthProvider";
 import { useAppToast } from "@/components/ToastProvider";
@@ -32,6 +32,8 @@ export default function UserManagementPage() {
   const [editingUser, setEditingUser] = useState<UserRole | null>(null);
   const [editFullName, setEditFullName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<UserRole | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadUsers = async () => {
     if (!tenantContext?.masjidId) return;
@@ -40,11 +42,14 @@ export default function UserManagementPage() {
     try {
       const { data, error } = await supabase
         .from("user_roles")
-        .select("*")
+        .select("id, user_id, auth_user_id, email, full_name, role, permissions, onboarding_completed, created_at, status")
         .eq("masjid_id", tenantContext.masjidId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
+      console.log("[Load Users] Loaded users:", data);
+      console.log("[Load Users] Sample user object:", data?.[0]);
+      console.log("[Load Users] Sample user id field:", data?.[0]?.id, "type:", typeof data?.[0]?.id);
       setUsers(data || []);
     } catch (error: any) {
       console.error("Error loading users:", error);
@@ -133,6 +138,82 @@ export default function UserManagementPage() {
   const handleCancelEdit = () => {
     setEditingUser(null);
     setEditFullName("");
+  };
+
+  const handleDelete = async (userRole: UserRole) => {
+    console.log("[Handle Delete] User role object received:", userRole);
+    console.log("[Handle Delete] userRole.id:", userRole.id, "type:", typeof userRole.id);
+    console.log("[Handle Delete] userRole.email:", userRole.email);
+    console.log("[Handle Delete] userRole.user_id:", userRole.user_id);
+    console.log("[Handle Delete] userRole.auth_user_id:", userRole.auth_user_id);
+    setDeletingUser(userRole);
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingUser || !tenantContext?.masjidId) return;
+
+    setIsDeleting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+
+      const payload = {
+        userRoleId: deletingUser.id,
+        masjidId: tenantContext.masjidId,
+        deletedBy: user?.id, // Pass auth user ID (UUID) instead of email
+      };
+
+      console.log("[Delete User] === DELETE REQUEST START ===");
+      console.log("[Delete User] deletingUser object:", JSON.stringify(deletingUser, null, 2));
+      console.log("[Delete User] deletingUser.id value:", deletingUser.id);
+      console.log("[Delete User] deletingUser.id type:", typeof deletingUser.id);
+      console.log("[Delete User] deletingUser.email value:", deletingUser.email);
+      console.log("[Delete User] Payload to send:", JSON.stringify(payload, null, 2));
+      console.log("[Delete User] === DELETE REQUEST END ===");
+
+      const response = await fetch("/admin/api/delete-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      console.log("[Delete User] API Response:", data);
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete user");
+      }
+
+      toast({
+        kind: "success",
+        title: "Success",
+        message: "User removed successfully",
+      });
+
+      setDeletingUser(null);
+      loadUsers();
+    } catch (error: any) {
+      console.error("Error deleting user:", error);
+      toast({
+        kind: "error",
+        title: "Error",
+        message: error.message || "Failed to delete user",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const cancelDelete = () => {
+    setDeletingUser(null);
   };
 
   const getRoleBadgeColor = (role: string) => {
@@ -268,6 +349,13 @@ export default function UserManagementPage() {
                         >
                           <Edit className="w-5 h-5" />
                         </button>
+                        <button
+                          onClick={() => handleDelete(userRole)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                          title="Remove user"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
                       </div>
                     </div>
                   )}
@@ -290,6 +378,47 @@ export default function UserManagementPage() {
               </div>
             </div>
           </div>
+
+          {/* Delete Confirmation Modal */}
+          {deletingUser && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                    <Trash2 className="w-5 h-5 text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Remove User</h3>
+                </div>
+                <p className="text-gray-600 mb-4">
+                  Are you sure you want to remove <strong>{deletingUser.email}</strong> from your masjid?
+                  This will revoke their access to the masjid management system.
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={cancelDelete}
+                    disabled={isDeleting}
+                    className="px-4 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    disabled={isDeleting}
+                    className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Removing...
+                      </>
+                    ) : (
+                      "Remove User"
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </AppShell>
     </RouteGuard>

@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     // Check if email exists in auth.users using admin client
     const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-    
+
     if (listError) {
       console.error("[Check Email] Error listing users:", listError);
       return NextResponse.json(
@@ -38,15 +38,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const emailExists = users?.some(user => 
+    const authUserExists = users?.some(user =>
       user.email?.trim().toLowerCase() === normalizedEmail
     );
 
-    console.log("[Check Email] Email exists:", emailExists);
+    // Also check if email exists in user_roles (for synchronization check)
+    const { data: userRole, error: roleError } = await supabaseAdmin
+      .from("user_roles")
+      .select("email, masjid_id")
+      .eq("email", normalizedEmail)
+      .maybeSingle();
+
+    const userRoleExists = !roleError && !!userRole;
+
+    console.log("[Check Email] Auth user exists:", authUserExists, "User role exists:", userRoleExists);
 
     return NextResponse.json({
-      exists: emailExists,
-      email: normalizedEmail
+      exists: authUserExists,
+      email: normalizedEmail,
+      hasUserRole: userRoleExists,
+      needsAccountSetup: userRoleExists && !authUserExists
     });
 
   } catch (error: any) {

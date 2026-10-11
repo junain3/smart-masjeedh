@@ -94,10 +94,20 @@ export default function LoginPage() {
 
       const checkData = await checkResponse.json();
 
-      if (checkResponse.ok && !checkData.exists) {
-        setMessage("This email is not registered. No account found for this email address.");
+      if (checkResponse.ok) {
+        if (checkData.needsAccountSetup) {
+          // User has user_roles but no auth.users - needs account setup
+          setMessage("Your account exists but needs password setup. Please use the invitation link or contact support.");
+          setMessageType("error");
+          setLoading(false);
+          return;
+        } else if (!checkData.exists) {
+          setMessage("This email is not registered. No account found for this email address.");
+        } else {
+          setMessage("Invalid password. Please try again.");
+        }
       } else {
-        setMessage("Invalid password. Please try again.");
+        setMessage("Invalid email or password");
       }
     } catch (checkError) {
       console.error("[Login] Email check failed:", checkError);
